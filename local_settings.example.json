@@ -1,0 +1,11 @@
+{
+  "SMTP_HOST": "smtp.example.com",
+  "SMTP_PORT": 465,
+  "SMTP_USE_SSL": true,
+  "SMTP_USE_TLS": false,
+  "SMTP_USERNAME": "tu_usuario@example.com",
+  "SMTP_PASSWORD": "tu_password",
+  "SMTP_FROM": "tu_usuario@example.com",
+  "APP_BASE_URL": "https://tu-dominio.com",
+  "FOLLOWUP_DEFAULT_TO_EMAIL": "tu_mail@empresa.com"
+}

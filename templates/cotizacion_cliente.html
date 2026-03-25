@@ -1,0 +1,151 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<style>
+    .invoice-box { max-width: 800px; margin: auto; padding: 30px; border: 1px solid #eee; background: #fff; }
+    .product-img {
+        width: 56px;
+        height: 56px;
+        object-fit: contain;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #fff;
+        padding: 4px;
+    }
+    thead th {
+        background-color: #000 !important;
+        color: #fff !important;
+        text-transform: uppercase;
+        font-size: 12px;
+    }
+    .table td { border-bottom: 1px solid #eee; }
+    .fw-bold { font-weight: bold; }
+    @media print {
+        .no-print, .btn, .container.no-print, nav.navbar { display: none !important; }
+        body { background: white !important; }
+        .invoice-box { box-shadow: none !important; border: none !important; margin: 0 !important; width: 100% !important; }
+    }
+</style>
+
+<div class="container no-print text-center my-4">
+    <button onclick="window.print()" class="btn btn-success btn-lg px-5">Guardar como PDF / Imprimir</button>
+    <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-edit-custom btn-lg">Editar</a>
+    <a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="btn btn-dark-custom btn-lg">Exportar Excel</a>
+    <a href="/historial" class="btn btn-outline-secondary btn-lg">Volver al Historial</a>
+</div>
+
+<div class="invoice-box mt-5">
+    <div class="row align-items-center mb-3">
+        <div class="col-6 d-flex align-items-center">
+            <img src="{{ url_for('static', filename='LOGO color.png') }}" alt="Logo Cuenco Tech" style="max-width: 120px; margin-right: 15px;" onerror="this.onerror=null;this.src='{{ url_for('static', filename='logo.png') }}';">
+            <div>
+                <h3 class="mb-0" style="color: #000;">{{ cot.nombre_fantasia }}</h3>
+                <small>{{ cot.razon_social }}<br>CUIT: {{ cot.cuit }}<br>{{ domicilio_empresa }}</small>
+            </div>
+        </div>
+        <div class="col-6 text-end">
+            <h2 class="h4">PRESUPUESTO #{{ cot.numero_cotizacion or ("%04d" | format(cot.id)) }}</h2>
+            <p class="fw-bold mb-1">Moneda: {{ "Pesos Argentinos" if cot.moneda == "ARS" else "Dolares Estadounidenses" }}</p>
+            <p class="mb-1">
+                <span id="estado-badge-view" class="estado-pill {% if cot.estado == 'Aceptada' %}estado-aceptada{% elif cot.estado == 'Rechazada' %}estado-rechazada{% else %}estado-en-progreso{% endif %}">
+                    {{ cot.estado or "En progreso" }}
+                </span>
+            </p>
+            <p class="mb-0">Fecha: {{ cot.fecha.strftime('%d/%m/%Y') }}</p>
+        </div>
+    </div>
+    <hr>
+    <h5>Cliente: {{ cot.cliente }}</h5>
+    {% if cot.cliente_razon_social or cot.cliente_cuit %}
+    <p style="margin-top: -10px; color: #555;">
+        {% if cot.cliente_razon_social %}<strong>Razon Social:</strong> {{ cot.cliente_razon_social }}<br>{% endif %}
+        {% if cot.cliente_cuit %}<strong>CUIT:</strong> {{ cot.cliente_cuit }}{% endif %}
+    </p>
+    {% endif %}
+    <table class="table mt-4">
+        <thead style="background-color: #000; color: #fff;">
+            <tr>
+                <th style="width: 76px;" class="text-center">Imagen</th>
+                <th>Descripcion</th>
+                <th class="text-center">Cant.</th>
+                <th class="text-end">Precio Unit.</th>
+                <th class="text-end">Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in cot.items %}
+            {% set item_img_src = url_for('static', filename='placeholder_product.png') %}
+            {% if item.imagen_url %}
+                {% if item.imagen_url.startswith('http://') or item.imagen_url.startswith('https://') %}
+                    {% set item_img_src = item.imagen_url %}
+                {% else %}
+                    {% set item_img_src = url_for('static', filename=item.imagen_url) %}
+                {% endif %}
+            {% endif %}
+            <tr>
+                <td class="text-center">
+                    <img
+                        src="{{ item_img_src }}"
+                        alt="{{ item.descripcion }}"
+                        class="product-img"
+                        loading="lazy"
+                        onerror="this.onerror=null;this.src='{{ url_for('static', filename='placeholder_product.png') }}';"
+                    >
+                </td>
+                <td>{{ item.descripcion }}</td>
+                <td class="text-center">{{ item.cantidad }}</td>
+                {% if cot.condicion_iva == 'Responsable Inscrito' %}
+                <td class="text-end">$ {{ "{:,.2f}".format(item.precio_venta) }}</td>
+                <td class="text-end">$ {{ "{:,.2f}".format(item.precio_venta * item.cantidad) }}</td>
+                {% elif cot.condicion_iva == 'Exento' %}
+                <td class="text-end">$ {{ "{:,.2f}".format(item.precio_venta) }}</td>
+                <td class="text-end">$ {{ "{:,.2f}".format(item.precio_venta * item.cantidad) }}</td>
+                {% else %}
+                <td class="text-end">$ {{ "{:,.2f}".format(item.precio_venta * (1 + item.iva_porcentaje / 100)) }}</td>
+                <td class="text-end">$ {{ "{:,.2f}".format(item.subtotal) }}</td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="row justify-content-end">
+        <div class="col-5">
+            <div class="p-3 border" style="border-radius: 10px; background-color: #f8f9fa;">
+            {% if cot.condicion_iva == 'Responsable Inscrito' %}
+            <div class="d-flex justify-content-between mb-2">
+                <span class="fw-bold">Subtotal Neto:</span>
+                <span>$ {{ "{:,.2f}".format(cot.total_neto) }}</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2">
+                <span class="fw-bold">IVA Total:</span>
+                <span>$ {{ "{:,.2f}".format(cot.total_iva) }}</span>
+            </div>
+            {% elif cot.condicion_iva == 'Exento' %}
+            <div class="d-flex justify-content-between mb-2">
+                <span class="fw-bold">Subtotal:</span>
+                <span>$ {{ "{:,.2f}".format(cot.total_neto) }}</span>
+            </div>
+            {% else %}
+            <div class="mb-2 text-muted small">
+                <i>* Los precios unitarios incluyen IVA.</i>
+            </div>
+            {% endif %}
+            <hr style="border-top: 2px solid #000;">
+            <div class="d-flex justify-content-between h5 fw-bold" style="color: #000;">
+                <span>TOTAL {{ cot.moneda }}:</span>
+                <span>$ {{ "{:,.2f}".format(cot.total_final) }}</span>
+            </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("print") === "true" || urlParams.get("download") === "1") {
+        window.onload = function() {
+            window.print();
+        };
+    }
+</script>
+{% endblock %}

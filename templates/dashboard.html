@@ -1,0 +1,211 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<style>
+    .dashboard-card {
+        padding: 1.2rem 1.25rem;
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(240, 245, 250, 0.98));
+        box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+        height: 100%;
+    }
+
+    .dashboard-card-muted {
+        background: linear-gradient(160deg, #111827 0%, #1f2937 100%);
+        color: #f8fafc;
+    }
+
+    .dashboard-label {
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #64748b;
+        font-weight: 700;
+        margin-bottom: 0.45rem;
+    }
+
+    .dashboard-card-muted .dashboard-label {
+        color: #cbd5e1;
+    }
+
+    .dashboard-value {
+        font-size: 2rem;
+        font-weight: 800;
+        line-height: 1;
+        margin-bottom: 0.3rem;
+        color: #0f172a;
+    }
+
+    .dashboard-card-muted .dashboard-value {
+        color: #f8fafc;
+    }
+
+    .dashboard-help {
+        font-size: 0.9rem;
+        color: #64748b;
+    }
+
+    .dashboard-period-btn {
+        min-width: 120px;
+    }
+
+    .dashboard-note {
+        font-size: 0.88rem;
+        color: #64748b;
+    }
+</style>
+
+<div class="card p-4 page-surface">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h2 class="text-dark m-0"><i class="bi bi-speedometer2 me-2"></i>Dashboard</h2>
+            <div class="dashboard-note mt-2">
+                Cerradas = cotizaciones <strong>Aceptadas + Rechazadas</strong>. La fecha usada es la de creación de la cotización.
+            </div>
+        </div>
+        <div class="btn-group" role="group" aria-label="Periodo dashboard">
+            <a href="{{ url_for('dashboard_page', periodo='30', estado=filtro_estado) }}" class="btn btn-sm {{ 'btn-dark-custom active' if filtro_periodo == '30' else 'btn-outline-dark' }} dashboard-period-btn">Último mes</a>
+            <a href="{{ url_for('dashboard_page', periodo='60', estado=filtro_estado) }}" class="btn btn-sm {{ 'btn-dark-custom active' if filtro_periodo == '60' else 'btn-outline-dark' }} dashboard-period-btn">Últimos 2 meses</a>
+            <a href="{{ url_for('dashboard_page', periodo='custom', estado=filtro_estado, desde=filtro_desde, hasta=filtro_hasta) }}" class="btn btn-sm {{ 'btn-dark-custom active' if filtro_periodo == 'custom' else 'btn-outline-dark' }} dashboard-period-btn">Personalizado</a>
+        </div>
+    </div>
+
+    <form method="GET" action="{{ url_for('dashboard_page') }}" class="row g-3 mb-4 p-3 surface-strip">
+        <input type="hidden" name="periodo" value="{{ filtro_periodo }}">
+        <div class="col-md-3">
+            <label class="small fw-bold text-muted text-uppercase">Desde</label>
+            <input type="date" name="desde" class="form-control" value="{{ filtro_desde }}">
+        </div>
+        <div class="col-md-3">
+            <label class="small fw-bold text-muted text-uppercase">Hasta</label>
+            <input type="date" name="hasta" class="form-control" value="{{ filtro_hasta }}">
+        </div>
+        <div class="col-md-3">
+            <label class="small fw-bold text-muted text-uppercase">Estado</label>
+            <select name="estado" class="form-select">
+                <option value="todos" {% if filtro_estado == 'todos' %}selected{% endif %}>Todas</option>
+                <option value="cerradas" {% if filtro_estado == 'cerradas' %}selected{% endif %}>Cerradas</option>
+                <option value="aceptadas" {% if filtro_estado == 'aceptadas' %}selected{% endif %}>Aceptadas</option>
+                <option value="rechazadas" {% if filtro_estado == 'rechazadas' %}selected{% endif %}>Rechazadas</option>
+                <option value="en_progreso" {% if filtro_estado == 'en_progreso' %}selected{% endif %}>En progreso</option>
+            </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-primary w-100">
+                <i class="bi bi-funnel me-1"></i> Aplicar
+            </button>
+            <a href="{{ url_for('dashboard_page') }}" class="btn btn-outline-dark">Limpiar</a>
+        </div>
+    </form>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6 col-xl-2">
+            <div class="dashboard-card dashboard-card-muted">
+                <div class="dashboard-label">Cerradas 30 días</div>
+                <div class="dashboard-value">{{ resumen.cerradas_30 }}</div>
+                <div class="dashboard-help text-light-emphasis">Últimos 30 días</div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-2">
+            <div class="dashboard-card dashboard-card-muted">
+                <div class="dashboard-label">Cerradas 60 días</div>
+                <div class="dashboard-value">{{ resumen.cerradas_60 }}</div>
+                <div class="dashboard-help text-light-emphasis">Últimos 60 días</div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-2">
+            <div class="dashboard-card">
+                <div class="dashboard-label">Total período</div>
+                <div class="dashboard-value">{{ resumen.total }}</div>
+                <div class="dashboard-help">Cotizaciones creadas</div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-2">
+            <div class="dashboard-card">
+                <div class="dashboard-label">Cerradas período</div>
+                <div class="dashboard-value">{{ resumen.cerradas }}</div>
+                <div class="dashboard-help">Aceptadas + Rechazadas</div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-2">
+            <div class="dashboard-card">
+                <div class="dashboard-label">En progreso</div>
+                <div class="dashboard-value">{{ resumen.en_progreso }}</div>
+                <div class="dashboard-help">Pendientes de cierre</div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-2">
+            <div class="dashboard-card">
+                <div class="dashboard-label">Aceptadas</div>
+                <div class="dashboard-value">{{ resumen.aceptadas }}</div>
+                <div class="dashboard-help">Cerradas ganadas</div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-2">
+            <div class="dashboard-card">
+                <div class="dashboard-label">Rechazadas</div>
+                <div class="dashboard-value">{{ resumen.rechazadas }}</div>
+                <div class="dashboard-help">Cerradas perdidas</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-responsive table-grid-outline">
+        <table class="table table-custom align-middle">
+            <thead class="thead-dark-custom">
+                <tr>
+                    <th>Nro</th>
+                    <th>Cliente</th>
+                    <th>Fecha de creación</th>
+                    <th class="text-center">Estado</th>
+                    <th class="text-end">Total</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if cotizaciones %}
+                    {% for cot in cotizaciones %}
+                    <tr>
+                        <td><span class="badge bg-secondary">#{{ cot.numero_cotizacion }}</span></td>
+                        <td>
+                            <strong>{{ cot.cliente_ref.nombre if cot.cliente_ref else cot.cliente }}</strong>
+                            {% if cot.cliente_razon_social %}
+                            <div class="small text-muted">{{ cot.cliente_razon_social }}</div>
+                            {% endif %}
+                        </td>
+                        <td>{{ cot.fecha.strftime('%d/%m/%Y %H:%M') }}</td>
+                        <td class="text-center">
+                            <span class="estado-pill {% if cot.estado == 'Aceptada' %}estado-aceptada{% elif cot.estado == 'Rechazada' %}estado-rechazada{% else %}estado-en-progreso{% endif %}">
+                                {{ cot.estado or 'En progreso' }}
+                            </span>
+                        </td>
+                        <td class="text-end fw-bold">
+                            {{ cot.moneda or 'ARS' }} {{ "{:,.2f}".format(cot.total_final or 0) }}
+                        </td>
+                        <td class="text-end">
+                            <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-sm btn-edit-custom me-1">
+                                <i class="bi bi-pencil-square"></i> Editar
+                            </a>
+                            <a href="{{ url_for('ver_cotizacion', id=cot.id) }}" class="btn btn-sm btn-view-custom me-1">
+                                <i class="bi bi-eye"></i> Ver
+                            </a>
+                            <a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="btn btn-sm btn-dark-custom me-1">
+                                <i class="bi bi-file-earmark-excel"></i> Excel
+                            </a>
+                            <a href="{{ url_for('ver_cotizacion', id=cot.id) }}?download=1" class="btn btn-sm btn-success">
+                                <i class="bi bi-file-earmark-pdf"></i> PDF
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted p-4">No hay cotizaciones para el rango y estado seleccionados.</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cotizador</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon-cuencotech.svg') }}?v=20260318b">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f4f7f6; }
+        .container-wide { width: 95%; margin: auto; }
+        .table input { border: none; background: transparent; }
+        .table input:focus { background: #fff; outline: 1px solid #007bff; }
+        .subtotal-cell { font-weight: 600; }
+    </style>
+</head>
+<body>
+<div class="container-wide py-4">
+    <div class="card shadow p-4 mb-5">
+        <h2 class="text-primary mb-4">Nuevo Presupuesto</h2>
+        <form method="POST">
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Nombre de Fantasia</label>
+                    <input type="text" name="nombre_fantasia" class="form-control" value="Cuenco Tech" readonly>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Razon Social</label>
+                    <input type="text" name="razon_social" class="form-control" value="Cuenco Tech S.A." readonly>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">CUIT</label>
+                    <input type="text" name="cuit" class="form-control" value="30-71831614-2" readonly>
+                </div>
+            </div>
+
+            <hr>
+
+            <div class="row mb-4">
+                <div class="col-md-8">
+                    <label class="form-label fw-bold">Cliente</label>
+                    <input type="text" name="cliente" class="form-control" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">IVA</label>
+                    <select name="condicion_iva" id="condicion_iva" class="form-select" onchange="recalcularTodo()">
+                        <option value="Exento">Consumidor Final / Exento</option>
+                        <option value="Responsable Inscrito">Responsable Inscrito</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover border" id="tabla-items">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width: 35%;">Producto / Servicio</th>
+                            <th>Cant.</th>
+                            <th>Costo</th>
+                            <th>Margen %</th>
+                            <th>IVA Item</th>
+                            <th>Venta Unit.</th>
+                            <th>Subtotal</th>
+                            <th>Accion</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-body"></tbody>
+                </table>
+            </div>
+
+            <button type="button" class="btn btn-outline-primary mt-2" onclick="addFila()">+ Agregar Producto</button>
+
+            <div class="row justify-content-end mt-4">
+                <div class="col-md-4">
+                    <ul class="list-group">
+                        <li class="list-group-item d-flex justify-content-between">
+                            Neto <span id="resumen-neto">$ 0.00</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between" id="fila-iva" style="display:none !important;">
+                            IVA <span id="resumen-iva">$ 0.00</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between active">
+                            <strong>Total Final</strong> <span id="resumen-total">$ 0.00</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="text-end mt-4">
+                <button type="submit" class="btn btn-success btn-lg">Generar Presupuesto Profesional</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card shadow mt-5 border-0">
+        <div class="card-header bg-dark text-white p-3">
+            <h5 class="mb-0">Historial de Cotizaciones</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 mb-4 p-3 bg-light rounded">
+                <div class="col-md-4">
+                    <label class="small fw-bold">Buscar Cliente</label>
+                    <input type="text" id="filtro_cliente" class="form-control" placeholder="Nombre del cliente...">
+                </div>
+                <div class="col-md-3">
+                    <label class="small fw-bold">Desde</label>
+                    <input type="date" id="filtro_desde" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label class="small fw-bold">Hasta</label>
+                    <input type="date" id="filtro_hasta" class="form-control">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button onclick="aplicarFiltros()" class="btn btn-primary w-100" type="button">Aplicar</button>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Cliente</th>
+                            <th>Fecha</th>
+                            <th>Total Final</th>
+                            <th class="text-end">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-historial">
+                        {% for c in cotizaciones %}
+                        <tr>
+                            <td>#{{ "%04d" | format(c.id) }}</td>
+                            <td>{{ c.cliente }}</td>
+                            <td>{{ c.fecha.strftime('%d/%m/%Y') }}</td>
+                            <td class="fw-bold">${{ "{:,.2f}".format(c.total_final) }}</td>
+                            <td class="text-end">
+                                <a href="/cotizacion/{{ c.id }}" class="btn btn-sm btn-view-custom">Ver</a>
+                                <a href="/cotizacion/{{ c.id }}?download=1" class="btn btn-sm btn-outline-success">PDF</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function addFila() {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+        <td><input type="text" name="desc[]" class="form-control" required></td>
+        <td><input type="number" name="cant[]" class="form-control" value="1" step="any" oninput="recalcularTodo()"></td>
+        <td><input type="number" name="costo[]" class="form-control" value="0" step="any" oninput="recalcularTodo()"></td>
+        <td><input type="number" name="margen[]" class="form-control" value="0.75" step="any" oninput="recalcularTodo()"></td>
+        <td>
+            <select name="iva_item[]" class="form-select" onchange="recalcularTodo()">
+                <option value="21">21%</option>
+                <option value="10.5">10.5%</option>
+            </select>
+        </td>
+        <td><input type="text" class="form-control venta-fila" readonly></td>
+        <td><input type="text" class="form-control subtotal-fila subtotal-cell" readonly></td>
+        <td><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); recalcularTodo();">x</button></td>
+    `;
+    document.getElementById("tabla-body").appendChild(row);
+    recalcularTodo();
+}
+
+function recalcularTodo() {
+    let neto = 0;
+    let ivaTotalItems = 0;
+    document.querySelectorAll("#tabla-body tr").forEach((fila) => {
+        const cant = parseFloat(fila.querySelector('[name="cant[]"]').value) || 0;
+        const costo = parseFloat(fila.querySelector('[name="costo[]"]').value) || 0;
+        const margen = parseFloat(fila.querySelector('[name="margen[]"]').value) || 0;
+        const ivaItem = parseFloat(fila.querySelector('[name="iva_item[]"]').value) || 0;
+        const venta = costo * (1 + margen);
+        const sub = cant * venta;
+        fila.querySelector(".venta-fila").value = venta.toLocaleString("es-AR", { minimumFractionDigits: 2 });
+        fila.querySelector(".subtotal-fila").value = sub.toLocaleString("es-AR", { minimumFractionDigits: 2 });
+        neto += sub;
+        ivaTotalItems += sub * (ivaItem / 100);
+    });
+
+    const ivaAplicable = document.getElementById("condicion_iva").value === "Responsable Inscrito";
+    const iva = ivaAplicable ? ivaTotalItems : 0;
+    const total = neto + iva;
+
+    document.getElementById("fila-iva").style.display = ivaAplicable ? "flex" : "none";
+    document.getElementById("resumen-neto").innerText = "$ " + neto.toLocaleString("es-AR", { minimumFractionDigits: 2 });
+    document.getElementById("resumen-iva").innerText = "$ " + iva.toLocaleString("es-AR", { minimumFractionDigits: 2 });
+    document.getElementById("resumen-total").innerText = "$ " + total.toLocaleString("es-AR", { minimumFractionDigits: 2 });
+}
+
+window.onload = addFila;
+
+function descargarPDF(id) {
+    window.open(`/cotizacion/${id}?print=true`, "_blank");
+}
+
+function aplicarFiltros() {
+    const cliente = document.getElementById("filtro_cliente").value;
+    const desde = document.getElementById("filtro_desde").value;
+    const hasta = document.getElementById("filtro_hasta").value;
+    const params = new URLSearchParams({ cliente, desde, hasta });
+
+    fetch(`/filtrar_historial?${params.toString()}`)
+        .then((response) => response.json())
+        .then((data) => {
+            const tbody = document.getElementById("tabla-historial");
+            tbody.innerHTML = "";
+
+            data.forEach((c) => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td>#${String(c.id).padStart(4, "0")}</td>
+                        <td>${c.cliente}</td>
+                        <td>${c.fecha}</td>
+                        <td class="fw-bold text-primary">${c.total}</td>
+                        <td class="text-end">
+                            <a href="/cotizacion/${c.id}" class="btn btn-sm btn-view-custom">Ver</a>
+                            <a href="/cotizacion/${c.id}?download=1" class="btn btn-sm btn-outline-success">PDF</a>
+                        </td>
+                    </tr>
+                `;
+            });
+        });
+}
+</script>
+</body>
+</html>

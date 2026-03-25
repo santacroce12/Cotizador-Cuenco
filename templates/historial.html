@@ -1,0 +1,201 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="card p-4 page-surface">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="text-dark m-0"><i class="bi bi-clock-history"></i> Historial de Cotizaciones</h2>
+        <div class="btn-group" role="group" aria-label="Filtro moneda">
+            <button id="btn-moneda-todas" type="button" class="btn btn-sm btn-dark-custom active" onclick="setFiltroMoneda('')">Todas</button>
+            <button id="btn-moneda-ars" type="button" class="btn btn-sm btn-outline-dark" onclick="setFiltroMoneda('ARS')">Solo ARS</button>
+            <button id="btn-moneda-usd" type="button" class="btn btn-sm btn-outline-dark" onclick="setFiltroMoneda('USD')">Solo USD</button>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4 p-3 surface-strip">
+        <div class="col-md-4">
+            <label class="small fw-bold text-muted text-uppercase">Buscar Cliente</label>
+            <select id="filtro_cliente_id" class="form-select">
+                <option value="">Buscar por nombre, razon social o CUIT...</option>
+                {% for c in clientes %}
+                <option
+                    value="{{ c.id }}"
+                    data-data='{{ {"nombre": c.nombre or "", "razon": c.razon_social or "", "cuit": c.cuit or ""}|tojson|safe }}'
+                >
+                    {{ c.nombre }}{% if c.razon_social %} | {{ c.razon_social }}{% endif %}{% if c.cuit %} ({{ c.cuit }}){% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="small fw-bold text-muted text-uppercase">Desde</label>
+            <input type="date" id="filtro_desde" class="form-control">
+        </div>
+        <div class="col-md-3">
+            <label class="small fw-bold text-muted text-uppercase">Hasta</label>
+            <input type="date" id="filtro_hasta" class="form-control">
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button onclick="aplicarFiltros()" class="btn btn-primary w-100">
+                <i class="bi bi-search"></i> Filtrar
+            </button>
+        </div>
+    </div>
+
+    <div class="table-responsive table-grid-outline">
+        <table class="table table-custom align-middle">
+            <thead class="historial-header">
+                <tr>
+                    <th>Nro</th>
+                    <th>Cliente</th>
+                    <th>Fecha</th>
+                    <th class="text-center">Estado</th>
+                    <th class="text-end">Total Final ($)</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-historial"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+let filtroMoneda = "";
+let historialClienteTomSelect = null;
+document.addEventListener("DOMContentLoaded", function () {
+    initHistorialClienteSelect();
+    aplicarFiltros();
+});
+
+function initHistorialClienteSelect() {
+    const select = document.getElementById("filtro_cliente_id");
+    if (!select || typeof TomSelect === "undefined" || select.tomselect) {
+        return;
+    }
+
+    historialClienteTomSelect = new TomSelect(select, {
+        maxItems: 1,
+        create: false,
+        allowEmptyOption: true,
+        closeAfterSelect: true,
+        plugins: ["clear_button"],
+        searchField: ["text", "nombre", "razon", "cuit"],
+        sortField: [
+            { field: "$score" },
+            { field: "text" },
+        ],
+        placeholder: "Buscar por nombre, razon social o CUIT...",
+        render: {
+            option: function (data, escape) {
+                const nombre = data.nombre || data.text || "";
+                const razon = data.razon || "";
+                const cuit = data.cuit || "";
+                return `
+                    <div class="cliente-option flex-column align-items-start">
+                        <strong>${escape(nombre)}</strong>
+                        ${razon ? `<small>${escape(razon)}</small>` : ""}
+                        ${cuit ? `<small>${escape(cuit)}</small>` : ""}
+                    </div>
+                `;
+            },
+            item: function (data, escape) {
+                const nombre = data.nombre || data.text || "";
+                const razon = data.razon || "";
+                return `<div class="cliente-item">${escape(razon ? `${nombre} - ${razon}` : nombre)}</div>`;
+            },
+            no_results: function (data, escape) {
+                return `<div class="no-results py-2 px-3 text-muted">Sin coincidencias para "${escape(data.input)}"</div>`;
+            },
+        },
+        onChange: function () {
+            aplicarFiltros();
+        },
+    });
+}
+
+function setFiltroMoneda(moneda) {
+    filtroMoneda = moneda;
+    document.getElementById("btn-moneda-todas").className = `btn btn-sm ${moneda === "" ? "btn-dark-custom active" : "btn-outline-dark"}`;
+    document.getElementById("btn-moneda-ars").className = `btn btn-sm ${moneda === "ARS" ? "btn-dark-custom active" : "btn-outline-dark"}`;
+    document.getElementById("btn-moneda-usd").className = `btn btn-sm ${moneda === "USD" ? "btn-dark-custom active" : "btn-outline-dark"}`;
+    aplicarFiltros();
+}
+
+function claseEstado(estado) {
+    if (estado === "Aceptada") {
+        return "estado-aceptada";
+    }
+    if (estado === "Rechazada") {
+        return "estado-rechazada";
+    }
+    return "estado-en-progreso";
+}
+
+function aplicarFiltros() {
+    const clienteSelect = document.getElementById("filtro_cliente_id");
+    const clienteId = clienteSelect?.value || "";
+    const clienteTexto = clienteSelect?.tomselect?.control_input?.value?.trim() || "";
+    const desde = document.getElementById("filtro_desde").value;
+    const hasta = document.getElementById("filtro_hasta").value;
+    const params = new URLSearchParams({ desde, hasta });
+    if (clienteId) {
+        params.set("cliente_id", clienteId);
+    } else if (clienteTexto) {
+        params.set("cliente", clienteTexto);
+    }
+    if (filtroMoneda) {
+        params.set("moneda", filtroMoneda);
+    }
+
+    fetch(`/filtrar_historial?${params.toString()}`)
+        .then((response) => response.json())
+        .then((data) => {
+            const tbody = document.getElementById("tabla-historial");
+            tbody.innerHTML = "";
+
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted p-4">No se encontraron cotizaciones para este filtro.</td></tr>`;
+                return;
+            }
+
+            data.forEach((c) => {
+                const numeroCot = c.numero_cotizacion || String(c.id).padStart(4, "0");
+                const estado = c.estado || "En progreso";
+                const estadoClass = claseEstado(estado);
+                const moneda = (c.moneda || "ARS").toUpperCase();
+                const icono = moneda === "USD" ? "bi-currency-dollar text-success" : "bi-cash-stack text-primary";
+                const tagMoneda = moneda === "USD"
+                    ? `<span class="moneda-tag tag-usd">USD</span>`
+                    : `<span class="moneda-tag tag-ars">ARS</span>`;
+                const totalNumerico = Number(c.total_final || 0);
+                const totalFormateado = totalNumerico.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td><span class="badge bg-secondary">#${numeroCot}</span></td>
+                        <td><i class="bi ${icono} me-2"></i><strong class="text-dark">${c.cliente_nombre || c.cliente || "Sin Cliente"}</strong></td>
+                        <td>${c.fecha}</td>
+                        <td class="text-center">
+                            <span id="estado-badge-${c.id}" class="estado-pill ${estadoClass}">${estado}</span>
+                        </td>
+                        <td class="text-end fw-bold">${tagMoneda}$ ${totalFormateado}</td>
+                        <td class="text-end">
+                            <a href="/cotizacion/${c.id}/editar" class="btn btn-sm btn-edit-custom me-1">
+                                <i class="bi bi-pencil-square"></i> Editar
+                            </a>
+                            <a href="/cotizacion/${c.id}" class="btn btn-sm btn-view-custom me-1">
+                                <i class="bi bi-eye"></i> Ver Online
+                            </a>
+                            <a href="/cotizacion/${c.id}/xlsx" class="btn btn-sm btn-dark-custom me-1">
+                                <i class="bi bi-file-earmark-excel"></i> Excel
+                            </a>
+                            <a href="/cotizacion/${c.id}?download=1" class="btn btn-sm btn-success">
+                                <i class="bi bi-file-earmark-pdf"></i> PDF
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            });
+        });
+}
+</script>
+{% endblock %}
