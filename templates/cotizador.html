@@ -91,13 +91,16 @@
                             <select name="cliente_id" id="cliente_select" class="form-select select2-dark" required>
                                 <option value="">Buscar por nombre o CUIT...</option>
                                 {% if cotizacion and not cotizacion.cliente_id and cotizacion.cliente %}
-                                <option value="legacy_{{ cotizacion.id }}" data-iva="{{ cotizacion.condicion_iva }}" data-nombre="{{ cotizacion.cliente }}" data-razon="{{ cotizacion.cliente_razon_social }}" data-cuit="{{ cotizacion.cliente_cuit }}" selected>{{ cotizacion.cliente }}{% if cotizacion.cliente_cuit %} ({{ cotizacion.cliente_cuit }}){% endif %}</option>
+                                <option value="legacy_{{ cotizacion.id }}" data-iva="{{ cotizacion.condicion_iva }}" data-nombre="{{ cotizacion.cliente }}" data-razon="{{ cotizacion.cliente_razon_social }}" data-cuit="{{ cotizacion.cliente_cuit }}" data-domicilio="" data-sector="" data-subsector="" data-email="" data-telefono="" selected>{{ cotizacion.cliente }}{% if cotizacion.cliente_cuit %} ({{ cotizacion.cliente_cuit }}){% endif %}</option>
                                 {% endif %}
                                 {% for c in clientes %}
-                                <option value="{{ c.id }}" data-iva="{{ c.condicion_iva }}" data-nombre="{{ c.nombre }}" data-razon="{{ c.razon_social }}" data-cuit="{{ c.cuit }}" {% if cotizacion and cotizacion.cliente_id == c.id %}selected{% endif %}>{{ c.nombre }}{% if c.cuit %} ({{ c.cuit }}){% endif %}</option>
+                                <option value="{{ c.id }}" data-iva="{{ c.condicion_iva }}" data-nombre="{{ c.nombre }}" data-razon="{{ c.razon_social }}" data-cuit="{{ c.cuit }}" data-domicilio="{{ c.domicilio or '' }}" data-sector="{{ c.sector or '' }}" data-subsector="{{ c.subsector or '' }}" data-email="{{ c.email or '' }}" data-telefono="{{ c.telefono or '' }}" {% if cotizacion and cotizacion.cliente_id == c.id %}selected{% endif %}>{{ c.nombre }}{% if c.cuit %} ({{ c.cuit }}){% endif %}</option>
                                 {% endfor %}
                             </select>
-                            <button type="button" class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#modalNuevoCliente">
+                            <button type="button" class="btn btn-outline-secondary" onclick="abrirModalEditarCliente()" title="Editar cliente seleccionado">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button type="button" class="btn btn-dark" onclick="abrirModalNuevoCliente()" title="Agregar cliente">
                                 <i class="bi bi-plus-lg"></i>
                             </button>
                         </div>
@@ -113,6 +116,7 @@
         <input type="hidden" name="cliente" id="input_cliente_nombre">
         <input type="hidden" name="cliente_razon_social" id="input_cliente_razon_social">
         <input type="hidden" name="cliente_cuit" id="input_cliente_cuit">
+        <input type="hidden" name="familia" id="input_familia_hidden" value="{{ cotizacion.familia if cotizacion and cotizacion.familia else '' }}">
 
         <div class="row g-3 mb-4 p-3 surface-strip">
             <div class="col-md-3">
@@ -197,10 +201,11 @@
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">Agregar Nuevo Cliente</h5>
+                        <h5 class="modal-title" id="modalClienteTitulo">Agregar Nuevo Cliente</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
+                        <input type="hidden" id="cliente_modal_id">
                         <div class="mb-3">
                             <label>Nombre o Alias (Obligatorio)</label>
                             <input type="text" id="nuevo_cli_nombre" class="form-control">
@@ -212,6 +217,24 @@
                         <div class="mb-3">
                             <label>CUIT</label>
                             <input type="text" id="nuevo_cli_cuit" class="form-control" placeholder="XX-XXXXXXXX-X">
+                        </div>
+                        <div class="mb-3">
+                            <label>Domicilio</label>
+                            <input type="text" id="nuevo_cli_domicilio" class="form-control" placeholder="Opcional">
+                        </div>
+                        <div class="mb-3">
+                            <label>Sector</label>
+                            <select id="nuevo_cli_sector" class="form-select" onchange="actualizarSubsectores()">
+                                <option value="">Seleccionar...</option>
+                                <option value="Publico">Publico</option>
+                                <option value="Privado">Privado</option>
+                            </select>
+                        </div>
+                        <div class="mb-3 d-none" id="div_subsector">
+                            <label>Subdivision</label>
+                            <select id="nuevo_cli_subsector" class="form-select">
+                                <option value="">Seleccionar subdivision...</option>
+                            </select>
                         </div>
                         <div class="mb-3">
                             <label>Email</label>
@@ -232,7 +255,7 @@
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="button" class="btn btn-primary" onclick="guardarCliente()">Guardar Cliente</button>
+                        <button type="button" class="btn btn-primary" id="modalClienteGuardarBtn" onclick="guardarCliente()">Guardar Cliente</button>
                     </div>
                 </div>
             </div>
@@ -290,9 +313,36 @@
         </div>
 
         <div class="text-end mt-4">
-            <button type="submit" class="btn btn-success btn-lg px-5 shadow">{{ "Guardar Cambios" if modo_edicion else "Generar Presupuesto" }}</button>
+            <button type="button" onclick="prepararEnvio()" class="btn btn-success btn-lg px-5 shadow">{{ "Guardar Cambios" if modo_edicion else "Generar Presupuesto" }}</button>
         </div>
     </form>
+</div>
+
+<div class="modal fade" id="modalFamilia" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title">Finalizar Cotizacion</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label fw-bold">¿A que familia pertenece este proyecto?</label>
+                <select id="select_familia" class="form-select form-select-lg mb-3">
+                    <option value="">Seleccionar Familia...</option>
+                    {% for familia in familias_cotizacion %}
+                    <option value="{{ familia }}">{{ familia }}</option>
+                    {% endfor %}
+                </select>
+                <div class="small text-white-50">La familia se guarda en la cotizacion y despues queda disponible en historial, exportaciones y dashboard.</div>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="confirmarEnvio()">
+                    <i class="bi bi-check-circle me-2"></i>{{ "Guardar Cambios" if modo_edicion else "Generar y Guardar" }}
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -381,10 +431,10 @@ function sincronizarClienteSeleccionado() {
     }
     const selectedOption = select.options[select.selectedIndex];
     const tomData = select.tomselect ? select.tomselect.options[select.value] || {} : {};
-    const nombre = selectedOption?.getAttribute("data-nombre") || tomData.nombre || selectedOption?.text || "";
-    const razon = selectedOption?.getAttribute("data-razon") || tomData.razon || "";
-    const cuit = selectedOption?.getAttribute("data-cuit") || tomData.cuit || "";
-    const condicionIva = selectedOption?.getAttribute("data-iva") || tomData.iva || "Consumidor Final";
+    const nombre = tomData.nombre || selectedOption?.getAttribute("data-nombre") || selectedOption?.text || "";
+    const razon = tomData.razon || tomData.razon_social || selectedOption?.getAttribute("data-razon") || "";
+    const cuit = tomData.cuit || selectedOption?.getAttribute("data-cuit") || "";
+    const condicionIva = tomData.iva || tomData.condicion_iva || selectedOption?.getAttribute("data-iva") || "Consumidor Final";
 
     document.getElementById("input_cliente_nombre").value = nombre;
     document.getElementById("input_cliente_razon_social").value = razon;
@@ -398,10 +448,162 @@ function sincronizarClienteSeleccionado() {
     calcularTodo();
 }
 
+function actualizarSubsectores() {
+    const sector = document.getElementById("nuevo_cli_sector")?.value || "";
+    const divSub = document.getElementById("div_subsector");
+    const selectSub = document.getElementById("nuevo_cli_subsector");
+    const opciones = {
+        "Publico": ["Municipal", "Provincial", "Nacional", "Otro"],
+        "Privado": ["Energía", "Agroindustria", "Hotelería", "Educación", "Turismo", "Retail", "Otro"],
+    };
+
+    if (!divSub || !selectSub) {
+        return;
+    }
+
+    selectSub.innerHTML = '<option value="">Seleccionar subdivision...</option>';
+    if (sector && opciones[sector]) {
+        divSub.classList.remove("d-none");
+        opciones[sector].forEach((opt) => {
+            const option = document.createElement("option");
+            option.value = opt;
+            option.textContent = opt;
+            selectSub.appendChild(option);
+        });
+    } else {
+        divSub.classList.add("d-none");
+    }
+    selectSub.value = "";
+}
+
+function obtenerDatosClienteSeleccionado() {
+    const select = document.getElementById("cliente_select");
+    if (!select || !select.value || !/^\d+$/.test(select.value)) {
+        return null;
+    }
+
+    const selectedOption = select.options[select.selectedIndex];
+    const tomData = select.tomselect ? select.tomselect.options[select.value] || {} : {};
+    return {
+        id: select.value,
+        nombre: tomData.nombre || selectedOption?.getAttribute("data-nombre") || "",
+        razon_social: tomData.razon || tomData.razon_social || selectedOption?.getAttribute("data-razon") || "",
+        cuit: tomData.cuit || selectedOption?.getAttribute("data-cuit") || "",
+        domicilio: tomData.domicilio || selectedOption?.getAttribute("data-domicilio") || "",
+        sector: tomData.sector || selectedOption?.getAttribute("data-sector") || "",
+        subsector: tomData.subsector || selectedOption?.getAttribute("data-subsector") || "",
+        email: tomData.email || selectedOption?.getAttribute("data-email") || "",
+        telefono: tomData.telefono || selectedOption?.getAttribute("data-telefono") || "",
+        condicion_iva: tomData.iva || tomData.condicion_iva || selectedOption?.getAttribute("data-iva") || "Consumidor Final",
+    };
+}
+
+function limpiarModalCliente() {
+    document.getElementById("cliente_modal_id").value = "";
+    document.getElementById("modalClienteTitulo").textContent = "Agregar Nuevo Cliente";
+    document.getElementById("modalClienteGuardarBtn").textContent = "Guardar Cliente";
+    document.getElementById("nuevo_cli_nombre").value = "";
+    document.getElementById("nuevo_cli_razon").value = "";
+    document.getElementById("nuevo_cli_cuit").value = "";
+    document.getElementById("nuevo_cli_domicilio").value = "";
+    document.getElementById("nuevo_cli_sector").value = "";
+    document.getElementById("nuevo_cli_email").value = "";
+    document.getElementById("nuevo_cli_telefono").value = "";
+    document.getElementById("nuevo_cli_iva").value = "Consumidor Final";
+    actualizarSubsectores();
+}
+
+function abrirModalNuevoCliente() {
+    limpiarModalCliente();
+    const modalEl = document.getElementById("modalNuevoCliente");
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+}
+
+function abrirModalEditarCliente() {
+    const cliente = obtenerDatosClienteSeleccionado();
+    if (!cliente) {
+        alert("Selecciona un cliente existente para poder editarlo.");
+        return;
+    }
+
+    document.getElementById("cliente_modal_id").value = cliente.id;
+    document.getElementById("modalClienteTitulo").textContent = "Editar Cliente";
+    document.getElementById("modalClienteGuardarBtn").textContent = "Guardar Cambios";
+    document.getElementById("nuevo_cli_nombre").value = cliente.nombre;
+    document.getElementById("nuevo_cli_razon").value = cliente.razon_social;
+    document.getElementById("nuevo_cli_cuit").value = cliente.cuit;
+    document.getElementById("nuevo_cli_domicilio").value = cliente.domicilio;
+    document.getElementById("nuevo_cli_sector").value = cliente.sector;
+    actualizarSubsectores();
+    document.getElementById("nuevo_cli_subsector").value = cliente.subsector || "";
+    document.getElementById("nuevo_cli_email").value = cliente.email;
+    document.getElementById("nuevo_cli_telefono").value = cliente.telefono;
+    document.getElementById("nuevo_cli_iva").value = cliente.condicion_iva;
+
+    const modalEl = document.getElementById("modalNuevoCliente");
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+}
+
+function actualizarOptionClienteEnSelect(data) {
+    const select = document.getElementById("cliente_select");
+    const value = String(data.id);
+    const text = `${data.nombre}${data.cuit ? ` (${data.cuit})` : ""}`;
+    const optionData = {
+        value: value,
+        text: text,
+        nombre: data.nombre || "",
+        razon: data.razon_social || "",
+        razon_social: data.razon_social || "",
+        cuit: data.cuit || "",
+        domicilio: data.domicilio || "",
+        sector: data.sector || "",
+        subsector: data.subsector || "",
+        email: data.email || "",
+        telefono: data.telefono || "",
+        iva: data.condicion_iva || "Consumidor Final",
+        condicion_iva: data.condicion_iva || "Consumidor Final",
+    };
+
+    if (select.tomselect) {
+        select.tomselect.addOption(optionData);
+        select.tomselect.updateOption(value, optionData);
+        select.tomselect.setValue(value, true);
+    }
+
+    let option = Array.from(select.options).find((opt) => opt.value === value);
+    if (!option) {
+        option = document.createElement("option");
+        option.value = value;
+        select.appendChild(option);
+    }
+    option.text = text;
+    option.setAttribute("data-nombre", optionData.nombre);
+    option.setAttribute("data-razon", optionData.razon);
+    option.setAttribute("data-cuit", optionData.cuit);
+    option.setAttribute("data-domicilio", optionData.domicilio);
+    option.setAttribute("data-sector", optionData.sector);
+    option.setAttribute("data-subsector", optionData.subsector);
+    option.setAttribute("data-email", optionData.email);
+    option.setAttribute("data-telefono", optionData.telefono);
+    option.setAttribute("data-iva", optionData.iva);
+    if (!select.tomselect) {
+        select.value = value;
+    }
+
+    sincronizarClienteSeleccionado();
+}
+
 function guardarCliente() {
+    const clienteId = document.getElementById("cliente_modal_id").value.trim();
+    const esEdicion = Boolean(clienteId);
     const nombre = document.getElementById("nuevo_cli_nombre").value.trim();
     const razon = document.getElementById("nuevo_cli_razon").value.trim();
     const cuit = document.getElementById("nuevo_cli_cuit").value.trim();
+    const domicilio = document.getElementById("nuevo_cli_domicilio").value.trim();
+    const sector = document.getElementById("nuevo_cli_sector").value;
+    const subsector = document.getElementById("nuevo_cli_subsector").value;
     const email = document.getElementById("nuevo_cli_email").value.trim();
     const telefono = document.getElementById("nuevo_cli_telefono").value.trim();
     const condicionIva = document.getElementById("nuevo_cli_iva").value;
@@ -410,14 +612,25 @@ function guardarCliente() {
         alert("El nombre es requerido");
         return;
     }
+    if (!sector) {
+        alert("El sector es obligatorio");
+        return;
+    }
+    if (!subsector) {
+        alert("La subdivision es obligatoria");
+        return;
+    }
 
-    fetch("/api/clientes", {
-        method: "POST",
+    fetch(esEdicion ? `/api/clientes/${clienteId}` : "/api/clientes", {
+        method: esEdicion ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             nombre: nombre,
             razon_social: razon,
             cuit: cuit,
+            domicilio: domicilio,
+            sector: sector,
+            subsector: subsector,
             email: email,
             telefono: telefono,
             condicion_iva: condicionIva,
@@ -425,50 +638,76 @@ function guardarCliente() {
     })
         .then((res) => res.json())
         .then((data) => {
+            if (data.error === "auth_required") {
+                window.location.href = "{{ url_for('login') }}";
+                return;
+            }
             if (data.error) {
                 alert(data.error);
                 return;
             }
 
-            const select = document.getElementById("cliente_select");
-            const text = `${data.nombre}${data.cuit ? ` (${data.cuit})` : ""}`;
-            const optionData = {
-                value: String(data.id),
-                text: text,
-                nombre: data.nombre || "",
-                razon: data.razon_social || "",
-                cuit: data.cuit || "",
-                iva: data.condicion_iva || "Consumidor Final",
-            };
-
-            if (select.tomselect) {
-                select.tomselect.addOption(optionData);
-                select.tomselect.addItem(String(data.id), true);
-            } else {
-                const option = document.createElement("option");
-                option.value = String(data.id);
-                option.text = text;
-                option.setAttribute("data-nombre", optionData.nombre);
-                option.setAttribute("data-razon", optionData.razon);
-                option.setAttribute("data-cuit", optionData.cuit);
-                option.setAttribute("data-iva", optionData.iva);
-                select.appendChild(option);
-                select.value = String(data.id);
-            }
-
-            sincronizarClienteSeleccionado();
+            actualizarOptionClienteEnSelect(data);
 
             const modalEl = document.getElementById("modalNuevoCliente");
-            const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
             modal.hide();
-
-            document.getElementById("nuevo_cli_nombre").value = "";
-            document.getElementById("nuevo_cli_razon").value = "";
-            document.getElementById("nuevo_cli_cuit").value = "";
-            document.getElementById("nuevo_cli_email").value = "";
-            document.getElementById("nuevo_cli_telefono").value = "";
-            document.getElementById("nuevo_cli_iva").value = "Consumidor Final";
+            limpiarModalCliente();
         });
+}
+
+function prepararEnvio() {
+    const form = document.getElementById("form-cotizador");
+    const select = document.getElementById("cliente_select");
+    const rows = document.querySelectorAll("#cuerpo-tabla tr");
+    if (!form) {
+        return;
+    }
+    if (select && !select.value) {
+        alert("Selecciona un cliente antes de generar la cotizacion.");
+        if (select.tomselect) {
+            select.tomselect.focus();
+        } else {
+            select.focus();
+        }
+        return;
+    }
+    if (!rows.length) {
+        alert("Agrega al menos un item antes de continuar.");
+        return;
+    }
+    if (!form.reportValidity()) {
+        return;
+    }
+
+    sincronizarClienteSeleccionado();
+    const familiaActual = document.getElementById("input_familia_hidden")?.value || "";
+    const selectFamilia = document.getElementById("select_familia");
+    if (selectFamilia) {
+        selectFamilia.value = familiaActual;
+    }
+    bootstrap.Modal.getOrCreateInstance(document.getElementById("modalFamilia")).show();
+}
+
+function confirmarEnvio() {
+    const familia = document.getElementById("select_familia")?.value || "";
+    if (!familia) {
+        alert("Por favor, selecciona una familia para continuar.");
+        return;
+    }
+
+    const form = document.getElementById("form-cotizador");
+    const inputFamilia = document.getElementById("input_familia_hidden");
+    if (!form || !inputFamilia) {
+        return;
+    }
+    inputFamilia.value = familia;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById("modalFamilia")).hide();
+    if (typeof form.requestSubmit === "function") {
+        form.requestSubmit();
+    } else {
+        form.submit();
+    }
 }
 
 function agregarFila(data = {}) {
@@ -668,6 +907,12 @@ document.getElementById("form-cotizador")?.addEventListener("submit", function (
         } else {
             select.focus();
         }
+        return;
+    }
+    const inputFamilia = document.getElementById("input_familia_hidden");
+    if (!inputFamilia || !inputFamilia.value.trim()) {
+        event.preventDefault();
+        prepararEnvio();
         return;
     }
     sincronizarClienteSeleccionado();

@@ -149,6 +149,12 @@ function aplicarFiltros() {
     fetch(`/filtrar_historial?${params.toString()}`)
         .then((response) => response.json())
         .then((data) => {
+            if (!Array.isArray(data)) {
+                if (data && data.error === "auth_required") {
+                    window.location.href = "{{ url_for('login') }}";
+                }
+                return;
+            }
             const tbody = document.getElementById("tabla-historial");
             tbody.innerHTML = "";
 
@@ -172,7 +178,10 @@ function aplicarFiltros() {
                 tbody.innerHTML += `
                     <tr>
                         <td><span class="badge bg-secondary">#${numeroCot}</span></td>
-                        <td><i class="bi ${icono} me-2"></i><strong class="text-dark">${c.cliente_nombre || c.cliente || "Sin Cliente"}</strong></td>
+                        <td>
+                            <i class="bi ${icono} me-2"></i><strong class="text-dark">${c.cliente_nombre || c.cliente || "Sin Cliente"}</strong>
+                            ${c.familia ? `<div><small class="text-muted text-uppercase" style="font-size: 0.7rem;"><i class="bi bi-tag-fill me-1"></i>${c.familia}</small></div>` : ""}
+                        </td>
                         <td>${c.fecha}</td>
                         <td class="text-center">
                             <span id="estado-badge-${c.id}" class="estado-pill ${estadoClass}">${estado}</span>

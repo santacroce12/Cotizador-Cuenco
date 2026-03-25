@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7 col-lg-5">
+        <div class="card p-4 page-surface">
+            <div class="text-center mb-4">
+                <h2 class="mb-2">Crear administrador</h2>
+                <div class="text-muted">Configuración inicial del cotizador</div>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-danger" role="alert">{{ error }}</div>
+            {% endif %}
+
+            {% if not setup_token_configurado %}
+            <div class="alert alert-warning" role="alert">
+                El alta inicial esta bloqueada hasta definir <code>ADMIN_SETUP_TOKEN</code>.
+            </div>
+            {% endif %}
+
+            <form method="POST">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Clave de instalacion</label>
+                    <input type="password" name="setup_token" class="form-control" autocomplete="one-time-code" required>
+                    <div class="form-text">Esta clave evita que cualquiera cree el usuario inicial si el sistema queda expuesto.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Usuario</label>
+                    <input type="text" name="username" class="form-control" autocomplete="username" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Contraseña</label>
+                    <input type="password" name="password" class="form-control" autocomplete="new-password" required>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Repetir contraseña</label>
+                    <input type="password" name="password_confirm" class="form-control" autocomplete="new-password" required>
+                </div>
+                <button type="submit" class="btn btn-dark-custom w-100">Crear usuario inicial</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

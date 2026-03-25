@@ -1,0 +1,53 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="card p-4 page-surface">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h2 class="text-dark m-0"><i class="bi bi-journal-text me-2"></i>Auditoria</h2>
+            <div class="small text-muted mt-2">Registro de acciones realizadas dentro del cotizador.</div>
+        </div>
+    </div>
+
+    <div class="table-responsive table-grid-outline">
+        <table class="table table-custom align-middle">
+            <thead class="thead-dark-custom">
+                <tr>
+                    <th>Fecha</th>
+                    <th>Usuario</th>
+                    <th>Accion</th>
+                    <th>Entidad</th>
+                    <th>Referencia</th>
+                    <th>Detalle</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if registros %}
+                    {% for registro in registros %}
+                    <tr>
+                        <td>{{ registro.fecha.strftime('%d/%m/%Y %H:%M:%S') if registro.fecha else '' }}</td>
+                        <td><strong>{{ registro.username }}</strong></td>
+                        <td>{{ registro.accion }}</td>
+                        <td>{{ registro.tipo_entidad }}</td>
+                        <td>
+                            {% if registro.tipo_entidad == 'Cotización' and registro.entidad_id %}
+                            <a href="{{ url_for('ver_cotizacion', id=registro.entidad_id) }}" class="text-decoration-none">
+                                {{ registro.entidad_ref or registro.entidad_id }}
+                            </a>
+                            {% else %}
+                                {{ registro.entidad_ref or '-' }}
+                            {% endif %}
+                        </td>
+                        <td>{{ registro.detalle or '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted p-4">Todavia no hay eventos registrados.</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

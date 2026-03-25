@@ -1,4 +1,6 @@
 {
+  "APP_SECRET_KEY": "una-clave-larga-y-aleatoria",
+  "ADMIN_SETUP_TOKEN": "otra-clave-larga-solo-para-el-alta-inicial",
   "SMTP_HOST": "smtp.example.com",
   "SMTP_PORT": 465,
   "SMTP_USE_SSL": true,

@@ -4,20 +4,26 @@ import re
 import smtplib
 import threading
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta
 from email.message import EmailMessage
+from functools import wraps
 from io import BytesIO
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, redirect, render_template, request, url_for
+import jwt
+from flask import Flask, Response, g, jsonify, redirect, render_template, request, url_for
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, or_
+from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 db_path = Path(app.root_path) / "database.db"
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path.as_posix()}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -35,11 +41,45 @@ DEFAULT_SMTP_FROM = "cotizador@cuencotech.com"
 DEFAULT_APP_BASE_URL = "https://cuencotech.com"
 LOCAL_SETTINGS_PATH = Path(app.root_path) / "local_settings.json"
 
+
+def cargar_local_settings():
+    if not LOCAL_SETTINGS_PATH.exists():
+        return {}
+    try:
+        data = json.loads(LOCAL_SETTINGS_PATH.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+LOCAL_SETTINGS = cargar_local_settings()
+app.config["SECRET_KEY"] = (
+    os.getenv("APP_SECRET_KEY")
+    or os.getenv("SECRET_KEY")
+    or str(LOCAL_SETTINGS.get("APP_SECRET_KEY") or LOCAL_SETTINGS.get("SECRET_KEY") or "").strip()
+    or "change-this-secret-in-local-settings"
+)
+AUTH_COOKIE_SECURE = str(
+    os.getenv("AUTH_COOKIE_SECURE") or LOCAL_SETTINGS.get("AUTH_COOKIE_SECURE") or ""
+).strip().lower() in ("1", "true", "yes")
+
 PLACEHOLDER_PRODUCTO = "placeholder_product.png"
 UPLOADS_PRODUCTOS_DIR = Path(app.static_folder) / "uploads" / "productos"
 UPLOADS_PRODUCTOS_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 ESTADOS_COTIZACION = ("En progreso", "Aceptada", "Rechazada")
+FAMILIAS_COTIZACION = (
+    "SEGURIDAD URBANA",
+    "PARKING",
+    "TRANSPORTE INTELIGENTE",
+    "CONECTIVIDAD SATELITAL",
+    "SALAS DE CONTROL",
+    "SMART CITIES",
+)
+SECTORES_CLIENTE = {
+    "Publico": ("Municipal", "Provincial", "Nacional", "Otro"),
+    "Privado": ("Energía", "Agroindustria", "Hotelería", "Educación", "Turismo", "Retail", "Otro"),
+}
 REMINDER_POLL_SECONDS = 60
 _reminder_worker_lock = threading.Lock()
 _reminder_worker_started = False
@@ -62,6 +102,7 @@ class Cotizacion(db.Model):
     cliente_id = db.Column(db.Integer, db.ForeignKey("cliente.id"))
     cliente_razon_social = db.Column(db.String(100))
     cliente_cuit = db.Column(db.String(50))
+    familia = db.Column(db.String(50))
     fecha = db.Column(db.DateTime, default=datetime.utcnow)
     moneda = db.Column(db.String(10), default="ARS")
     condicion_iva = db.Column(db.String(50))
@@ -95,10 +136,39 @@ class Cliente(db.Model):
     nombre = db.Column(db.String(100), nullable=False)
     razon_social = db.Column(db.String(100))
     cuit = db.Column(db.String(20), unique=True)
+    domicilio = db.Column(db.String(200))
+    sector = db.Column(db.String(50))
+    subsector = db.Column(db.String(50))
     email = db.Column(db.String(100))
     telefono = db.Column(db.String(50))
     condicion_iva = db.Column(db.String(50), default="Consumidor Final")
     cotizaciones = db.relationship("Cotizacion", backref="cliente_ref", lazy=True)
+
+
+class Usuario(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+
+class Auditoria(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuario.id"))
+    username = db.Column(db.String(50), nullable=False)
+    accion = db.Column(db.String(80), nullable=False)
+    tipo_entidad = db.Column(db.String(50), nullable=False)
+    entidad_id = db.Column(db.Integer)
+    entidad_ref = db.Column(db.String(80))
+    detalle = db.Column(db.Text)
+    fecha = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    usuario = db.relationship("Usuario", backref="auditorias", lazy=True)
 
 
 def formatear_numero_cotizacion(anio, secuencia):
@@ -111,6 +181,50 @@ def parsear_numero_cotizacion(valor):
     if not match:
         return None
     return int(match.group(1)), int(match.group(2))
+
+
+def generar_token_usuario(usuario):
+    token = jwt.encode(
+        {
+            "user_id": usuario.id,
+            "exp": datetime.utcnow() + timedelta(hours=24),
+        },
+        app.config["SECRET_KEY"],
+        algorithm="HS256",
+    )
+    return token if isinstance(token, str) else token.decode("utf-8")
+
+
+def obtener_usuario_desde_token(token):
+    if not token:
+        return None
+    try:
+        data = jwt.decode(token, app.config["SECRET_KEY"], algorithms=["HS256"])
+    except jwt.PyJWTError:
+        return None
+    return db.session.get(Usuario, data.get("user_id"))
+
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.cookies.get("x-access-token")
+        current_user = obtener_usuario_desde_token(token)
+        if not current_user:
+            if request.endpoint in {"agregar_cliente", "actualizar_estado_cotizacion", "filtrar_historial"}:
+                return jsonify({"error": "auth_required"}), 401
+            return redirect(url_for("login", next=request.path))
+        g.current_user = current_user
+        return f(*args, **kwargs)
+
+    return decorated
+
+
+@app.context_processor
+def inject_current_user():
+    return {
+        "current_user": getattr(g, "current_user", None),
+    }
 
 
 with app.app_context():
@@ -159,11 +273,23 @@ with app.app_context():
     if "cliente_id" not in columnas_cot:
         db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN cliente_id INTEGER"))
         db.session.commit()
+    if "familia" not in columnas_cot:
+        db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN familia VARCHAR(50)"))
+        db.session.commit()
     db.session.execute(
         db.text("UPDATE cotizacion SET estado = 'En progreso' WHERE estado IS NULL OR TRIM(estado) = ''")
     )
     db.session.commit()
     columnas_cliente = [col[1] for col in db.session.execute(db.text("PRAGMA table_info(cliente)")).fetchall()]
+    if "domicilio" not in columnas_cliente:
+        db.session.execute(db.text("ALTER TABLE cliente ADD COLUMN domicilio VARCHAR(200)"))
+        db.session.commit()
+    if "sector" not in columnas_cliente:
+        db.session.execute(db.text("ALTER TABLE cliente ADD COLUMN sector VARCHAR(50)"))
+        db.session.commit()
+    if "subsector" not in columnas_cliente:
+        db.session.execute(db.text("ALTER TABLE cliente ADD COLUMN subsector VARCHAR(50)"))
+        db.session.commit()
     if "email" not in columnas_cliente:
         db.session.execute(db.text("ALTER TABLE cliente ADD COLUMN email VARCHAR(100)"))
         db.session.commit()
@@ -286,6 +412,46 @@ def smtp_esta_configurado():
     return bool(config["host"] and config["from_email"] and config["username"] and config["password"])
 
 
+def auth_cookie_kwargs():
+    return {
+        "httponly": True,
+        "samesite": "Lax",
+        "secure": AUTH_COOKIE_SECURE or request.is_secure,
+        "max_age": 60 * 60 * 24,
+    }
+
+
+def no_hay_usuarios():
+    return Usuario.query.count() == 0
+
+
+def obtener_admin_setup_token():
+    return str(os.getenv("ADMIN_SETUP_TOKEN") or LOCAL_SETTINGS.get("ADMIN_SETUP_TOKEN") or "").strip()
+
+
+def registrar_auditoria(accion, tipo_entidad, entidad_id=None, entidad_ref=None, detalle=None, usuario=None, username=None):
+    usuario_actual = usuario or getattr(g, "current_user", None)
+    username_final = username or (usuario_actual.username if usuario_actual else "sistema")
+    usuario_id = usuario_actual.id if usuario_actual else None
+
+    try:
+        db.session.add(
+            Auditoria(
+                usuario_id=usuario_id,
+                username=username_final,
+                accion=(accion or "").strip(),
+                tipo_entidad=(tipo_entidad or "").strip(),
+                entidad_id=entidad_id,
+                entidad_ref=(entidad_ref or "").strip() or None,
+                detalle=(detalle or "").strip() or None,
+            )
+        )
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        print(f"[auditoria] No se pudo registrar la accion '{accion}': {exc}")
+
+
 def normalizar_estado_cotizacion(valor):
     valor = (valor or "").strip()
     if not valor:
@@ -294,6 +460,70 @@ def normalizar_estado_cotizacion(valor):
         if valor.lower() == estado.lower():
             return estado
     return None
+
+
+def normalizar_familia_cotizacion(valor):
+    valor = (valor or "").strip()
+    if not valor:
+        return None
+    for familia in FAMILIAS_COTIZACION:
+        if valor.lower() == familia.lower():
+            return familia
+    return None
+
+
+def normalizar_sector_cliente(valor):
+    valor = (valor or "").strip()
+    for sector in SECTORES_CLIENTE:
+        if valor.lower() == sector.lower():
+            return sector
+    return None
+
+
+def normalizar_subsector_cliente(sector, valor):
+    sector_normalizado = normalizar_sector_cliente(sector)
+    if not sector_normalizado:
+        return None
+    valor = (valor or "").strip()
+    for subsector in SECTORES_CLIENTE[sector_normalizado]:
+        if valor.lower() == subsector.lower():
+            return subsector
+    return None
+
+
+def validar_payload_cliente(data, cliente_actual=None):
+    nombre = (data.get("nombre") or "").strip()
+    cuit = (data.get("cuit") or "").strip()
+    sector = normalizar_sector_cliente(data.get("sector"))
+    subsector = normalizar_subsector_cliente(sector, data.get("subsector"))
+
+    if not nombre:
+        return None, "Nombre requerido"
+    if not sector:
+        return None, "Sector requerido"
+    if not subsector:
+        return None, "Subsector invalido para el sector seleccionado"
+
+    if cuit:
+        query = Cliente.query.filter(Cliente.cuit == cuit)
+        if cliente_actual:
+            query = query.filter(Cliente.id != cliente_actual.id)
+        repetido = query.first()
+        if repetido:
+            return None, "Ya existe un cliente con ese CUIT"
+
+    payload = {
+        "nombre": nombre,
+        "razon_social": (data.get("razon_social") or "").strip(),
+        "cuit": cuit,
+        "domicilio": (data.get("domicilio") or "").strip(),
+        "sector": sector,
+        "subsector": subsector,
+        "email": (data.get("email") or "").strip(),
+        "telefono": (data.get("telefono") or "").strip(),
+        "condicion_iva": (data.get("condicion_iva") or "Consumidor Final").strip() or "Consumidor Final",
+    }
+    return payload, None
 
 
 def parsear_entero_positivo(valor, default=None):
@@ -488,6 +718,7 @@ def renderizar_cotizador(cotizacion=None):
         cotizacion=cotizacion,
         modo_edicion=bool(cotizacion),
         items_precargados=construir_items_precargados(cotizacion),
+        familias_cotizacion=FAMILIAS_COTIZACION,
         smtp_configurado=smtp_esta_configurado(),
         followup_default_email=obtener_config_smtp()["default_to"],
     )
@@ -542,6 +773,7 @@ def generar_excel_cotizacion(cotizacion):
         ("Numero de cotizacion", cotizacion.numero_cotizacion or cotizacion.id),
         ("Fecha de creacion", cotizacion.fecha.strftime("%d/%m/%Y %H:%M") if cotizacion.fecha else ""),
         ("Estado", cotizacion.estado or "En progreso"),
+        ("Familia", cotizacion.familia or ""),
         ("Cliente", cotizacion.cliente or ""),
         ("Razon social cliente", cotizacion.cliente_razon_social or ""),
         ("CUIT cliente", cotizacion.cliente_cuit or ""),
@@ -641,33 +873,125 @@ def aplicar_filtro_fecha_cotizaciones(query, desde="", hasta=""):
     return query
 
 
+def parsear_fecha_iso(valor):
+    valor = (valor or "").strip()
+    if not valor:
+        return None
+    try:
+        return datetime.strptime(valor, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
 def resolver_rango_dashboard(periodo, desde_raw="", hasta_raw=""):
     hoy = datetime.now().date()
     periodo = (periodo or "30").strip().lower()
-    desde = (desde_raw or "").strip()
-    hasta = (hasta_raw or "").strip()
+    rangos_rapidos = {
+        "7": 6,
+        "30": 29,
+        "60": 59,
+        "90": 89,
+        "365": 364,
+    }
 
-    if periodo == "30":
-        hasta = hoy.isoformat()
-        desde = (hoy - timedelta(days=29)).isoformat()
-    elif periodo == "60":
-        hasta = hoy.isoformat()
-        desde = (hoy - timedelta(days=59)).isoformat()
+    if periodo in rangos_rapidos:
+        hasta_date = hoy
+        desde_date = hoy - timedelta(days=rangos_rapidos[periodo])
     else:
         periodo = "custom"
-        if not hasta:
-            hasta = hoy.isoformat()
+        desde_date = parsear_fecha_iso(desde_raw)
+        hasta_date = parsear_fecha_iso(hasta_raw) or hoy
+        if desde_date is None:
+            desde_date = hasta_date - timedelta(days=29)
 
-    if desde and hasta and desde > hasta:
-        desde, hasta = hasta, desde
+    if desde_date > hasta_date:
+        desde_date, hasta_date = hasta_date, desde_date
 
-    return periodo, desde, hasta
+    return periodo, desde_date.isoformat(), hasta_date.isoformat(), desde_date, hasta_date
+
+
+def calcular_variacion_porcentual(actual, anterior):
+    if not anterior:
+        return None if not actual else 100.0
+    return round(((actual - anterior) / anterior) * 100.0, 1)
+
+
+def construir_series_dashboard(cotizaciones, desde_date, hasta_date):
+    total_dias = max((hasta_date - desde_date).days + 1, 1)
+    usar_semanas = total_dias > 62
+    labels = []
+    buckets = []
+
+    cursor = desde_date
+    while cursor <= hasta_date:
+        if usar_semanas:
+            bucket_start = cursor
+            bucket_end = min(cursor + timedelta(days=6), hasta_date)
+            labels.append(f"{bucket_start.strftime('%d/%m')} - {bucket_end.strftime('%d/%m')}")
+            buckets.append({"start": bucket_start, "end": bucket_end, "creadas": 0, "cerradas": 0, "aceptadas": 0})
+            cursor = bucket_end + timedelta(days=1)
+        else:
+            labels.append(cursor.strftime("%d/%m"))
+            buckets.append({"start": cursor, "end": cursor, "creadas": 0, "cerradas": 0, "aceptadas": 0})
+            cursor += timedelta(days=1)
+
+    for cotizacion in cotizaciones:
+        fecha_cot = (cotizacion.fecha or datetime.utcnow()).date()
+        if fecha_cot < desde_date or fecha_cot > hasta_date:
+            continue
+        if usar_semanas:
+            index = (fecha_cot - desde_date).days // 7
+        else:
+            index = (fecha_cot - desde_date).days
+        if index < 0 or index >= len(buckets):
+            continue
+
+        bucket = buckets[index]
+        estado = normalizar_estado_cotizacion(cotizacion.estado) or "En progreso"
+        bucket["creadas"] += 1
+        if estado in ("Aceptada", "Rechazada"):
+            bucket["cerradas"] += 1
+        if estado == "Aceptada":
+            bucket["aceptadas"] += 1
+
+    return {
+        "labels": labels,
+        "creadas": [bucket["creadas"] for bucket in buckets],
+        "cerradas": [bucket["cerradas"] for bucket in buckets],
+        "aceptadas": [bucket["aceptadas"] for bucket in buckets],
+        "granularidad": "Semanal" if usar_semanas else "Diaria",
+    }
+
+
+def construir_top_clientes_dashboard(cotizaciones, limite=5):
+    acumulado = defaultdict(lambda: {"cantidad": 0, "total": 0.0, "aceptadas": 0})
+    for cotizacion in cotizaciones:
+        nombre = (cotizacion.cliente_ref.nombre if cotizacion.cliente_ref else cotizacion.cliente) or "Sin cliente"
+        estado = normalizar_estado_cotizacion(cotizacion.estado) or "En progreso"
+        acumulado[nombre]["cantidad"] += 1
+        acumulado[nombre]["total"] += cotizacion.total_final or 0.0
+        if estado == "Aceptada":
+            acumulado[nombre]["aceptadas"] += 1
+
+    ranking = []
+    for nombre, data in acumulado.items():
+        ranking.append(
+            {
+                "nombre": nombre,
+                "cantidad": data["cantidad"],
+                "aceptadas": data["aceptadas"],
+                "total": round(data["total"], 2),
+            }
+        )
+
+    ranking.sort(key=lambda item: (-item["cantidad"], -item["total"], item["nombre"].lower()))
+    return ranking[:limite]
 
 
 def aplicar_filtro_estado_dashboard(query, estado):
     estado = (estado or "todos").strip().lower()
     if estado == "cerradas":
-        return query.filter(Cotizacion.estado.in_(("Aceptada", "Rechazada")))
+        estado = "aceptadas"
     if estado == "aceptadas":
         return query.filter(Cotizacion.estado == "Aceptada")
     if estado == "rechazadas":
@@ -694,6 +1018,8 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         condicion_iva = cliente_sel.condicion_iva
 
     es_edicion = cotizacion is not None
+    estado_anterior = None
+    familia_anterior = normalizar_familia_cotizacion(cotizacion.familia if cotizacion else None)
     if not cotizacion:
         fecha_creacion = datetime.utcnow()
         cotizacion = Cotizacion(
@@ -708,6 +1034,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
             total_final=0.0,
         )
     else:
+        estado_anterior = normalizar_estado_cotizacion(cotizacion.estado) or "En progreso"
         cotizacion.numero_cotizacion = cotizacion.numero_cotizacion or generar_numero_cotizacion(cotizacion.fecha)
         cotizacion.estado = normalizar_estado_cotizacion(cotizacion.estado) or "En progreso"
         estado_form = normalizar_estado_cotizacion(request.form.get("estado"))
@@ -723,6 +1050,8 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         cliente_sel.razon_social if cliente_sel else (request.form.get("cliente_razon_social") or "").strip()
     )
     cotizacion.cliente_cuit = cliente_sel.cuit if cliente_sel else (request.form.get("cliente_cuit") or "").strip()
+    familia_form = normalizar_familia_cotizacion(request.form.get("familia"))
+    cotizacion.familia = familia_form or familia_anterior
     cotizacion.moneda = moneda
     cotizacion.condicion_iva = condicion_iva
     preparar_seguimiento_cotizacion(cotizacion, cliente_sel=cliente_sel)
@@ -806,7 +1135,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         eliminar_imagen_local(item_sobrante.imagen_url)
         db.session.delete(item_sobrante)
 
-    if not cotizacion.cliente or not cotizacion.items:
+    if not cotizacion.cliente or not cotizacion.items or not cotizacion.familia:
         destino = "editar_cotizacion" if es_edicion else "index"
         kwargs = {"id": cotizacion.id} if es_edicion else {}
         return None, redirect(url_for(destino, **kwargs))
@@ -817,40 +1146,160 @@ def persistir_cotizacion_desde_form(cotizacion=None):
 
     db.session.add(cotizacion)
     db.session.commit()
+    numero_ref = cotizacion.numero_cotizacion or str(cotizacion.id)
+    registrar_auditoria(
+        "Creó cotización" if not es_edicion else "Modificó cotización",
+        "Cotización",
+        entidad_id=cotizacion.id,
+        entidad_ref=numero_ref,
+        detalle=(
+            f"Cliente: {cotizacion.cliente}. Familia: {cotizacion.familia}. Estado: {cotizacion.estado}. "
+            f"Total: {cotizacion.moneda or 'ARS'} {cotizacion.total_final:,.2f}."
+        ),
+    )
+    if es_edicion and estado_anterior and estado_anterior != cotizacion.estado:
+        registrar_auditoria(
+            "Cambió estado de cotización",
+            "Cotización",
+            entidad_id=cotizacion.id,
+            entidad_ref=numero_ref,
+            detalle=f"Estado anterior: {estado_anterior}. Estado nuevo: {cotizacion.estado}.",
+        )
     return cotizacion, None
 
 
+@app.route("/setup-admin", methods=["GET", "POST"])
+def setup_admin():
+    if not no_hay_usuarios():
+        return redirect(url_for("login"))
+
+    error = None
+    setup_token_configurado = bool(obtener_admin_setup_token())
+    if request.method == "POST":
+        setup_token = (request.form.get("setup_token") or "").strip()
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        password_confirm = request.form.get("password_confirm") or ""
+        admin_setup_token = obtener_admin_setup_token()
+
+        if not admin_setup_token:
+            error = "El alta inicial esta deshabilitada hasta configurar ADMIN_SETUP_TOKEN."
+        elif setup_token != admin_setup_token:
+            error = "La clave de instalacion es invalida."
+        elif not username or not password:
+            error = "Usuario y contraseña son obligatorios."
+        elif password != password_confirm:
+            error = "Las contraseñas no coinciden."
+        elif len(password) < 8:
+            error = "La contraseña debe tener al menos 8 caracteres."
+        else:
+            nuevo = Usuario(username=username)
+            nuevo.set_password(password)
+            db.session.add(nuevo)
+            db.session.commit()
+            registrar_auditoria(
+                "Creo usuario inicial",
+                "Usuario",
+                entidad_id=nuevo.id,
+                entidad_ref=nuevo.username,
+                detalle="Alta inicial del cotizador.",
+                usuario=nuevo,
+                username=nuevo.username,
+            )
+            return redirect(url_for("login"))
+
+    return render_template("setup_admin.html", error=error, setup_token_configurado=setup_token_configurado)
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if no_hay_usuarios():
+        return redirect(url_for("setup_admin"))
+
+    token = request.cookies.get("x-access-token")
+    if token and obtener_usuario_desde_token(token):
+        return redirect(url_for("index"))
+
+    error = None
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        user = Usuario.query.filter_by(username=username).first()
+        if user and user.check_password(password):
+            token = generar_token_usuario(user)
+            destino = request.args.get("next") or request.form.get("next") or url_for("index")
+            if not str(destino).startswith("/"):
+                destino = url_for("index")
+            res = redirect(destino)
+            res.set_cookie("x-access-token", token, **auth_cookie_kwargs())
+            return res
+        error = "Usuario o contraseña incorrectos."
+
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    res = redirect(url_for("login"))
+    res.delete_cookie("x-access-token")
+    return res
+
+
 @app.route("/api/clientes", methods=["POST"])
+@token_required
 def agregar_cliente():
     data = request.get_json(silent=True) or {}
-    cuit = (data.get("cuit") or "").strip()
-    if cuit:
-        repetido = Cliente.query.filter(Cliente.cuit == cuit).first()
-        if repetido:
-            return jsonify({"error": "Ya existe un cliente con ese CUIT"}), 400
-    nuevo = Cliente(
-        nombre=(data.get("nombre") or "").strip(),
-        razon_social=(data.get("razon_social") or "").strip(),
-        cuit=cuit,
-        email=(data.get("email") or "").strip(),
-        telefono=(data.get("telefono") or "").strip(),
-        condicion_iva=(data.get("condicion_iva") or "Consumidor Final").strip() or "Consumidor Final",
-    )
-    if nuevo.nombre:
-        db.session.add(nuevo)
-        db.session.commit()
-        return jsonify(
-            {
-                "id": nuevo.id,
-                "nombre": nuevo.nombre,
-                "razon_social": nuevo.razon_social,
-                "cuit": nuevo.cuit,
-                "email": nuevo.email,
-                "telefono": nuevo.telefono,
-                "condicion_iva": nuevo.condicion_iva,
-            }
-        ), 201
-    return jsonify({"error": "Nombre requerido"}), 400
+    payload, error = validar_payload_cliente(data)
+    if error:
+        return jsonify({"error": error}), 400
+
+    nuevo = Cliente(**payload)
+    db.session.add(nuevo)
+    db.session.commit()
+    return jsonify(
+        {
+            "id": nuevo.id,
+            "nombre": nuevo.nombre,
+            "razon_social": nuevo.razon_social,
+            "cuit": nuevo.cuit,
+            "domicilio": nuevo.domicilio,
+            "sector": nuevo.sector,
+            "subsector": nuevo.subsector,
+            "email": nuevo.email,
+            "telefono": nuevo.telefono,
+            "condicion_iva": nuevo.condicion_iva,
+        }
+    ), 201
+
+
+@app.route("/api/clientes/<int:id>", methods=["PUT"])
+@token_required
+def actualizar_cliente(id):
+    cliente = Cliente.query.get_or_404(id)
+    data = request.get_json(silent=True) or {}
+    payload, error = validar_payload_cliente(data, cliente_actual=cliente)
+    if error:
+        return jsonify({"error": error}), 400
+
+    for campo, valor in payload.items():
+        setattr(cliente, campo, valor)
+
+    db.session.add(cliente)
+    db.session.commit()
+    return jsonify(
+        {
+            "id": cliente.id,
+            "nombre": cliente.nombre,
+            "razon_social": cliente.razon_social,
+            "cuit": cliente.cuit,
+            "domicilio": cliente.domicilio,
+            "sector": cliente.sector,
+            "subsector": cliente.subsector,
+            "email": cliente.email,
+            "telefono": cliente.telefono,
+            "condicion_iva": cliente.condicion_iva,
+        }
+    ), 200
 
 
 @app.before_request
@@ -863,19 +1312,31 @@ def ensure_followup_worker():
 
 
 @app.route("/cotizacion/<int:id>/estado", methods=["POST"])
+@token_required
 def actualizar_estado_cotizacion(id):
     cotizacion = Cotizacion.query.get_or_404(id)
     data = request.get_json(silent=True) or {}
     estado = normalizar_estado_cotizacion(data.get("estado"))
     if not estado:
         return jsonify({"error": "Estado invalido"}), 400
+    estado_anterior = normalizar_estado_cotizacion(cotizacion.estado) or "En progreso"
+    if estado == estado_anterior:
+        return jsonify({"id": cotizacion.id, "estado": cotizacion.estado}), 200
 
     cotizacion.estado = estado
     db.session.commit()
+    registrar_auditoria(
+        "Cambió estado de cotización",
+        "Cotización",
+        entidad_id=cotizacion.id,
+        entidad_ref=cotizacion.numero_cotizacion or str(cotizacion.id),
+        detalle=f"Estado anterior: {estado_anterior}. Estado nuevo: {estado}.",
+    )
     return jsonify({"id": cotizacion.id, "estado": cotizacion.estado}), 200
 
 
 @app.route("/", methods=["GET", "POST"])
+@token_required
 def index():
     if request.method == "POST":
         _, redirect_response = persistir_cotizacion_desde_form()
@@ -887,6 +1348,7 @@ def index():
 
 
 @app.route("/cotizacion/<int:id>/editar", methods=["GET", "POST"])
+@token_required
 def editar_cotizacion(id):
     cotizacion = Cotizacion.query.get_or_404(id)
     if request.method == "POST":
@@ -899,59 +1361,122 @@ def editar_cotizacion(id):
 
 
 @app.route("/historial")
+@token_required
 def historial_page():
     clientes = Cliente.query.order_by(Cliente.nombre).all()
     return render_template("historial.html", clientes=clientes)
 
 
 @app.route("/dashboard")
+@token_required
 def dashboard_page():
     estado = (request.args.get("estado") or "todos").strip().lower()
-    if estado not in ("todos", "cerradas", "en_progreso", "aceptadas", "rechazadas"):
+    if estado == "cerradas":
+        estado = "aceptadas"
+    if estado not in ("todos", "en_progreso", "aceptadas", "rechazadas"):
         estado = "todos"
 
-    periodo, desde, hasta = resolver_rango_dashboard(
+    periodo, desde, hasta, desde_date, hasta_date = resolver_rango_dashboard(
         request.args.get("periodo"),
         request.args.get("desde"),
         request.args.get("hasta"),
     )
 
     query_periodo = aplicar_filtro_fecha_cotizaciones(Cotizacion.query, desde, hasta)
+    cotizaciones_periodo = query_periodo.order_by(Cotizacion.fecha.desc(), Cotizacion.id.desc()).all()
     query_tabla = aplicar_filtro_estado_dashboard(query_periodo, estado)
     cotizaciones = query_tabla.order_by(Cotizacion.fecha.desc(), Cotizacion.id.desc()).all()
 
-    hoy = datetime.now().date()
-    ultimos_30_desde = (hoy - timedelta(days=29)).isoformat()
-    ultimos_60_desde = (hoy - timedelta(days=59)).isoformat()
-    cerradas_30 = aplicar_filtro_fecha_cotizaciones(Cotizacion.query, ultimos_30_desde, hoy.isoformat()).filter(
-        Cotizacion.estado.in_(("Aceptada", "Rechazada"))
-    ).count()
-    cerradas_60 = aplicar_filtro_fecha_cotizaciones(Cotizacion.query, ultimos_60_desde, hoy.isoformat()).filter(
-        Cotizacion.estado.in_(("Aceptada", "Rechazada"))
-    ).count()
+    total = len(cotizaciones_periodo)
+    aceptadas = sum(1 for cot in cotizaciones_periodo if normalizar_estado_cotizacion(cot.estado) == "Aceptada")
+    rechazadas = sum(1 for cot in cotizaciones_periodo if normalizar_estado_cotizacion(cot.estado) == "Rechazada")
+    en_progreso = sum(1 for cot in cotizaciones_periodo if normalizar_estado_cotizacion(cot.estado) == "En progreso")
+    cerradas = aceptadas + rechazadas
+    total_importe = round(sum((cot.total_final or 0.0) for cot in cotizaciones_periodo), 2)
+    importe_pipeline = round(
+        sum((cot.total_final or 0.0) for cot in cotizaciones_periodo if normalizar_estado_cotizacion(cot.estado) == "En progreso"),
+        2,
+    )
+    importe_aceptado = round(
+        sum((cot.total_final or 0.0) for cot in cotizaciones_periodo if normalizar_estado_cotizacion(cot.estado) == "Aceptada"),
+        2,
+    )
+    ticket_promedio = round(total_importe / total, 2) if total else 0.0
+    tasa_cierre = round((cerradas / total) * 100.0, 1) if total else 0.0
+    tasa_aceptacion = round((aceptadas / total) * 100.0, 1) if total else 0.0
+
+    dias_periodo = max((hasta_date - desde_date).days + 1, 1)
+    desde_anterior = desde_date - timedelta(days=dias_periodo)
+    hasta_anterior = desde_date - timedelta(days=1)
+    cotizaciones_previas = aplicar_filtro_fecha_cotizaciones(
+        Cotizacion.query, desde_anterior.isoformat(), hasta_anterior.isoformat()
+    ).all()
+    total_previo = len(cotizaciones_previas)
+    aceptadas_previas = sum(1 for cot in cotizaciones_previas if normalizar_estado_cotizacion(cot.estado) == "Aceptada")
 
     resumen = {
-        "total": query_periodo.count(),
-        "cerradas": query_periodo.filter(Cotizacion.estado.in_(("Aceptada", "Rechazada"))).count(),
-        "aceptadas": query_periodo.filter(Cotizacion.estado == "Aceptada").count(),
-        "rechazadas": query_periodo.filter(Cotizacion.estado == "Rechazada").count(),
-        "en_progreso": query_periodo.filter(Cotizacion.estado == "En progreso").count(),
-        "cerradas_30": cerradas_30,
-        "cerradas_60": cerradas_60,
+        "total": total,
+        "cerradas": cerradas,
+        "aceptadas": aceptadas,
+        "rechazadas": rechazadas,
+        "en_progreso": en_progreso,
+        "total_importe": total_importe,
+        "importe_pipeline": importe_pipeline,
+        "importe_aceptado": importe_aceptado,
+        "ticket_promedio": ticket_promedio,
+        "tasa_cierre": tasa_cierre,
+        "tasa_aceptacion": tasa_aceptacion,
+        "promedio_diario": round(total / dias_periodo, 1),
+        "delta_total": calcular_variacion_porcentual(total, total_previo),
+        "delta_aceptadas": calcular_variacion_porcentual(aceptadas, aceptadas_previas),
     }
+
+    series = construir_series_dashboard(cotizaciones_periodo, desde_date, hasta_date)
+    monedas = {
+        "ARS": {
+            "cantidad": sum(1 for cot in cotizaciones_periodo if (cot.moneda or "ARS").upper() == "ARS"),
+            "total": round(sum((cot.total_final or 0.0) for cot in cotizaciones_periodo if (cot.moneda or "ARS").upper() == "ARS"), 2),
+        },
+        "USD": {
+            "cantidad": sum(1 for cot in cotizaciones_periodo if (cot.moneda or "ARS").upper() == "USD"),
+            "total": round(sum((cot.total_final or 0.0) for cot in cotizaciones_periodo if (cot.moneda or "ARS").upper() == "USD"), 2),
+        },
+    }
+    top_clientes = construir_top_clientes_dashboard(cotizaciones_periodo)
+    estado_foco_label = {
+        "todos": "Todas las cotizaciones",
+        "aceptadas": "Cotizaciones aceptadas",
+        "rechazadas": "Cotizaciones rechazadas",
+        "en_progreso": "Cotizaciones en progreso",
+    }[estado]
 
     return render_template(
         "dashboard.html",
         cotizaciones=cotizaciones,
         resumen=resumen,
+        series=series,
+        monedas=monedas,
+        top_clientes=top_clientes,
+        estado_foco_label=estado_foco_label,
         filtro_estado=estado,
         filtro_periodo=periodo,
         filtro_desde=desde,
         filtro_hasta=hasta,
+        filtro_desde_legible=desde_date.strftime("%d/%m/%Y"),
+        filtro_hasta_legible=hasta_date.strftime("%d/%m/%Y"),
+        dias_periodo=dias_periodo,
     )
 
 
+@app.route("/auditoria")
+@token_required
+def auditoria_page():
+    registros = Auditoria.query.order_by(Auditoria.fecha.desc(), Auditoria.id.desc()).limit(250).all()
+    return render_template("auditoria.html", registros=registros)
+
+
 @app.route("/filtrar_historial")
+@token_required
 def filtrar_historial():
     cliente_id_raw = (request.args.get("cliente_id") or "").strip()
     cliente = (request.args.get("cliente") or "").strip()
@@ -999,6 +1524,7 @@ def filtrar_historial():
             "estado": normalizar_estado_cotizacion(c.estado) or "En progreso",
             "cliente": c.cliente,
             "cliente_nombre": (c.cliente_ref.nombre if c.cliente_ref else c.cliente) or "Sin Cliente",
+            "familia": c.familia or "",
             "fecha": c.fecha.strftime("%d/%m/%Y"),
             "moneda": c.moneda or "ARS",
             "total_final": c.total_final or 0.0,
@@ -1010,12 +1536,14 @@ def filtrar_historial():
 
 
 @app.route("/cotizacion/<int:id>")
+@token_required
 def ver_cotizacion(id):
     cot = Cotizacion.query.get_or_404(id)
     return render_template("cotizacion_cliente.html", cot=cot, domicilio_empresa=DOMICILIO)
 
 
 @app.route("/cotizacion/<int:id>/xlsx")
+@token_required
 def exportar_cotizacion_xlsx(id):
     cotizacion = Cotizacion.query.get_or_404(id)
     contenido = generar_excel_cotizacion(cotizacion)

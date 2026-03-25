@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-4">
+        <div class="card p-4 page-surface">
+            <div class="text-center mb-4">
+                <h2 class="mb-2">Ingresar</h2>
+                <div class="text-muted">Acceso al cotizador</div>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-danger" role="alert">{{ error }}</div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('login', next=request.args.get('next', '')) }}">
+                <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Usuario</label>
+                    <input type="text" name="username" class="form-control" autocomplete="username" required>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Contraseña</label>
+                    <input type="password" name="password" class="form-control" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn btn-dark-custom w-100">Entrar</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

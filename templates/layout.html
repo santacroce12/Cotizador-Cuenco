@@ -51,7 +51,25 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
         .nav-link { font-weight: 500; }
+        .navbar-nav {
+            gap: 0.55rem;
+        }
+        .navbar-nav .nav-item {
+            display: flex;
+            align-items: center;
+        }
+        .navbar-nav .nav-link {
+            padding: 0.55rem 0.9rem;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+        }
         .nav-link.active { color: #93c5fd !important; border-bottom: 2px solid #60a5fa; }
+        .navbar-nav .nav-link.active {
+            background: rgba(96, 165, 250, 0.1);
+            border-bottom: none;
+        }
         .container.my-5 {
             position: relative;
         }
@@ -385,7 +403,8 @@
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-collapse nav navbar-nav ms-auto">
+            {% if current_user %}
+            <ul class="navbar-nav align-items-lg-center">
                 <li class="nav-item">
                     <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">
                         <i class="bi bi-file-earmark-plus"></i> Nuevo Presupuesto
@@ -397,11 +416,23 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link {% if request.path == '/auditoria' %}active{% endif %}" href="/auditoria">
+                        <i class="bi bi-journal-text"></i> Auditoria
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link {% if request.path == '/dashboard' %}active{% endif %}" href="/dashboard">
                         <i class="bi bi-speedometer2"></i> Dashboard
                     </a>
                 </li>
             </ul>
+            <div class="d-flex align-items-center gap-2 ms-auto mt-3 mt-lg-0">
+                <span class="navbar-text text-light opacity-75">{{ current_user.username }}</span>
+                <a class="btn btn-sm btn-outline-light" href="{{ url_for('logout') }}">
+                    <i class="bi bi-box-arrow-right"></i> Salir
+                </a>
+            </div>
+            {% endif %}
         </div>
     </div>
 </nav>

@@ -2,210 +2,412 @@
 
 {% block content %}
 <style>
-    .dashboard-card {
-        padding: 1.2rem 1.25rem;
-        border-radius: 18px;
-        border: 1px solid rgba(148, 163, 184, 0.18);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(240, 245, 250, 0.98));
-        box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
-        height: 100%;
+    .dash-grid { display:grid; gap:1rem; }
+    .dash-hero {
+        padding:1.5rem;
+        border-radius:24px;
+        color:#f8fafc;
+        background:
+            radial-gradient(circle at top right, rgba(96,165,250,.24), transparent 26%),
+            linear-gradient(145deg, #0f172a 0%, #172554 48%, #1e293b 100%);
+        box-shadow:0 24px 60px rgba(15,23,42,.22);
     }
-
-    .dashboard-card-muted {
-        background: linear-gradient(160deg, #111827 0%, #1f2937 100%);
-        color: #f8fafc;
+    .dash-kicker {
+        display:inline-flex; align-items:center; gap:.45rem;
+        padding:.35rem .75rem; border-radius:999px;
+        background:rgba(255,255,255,.08); color:#cbd5e1;
+        font-size:.78rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
     }
-
-    .dashboard-label {
-        font-size: 0.76rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #64748b;
-        font-weight: 700;
-        margin-bottom: 0.45rem;
+    .dash-title { font-size:clamp(1.8rem,2.8vw,2.75rem); font-weight:800; line-height:1.02; margin:.9rem 0 .55rem; }
+    .dash-subtitle { color:#cbd5e1; margin:0; }
+    .dash-pills { display:flex; flex-wrap:wrap; gap:.6rem; margin-top:1rem; }
+    .dash-pill {
+        display:inline-flex; align-items:center; gap:.4rem;
+        padding:.48rem .85rem; border-radius:999px;
+        background:rgba(255,255,255,.08); color:#e2e8f0;
+        font-size:.88rem; font-weight:600;
     }
-
-    .dashboard-card-muted .dashboard-label {
-        color: #cbd5e1;
+    .dash-hero-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.85rem; }
+    .dash-hero-stat {
+        min-height:100%; padding:1rem; border-radius:18px;
+        background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.08);
     }
-
-    .dashboard-value {
-        font-size: 2rem;
-        font-weight: 800;
-        line-height: 1;
-        margin-bottom: 0.3rem;
-        color: #0f172a;
+    .dash-label { font-size:.75rem; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:#64748b; margin-bottom:.5rem; }
+    .dash-hero-stat .dash-label { color:#cbd5e1; }
+    .dash-value { font-size:1.95rem; font-weight:800; line-height:1; color:#0f172a; margin-bottom:.35rem; }
+    .dash-hero-stat .dash-value { color:#f8fafc; }
+    .dash-note { color:#64748b; font-size:.9rem; margin:0; }
+    .dash-hero-stat .dash-note { color:#cbd5e1; }
+    .dash-up { color:#86efac; } .dash-down { color:#fda4af; }
+    .dash-controls, .dash-card, .dash-table {
+        padding:1rem; border-radius:22px;
+        border:1px solid rgba(148,163,184,.18);
+        background:linear-gradient(180deg, rgba(255,255,255,.96), rgba(241,246,251,.98));
+        box-shadow:0 14px 28px rgba(15,23,42,.06);
     }
-
-    .dashboard-card-muted .dashboard-value {
-        color: #f8fafc;
+    .dash-controls { background:linear-gradient(180deg, rgba(244,248,252,.98), rgba(233,240,248,.98)); }
+    .dash-period-actions { display:flex; flex-wrap:wrap; gap:.5rem; }
+    .dash-period-actions .btn, .dash-state-link {
+        border-radius:999px; font-weight:700; padding-inline:.95rem;
     }
-
-    .dashboard-help {
-        font-size: 0.9rem;
-        color: #64748b;
+    .dash-state-row { display:flex; flex-wrap:wrap; gap:.5rem; }
+    .dash-state-link {
+        display:inline-flex; align-items:center; justify-content:center; min-width:120px;
+        text-decoration:none; padding:.55rem .85rem;
+        background:rgba(255,255,255,.72); border:1px solid #cbd5e1; color:#334155;
     }
-
-    .dashboard-period-btn {
-        min-width: 120px;
+    .dash-state-link.active { background:linear-gradient(180deg, #111827 0%, #1e293b 100%); border-color:#0f172a; color:#f8fafc; }
+    .dash-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1rem; }
+    .dash-metric-dark { background:linear-gradient(160deg, #111827 0%, #1f2937 100%); }
+    .dash-metric-dark .dash-label, .dash-metric-dark .dash-note { color:#cbd5e1; }
+    .dash-metric-dark .dash-value { color:#f8fafc; }
+    .dash-analytics { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(320px,.85fr); gap:1rem; }
+    .dash-secondary { display:grid; grid-template-columns:minmax(0,1fr) minmax(320px,.95fr); gap:1rem; }
+    .dash-head { display:flex; align-items:start; justify-content:space-between; gap:.75rem; margin-bottom:1rem; }
+    .dash-head-title { font-size:1.02rem; font-weight:800; color:#0f172a; margin-bottom:.2rem; }
+    .dash-head-copy { color:#64748b; font-size:.88rem; margin:0; }
+    .dash-tag {
+        display:inline-flex; align-items:center; gap:.35rem;
+        padding:.42rem .7rem; border-radius:999px;
+        background:#e2e8f0; color:#334155; font-size:.78rem; font-weight:700;
     }
-
-    .dashboard-note {
-        font-size: 0.88rem;
-        color: #64748b;
-    }
+    .dash-chart { height:320px; }
+    .dash-donut { width:min(260px,100%); margin:0 auto 1rem; }
+    .dash-status-list { display:grid; gap:.75rem; }
+    .dash-status-item { padding:.8rem .9rem; border-radius:16px; background:rgba(226,232,240,.45); border:1px solid rgba(203,213,225,.8); }
+    .dash-status-head { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.45rem; }
+    .dash-status-name { display:inline-flex; align-items:center; gap:.55rem; font-weight:700; color:#0f172a; }
+    .dash-status-dot { width:10px; height:10px; border-radius:999px; }
+    .dot-progress { background:#f59e0b; } .dot-accepted { background:#16a34a; } .dot-rejected { background:#ef4444; } .dot-closed { background:#2563eb; }
+    .dash-bar { height:8px; border-radius:999px; background:rgba(148,163,184,.22); overflow:hidden; }
+    .dash-bar > span { display:block; height:100%; border-radius:999px; }
+    .dash-currency { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.9rem; }
+    .dash-currency-card { min-height:160px; border-radius:18px; padding:1rem; color:#f8fafc; }
+    .dash-currency-card.ars { background:linear-gradient(145deg, #0f766e 0%, #155e75 100%); }
+    .dash-currency-card.usd { background:linear-gradient(145deg, #14532d 0%, #166534 100%); }
+    .dash-currency-label { font-size:.78rem; text-transform:uppercase; letter-spacing:.08em; font-weight:800; color:rgba(255,255,255,.78); }
+    .dash-currency-value { font-size:1.9rem; font-weight:800; line-height:1; margin:.55rem 0; }
+    .dash-currency-note { color:rgba(255,255,255,.82); margin:0; }
+    .dash-top-list { display:grid; gap:.8rem; }
+    .dash-top-row { padding:.9rem 1rem; border-radius:18px; background:rgba(255,255,255,.82); border:1px solid rgba(203,213,225,.85); }
+    .dash-top-head { display:flex; align-items:center; justify-content:space-between; gap:.85rem; margin-bottom:.45rem; }
+    .dash-top-name { font-weight:700; color:#0f172a; }
+    .dash-top-meta { color:#64748b; font-size:.88rem; }
+    .dash-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:1rem; }
+    .dash-table-title { font-size:1.05rem; font-weight:800; color:#0f172a; margin-bottom:.2rem; }
+    .dash-counter { display:inline-flex; align-items:center; gap:.45rem; padding:.48rem .8rem; border-radius:999px; background:#e2e8f0; color:#334155; font-size:.82rem; font-weight:700; }
+    .dash-empty { padding:2.6rem 1.3rem; text-align:center; color:#64748b; }
+    .dash-empty i { display:block; font-size:2rem; color:#94a3b8; margin-bottom:.7rem; }
+    @media (max-width:1199px) { .dash-metrics{grid-template-columns:repeat(2,minmax(0,1fr));} .dash-analytics,.dash-secondary{grid-template-columns:1fr;} }
+    @media (max-width:991px) { .dash-hero-stats{grid-template-columns:1fr;} }
+    @media (max-width:767px) { .dash-metrics,.dash-currency{grid-template-columns:1fr;} .dash-chart{height:280px;} .dash-hero{padding:1.2rem;} }
 </style>
 
-<div class="card p-4 page-surface">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div>
-            <h2 class="text-dark m-0"><i class="bi bi-speedometer2 me-2"></i>Dashboard</h2>
-            <div class="dashboard-note mt-2">
-                Cerradas = cotizaciones <strong>Aceptadas + Rechazadas</strong>. La fecha usada es la de creación de la cotización.
+{% set total_periodo = resumen.total or 0 %}
+{% set pct_en_progreso = ((resumen.en_progreso / total_periodo) * 100) if total_periodo else 0 %}
+{% set pct_aceptadas = ((resumen.aceptadas / total_periodo) * 100) if total_periodo else 0 %}
+{% set pct_rechazadas = ((resumen.rechazadas / total_periodo) * 100) if total_periodo else 0 %}
+
+<div class="dash-grid">
+    <section class="dash-hero">
+        <div class="row g-4 align-items-stretch">
+            <div class="col-xl-7">
+                <span class="dash-kicker"><i class="bi bi-speedometer2"></i> Dashboard comercial</span>
+                <h1 class="dash-title">Mira volumen, cierre y pipeline en el rango que te interesa.</h1>
+                <p class="dash-subtitle">Este panel trabaja sobre la fecha de creacion de cada cotizacion y te deja cambiar rapido el periodo sin perder contexto.</p>
+                <div class="dash-pills">
+                    <span class="dash-pill"><i class="bi bi-calendar-range"></i> {{ filtro_desde_legible }} a {{ filtro_hasta_legible }}</span>
+                    <span class="dash-pill"><i class="bi bi-hourglass-split"></i> {{ dias_periodo }} dias</span>
+                    <span class="dash-pill"><i class="bi bi-funnel"></i> {{ estado_foco_label }}</span>
+                </div>
+            </div>
+            <div class="col-xl-5">
+                <div class="dash-hero-stats">
+                    <div class="dash-hero-stat">
+                        <div class="dash-label">Cotizaciones del periodo</div>
+                        <div class="dash-value">{{ resumen.total }}</div>
+                        <p class="dash-note">
+                            {% if resumen.delta_total is not none %}
+                                <span class="{{ 'dash-up' if resumen.delta_total >= 0 else 'dash-down' }}">{{ '+' if resumen.delta_total >= 0 else '' }}{{ resumen.delta_total }}%</span> vs periodo anterior
+                            {% else %}
+                                Sin base comparativa
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="dash-hero-stat">
+                        <div class="dash-label">Aceptadas</div>
+                        <div class="dash-value">{{ resumen.aceptadas }}</div>
+                        <p class="dash-note">
+                            {% if resumen.delta_aceptadas is not none %}
+                                <span class="{{ 'dash-up' if resumen.delta_aceptadas >= 0 else 'dash-down' }}">{{ '+' if resumen.delta_aceptadas >= 0 else '' }}{{ resumen.delta_aceptadas }}%</span> vs periodo anterior
+                            {% else %}
+                                Sin base comparativa
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="dash-hero-stat">
+                        <div class="dash-label">Tasa de aceptacion</div>
+                        <div class="dash-value">{{ "{:,.1f}".format(resumen.tasa_aceptacion) }}%</div>
+                        <p class="dash-note">Aceptadas sobre el total emitido del periodo</p>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="btn-group" role="group" aria-label="Periodo dashboard">
-            <a href="{{ url_for('dashboard_page', periodo='30', estado=filtro_estado) }}" class="btn btn-sm {{ 'btn-dark-custom active' if filtro_periodo == '30' else 'btn-outline-dark' }} dashboard-period-btn">Último mes</a>
-            <a href="{{ url_for('dashboard_page', periodo='60', estado=filtro_estado) }}" class="btn btn-sm {{ 'btn-dark-custom active' if filtro_periodo == '60' else 'btn-outline-dark' }} dashboard-period-btn">Últimos 2 meses</a>
-            <a href="{{ url_for('dashboard_page', periodo='custom', estado=filtro_estado, desde=filtro_desde, hasta=filtro_hasta) }}" class="btn btn-sm {{ 'btn-dark-custom active' if filtro_periodo == 'custom' else 'btn-outline-dark' }} dashboard-period-btn">Personalizado</a>
-        </div>
-    </div>
+    </section>
 
-    <form method="GET" action="{{ url_for('dashboard_page') }}" class="row g-3 mb-4 p-3 surface-strip">
-        <input type="hidden" name="periodo" value="{{ filtro_periodo }}">
-        <div class="col-md-3">
-            <label class="small fw-bold text-muted text-uppercase">Desde</label>
-            <input type="date" name="desde" class="form-control" value="{{ filtro_desde }}">
+    <form method="GET" action="{{ url_for('dashboard_page') }}" class="dash-controls">
+        <div class="row g-3 align-items-end">
+            <div class="col-xl-5">
+                <div class="dash-label">Rangos rapidos</div>
+                <div class="dash-period-actions">
+                    <button type="submit" name="periodo" value="7" class="btn btn-sm {{ 'btn-dark-custom active' if filtro_periodo == '7' else 'btn-outline-dark' }}">7 dias</button>
+                    <button type="submit" name="periodo" value="30" class="btn btn-sm {{ 'btn-dark-custom active' if filtro_periodo == '30' else 'btn-outline-dark' }}">30 dias</button>
+                    <button type="submit" name="periodo" value="60" class="btn btn-sm {{ 'btn-dark-custom active' if filtro_periodo == '60' else 'btn-outline-dark' }}">60 dias</button>
+                    <button type="submit" name="periodo" value="90" class="btn btn-sm {{ 'btn-dark-custom active' if filtro_periodo == '90' else 'btn-outline-dark' }}">90 dias</button>
+                    <button type="submit" name="periodo" value="365" class="btn btn-sm {{ 'btn-dark-custom active' if filtro_periodo == '365' else 'btn-outline-dark' }}">12 meses</button>
+                </div>
+            </div>
+            <div class="col-md-4 col-xl-2">
+                <div class="dash-label">Desde</div>
+                <input type="date" name="desde" class="form-control" value="{{ filtro_desde }}">
+            </div>
+            <div class="col-md-4 col-xl-2">
+                <div class="dash-label">Hasta</div>
+                <input type="date" name="hasta" class="form-control" value="{{ filtro_hasta }}">
+            </div>
+            <div class="col-md-4 col-xl-2">
+                <div class="dash-label">Vista</div>
+                <select name="estado" class="form-select">
+                    <option value="todos" {% if filtro_estado == 'todos' %}selected{% endif %}>Todas</option>
+                    <option value="aceptadas" {% if filtro_estado == 'aceptadas' %}selected{% endif %}>Aceptadas</option>
+                    <option value="rechazadas" {% if filtro_estado == 'rechazadas' %}selected{% endif %}>Rechazadas</option>
+                    <option value="en_progreso" {% if filtro_estado == 'en_progreso' %}selected{% endif %}>En progreso</option>
+                </select>
+            </div>
+            <div class="col-xl-1 d-flex align-items-end">
+                <button type="submit" name="periodo" value="custom" class="btn btn-primary w-100"><i class="bi bi-funnel"></i></button>
+            </div>
         </div>
-        <div class="col-md-3">
-            <label class="small fw-bold text-muted text-uppercase">Hasta</label>
-            <input type="date" name="hasta" class="form-control" value="{{ filtro_hasta }}">
-        </div>
-        <div class="col-md-3">
-            <label class="small fw-bold text-muted text-uppercase">Estado</label>
-            <select name="estado" class="form-select">
-                <option value="todos" {% if filtro_estado == 'todos' %}selected{% endif %}>Todas</option>
-                <option value="cerradas" {% if filtro_estado == 'cerradas' %}selected{% endif %}>Cerradas</option>
-                <option value="aceptadas" {% if filtro_estado == 'aceptadas' %}selected{% endif %}>Aceptadas</option>
-                <option value="rechazadas" {% if filtro_estado == 'rechazadas' %}selected{% endif %}>Rechazadas</option>
-                <option value="en_progreso" {% if filtro_estado == 'en_progreso' %}selected{% endif %}>En progreso</option>
-            </select>
-        </div>
-        <div class="col-md-3 d-flex align-items-end gap-2">
-            <button type="submit" class="btn btn-primary w-100">
-                <i class="bi bi-funnel me-1"></i> Aplicar
-            </button>
-            <a href="{{ url_for('dashboard_page') }}" class="btn btn-outline-dark">Limpiar</a>
+        <div class="dash-state-row mt-3">
+            {% for key, label in [('todos', 'Todo'), ('aceptadas', 'Aceptadas'), ('rechazadas', 'Rechazadas'), ('en_progreso', 'En progreso')] %}
+            <a class="dash-state-link {% if filtro_estado == key %}active{% endif %}" href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=key, desde=filtro_desde, hasta=filtro_hasta) }}">{{ label }}</a>
+            {% endfor %}
+            <a class="dash-state-link" href="{{ url_for('dashboard_page') }}">Limpiar</a>
         </div>
     </form>
 
-    <div class="row g-3 mb-4">
-        <div class="col-md-6 col-xl-2">
-            <div class="dashboard-card dashboard-card-muted">
-                <div class="dashboard-label">Cerradas 30 días</div>
-                <div class="dashboard-value">{{ resumen.cerradas_30 }}</div>
-                <div class="dashboard-help text-light-emphasis">Últimos 30 días</div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-2">
-            <div class="dashboard-card dashboard-card-muted">
-                <div class="dashboard-label">Cerradas 60 días</div>
-                <div class="dashboard-value">{{ resumen.cerradas_60 }}</div>
-                <div class="dashboard-help text-light-emphasis">Últimos 60 días</div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-2">
-            <div class="dashboard-card">
-                <div class="dashboard-label">Total período</div>
-                <div class="dashboard-value">{{ resumen.total }}</div>
-                <div class="dashboard-help">Cotizaciones creadas</div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-2">
-            <div class="dashboard-card">
-                <div class="dashboard-label">Cerradas período</div>
-                <div class="dashboard-value">{{ resumen.cerradas }}</div>
-                <div class="dashboard-help">Aceptadas + Rechazadas</div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-2">
-            <div class="dashboard-card">
-                <div class="dashboard-label">En progreso</div>
-                <div class="dashboard-value">{{ resumen.en_progreso }}</div>
-                <div class="dashboard-help">Pendientes de cierre</div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-2">
-            <div class="dashboard-card">
-                <div class="dashboard-label">Aceptadas</div>
-                <div class="dashboard-value">{{ resumen.aceptadas }}</div>
-                <div class="dashboard-help">Cerradas ganadas</div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-2">
-            <div class="dashboard-card">
-                <div class="dashboard-label">Rechazadas</div>
-                <div class="dashboard-value">{{ resumen.rechazadas }}</div>
-                <div class="dashboard-help">Cerradas perdidas</div>
-            </div>
-        </div>
-    </div>
+    <section class="dash-metrics">
+        <article class="dash-card dash-metric-dark">
+            <div class="dash-label">Volumen total cotizado</div>
+            <div class="dash-value">{{ "{:,.2f}".format(resumen.total_importe) }}</div>
+            <p class="dash-note">Suma completa del periodo, respetando la moneda guardada en cada cotizacion.</p>
+        </article>
+        <article class="dash-card">
+            <div class="dash-label">Pipeline abierto</div>
+            <div class="dash-value">{{ "{:,.2f}".format(resumen.importe_pipeline) }}</div>
+            <p class="dash-note">{{ resumen.en_progreso }} cotizaciones siguen activas.</p>
+        </article>
+        <article class="dash-card">
+            <div class="dash-label">Volumen aceptado</div>
+            <div class="dash-value">{{ "{:,.2f}".format(resumen.importe_aceptado) }}</div>
+            <p class="dash-note">Importe asociado a cotizaciones aceptadas.</p>
+        </article>
+        <article class="dash-card">
+            <div class="dash-label">Ticket promedio</div>
+            <div class="dash-value">{{ "{:,.2f}".format(resumen.ticket_promedio) }}</div>
+            <p class="dash-note">{{ "{:,.1f}".format(resumen.promedio_diario) }} cotizaciones por dia en promedio.</p>
+        </article>
+    </section>
 
-    <div class="table-responsive table-grid-outline">
-        <table class="table table-custom align-middle">
-            <thead class="thead-dark-custom">
-                <tr>
-                    <th>Nro</th>
-                    <th>Cliente</th>
-                    <th>Fecha de creación</th>
-                    <th class="text-center">Estado</th>
-                    <th class="text-end">Total</th>
-                    <th class="text-end">Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% if cotizaciones %}
-                    {% for cot in cotizaciones %}
+    <section class="dash-analytics">
+        <article class="dash-card">
+            <div class="dash-head">
+                <div>
+                    <div class="dash-head-title">Ritmo de generacion y cierre</div>
+                    <p class="dash-head-copy">Serie {{ series.granularidad|lower }} para ver si el periodo viene acelerando o frenando.</p>
+                </div>
+                <span class="dash-tag"><i class="bi bi-graph-up-arrow"></i> {{ series.granularidad }}</span>
+            </div>
+            {% if resumen.total %}
+            <div class="dash-chart"><canvas id="trendChart"></canvas></div>
+            {% else %}
+            <div class="dash-empty"><i class="bi bi-graph-up"></i>No hay cotizaciones en este rango para graficar tendencia.</div>
+            {% endif %}
+        </article>
+
+        <article class="dash-card">
+            <div class="dash-head">
+                <div>
+                    <div class="dash-head-title">Composicion del pipeline</div>
+                    <p class="dash-head-copy">Distribucion de estados dentro del periodo seleccionado.</p>
+                </div>
+                <span class="dash-tag"><i class="bi bi-pie-chart"></i> Estados</span>
+            </div>
+            {% if resumen.total %}
+            <div class="dash-donut"><canvas id="statusChart"></canvas></div>
+            <div class="dash-status-list">
+                <div class="dash-status-item">
+                    <div class="dash-status-head"><span class="dash-status-name"><span class="dash-status-dot dot-progress"></span>En progreso</span><strong>{{ resumen.en_progreso }} · {{ "{:,.1f}".format(pct_en_progreso) }}%</strong></div>
+                    <div class="dash-bar"><span style="width: {{ pct_en_progreso }}%; background:#f59e0b;"></span></div>
+                </div>
+                <div class="dash-status-item">
+                    <div class="dash-status-head"><span class="dash-status-name"><span class="dash-status-dot dot-accepted"></span>Aceptadas</span><strong>{{ resumen.aceptadas }} · {{ "{:,.1f}".format(pct_aceptadas) }}%</strong></div>
+                    <div class="dash-bar"><span style="width: {{ pct_aceptadas }}%; background:#16a34a;"></span></div>
+                </div>
+                <div class="dash-status-item">
+                    <div class="dash-status-head"><span class="dash-status-name"><span class="dash-status-dot dot-rejected"></span>Rechazadas</span><strong>{{ resumen.rechazadas }} · {{ "{:,.1f}".format(pct_rechazadas) }}%</strong></div>
+                    <div class="dash-bar"><span style="width: {{ pct_rechazadas }}%; background:#ef4444;"></span></div>
+                </div>
+            </div>
+            {% else %}
+            <div class="dash-empty"><i class="bi bi-kanban"></i>Sin datos para mostrar composicion de estados.</div>
+            {% endif %}
+        </article>
+    </section>
+
+    <section class="dash-secondary">
+        <article class="dash-card">
+            <div class="dash-head">
+                <div>
+                    <div class="dash-head-title">Totales por moneda</div>
+                    <p class="dash-head-copy">Sirve para no mezclar volumen en pesos con volumen en dolares.</p>
+                </div>
+                <span class="dash-tag"><i class="bi bi-cash-stack"></i> Monedas</span>
+            </div>
+            <div class="dash-currency">
+                <div class="dash-currency-card ars">
+                    <div class="dash-currency-label">Pesos argentinos</div>
+                    <div class="dash-currency-value">{{ "{:,.2f}".format(monedas.ARS.total) }}</div>
+                    <p class="dash-currency-note">{{ monedas.ARS.cantidad }} cotizaciones emitidas en ARS.</p>
+                </div>
+                <div class="dash-currency-card usd">
+                    <div class="dash-currency-label">Dolares estadounidenses</div>
+                    <div class="dash-currency-value">{{ "{:,.2f}".format(monedas.USD.total) }}</div>
+                    <p class="dash-currency-note">{{ monedas.USD.cantidad }} cotizaciones emitidas en USD.</p>
+                </div>
+            </div>
+        </article>
+
+        <article class="dash-card">
+            <div class="dash-head">
+                <div>
+                    <div class="dash-head-title">Clientes mas activos</div>
+                    <p class="dash-head-copy">Quienes concentraron mas movimiento dentro del rango actual.</p>
+                </div>
+                <span class="dash-tag"><i class="bi bi-people"></i> Top {{ top_clientes|length }}</span>
+            </div>
+            {% if top_clientes %}
+            <div class="dash-top-list">
+                {% for cliente in top_clientes %}
+                <div class="dash-top-row">
+                    <div class="dash-top-head">
+                        <div class="dash-top-name">{{ cliente.nombre }}</div>
+                        <div class="dash-top-meta">{{ cliente.cantidad }} cotizaciones</div>
+                    </div>
+                    <div class="small text-muted mb-2">{{ cliente.aceptadas }} aceptadas dentro del periodo</div>
+                    <div class="dash-bar"><span style="width: {{ (cliente.cantidad / (top_clientes[0].cantidad or 1)) * 100 }}%; background:#2563eb;"></span></div>
+                    <div class="small text-muted mt-2">Total cotizado: {{ "{:,.2f}".format(cliente.total) }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="dash-empty"><i class="bi bi-people"></i>Todavia no hay clientes para rankear en este periodo.</div>
+            {% endif %}
+        </article>
+    </section>
+
+    <section class="dash-table">
+        <div class="dash-toolbar">
+            <div>
+                <div class="dash-table-title">Detalle operativo</div>
+                <p class="dash-head-copy">{{ estado_foco_label }} dentro del rango seleccionado.</p>
+            </div>
+            <div class="dash-counter"><i class="bi bi-table"></i> {{ cotizaciones|length }} resultados</div>
+        </div>
+        <div class="table-responsive table-grid-outline">
+            <table class="table table-custom align-middle">
+                <thead class="thead-dark-custom">
                     <tr>
-                        <td><span class="badge bg-secondary">#{{ cot.numero_cotizacion }}</span></td>
-                        <td>
-                            <strong>{{ cot.cliente_ref.nombre if cot.cliente_ref else cot.cliente }}</strong>
-                            {% if cot.cliente_razon_social %}
-                            <div class="small text-muted">{{ cot.cliente_razon_social }}</div>
-                            {% endif %}
-                        </td>
-                        <td>{{ cot.fecha.strftime('%d/%m/%Y %H:%M') }}</td>
-                        <td class="text-center">
-                            <span class="estado-pill {% if cot.estado == 'Aceptada' %}estado-aceptada{% elif cot.estado == 'Rechazada' %}estado-rechazada{% else %}estado-en-progreso{% endif %}">
-                                {{ cot.estado or 'En progreso' }}
-                            </span>
-                        </td>
-                        <td class="text-end fw-bold">
-                            {{ cot.moneda or 'ARS' }} {{ "{:,.2f}".format(cot.total_final or 0) }}
-                        </td>
-                        <td class="text-end">
-                            <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-sm btn-edit-custom me-1">
-                                <i class="bi bi-pencil-square"></i> Editar
-                            </a>
-                            <a href="{{ url_for('ver_cotizacion', id=cot.id) }}" class="btn btn-sm btn-view-custom me-1">
-                                <i class="bi bi-eye"></i> Ver
-                            </a>
-                            <a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="btn btn-sm btn-dark-custom me-1">
-                                <i class="bi bi-file-earmark-excel"></i> Excel
-                            </a>
-                            <a href="{{ url_for('ver_cotizacion', id=cot.id) }}?download=1" class="btn btn-sm btn-success">
-                                <i class="bi bi-file-earmark-pdf"></i> PDF
-                            </a>
-                        </td>
+                        <th>Nro</th>
+                        <th>Cliente</th>
+                        <th>Fecha de creacion</th>
+                        <th class="text-center">Estado</th>
+                        <th class="text-end">Moneda</th>
+                        <th class="text-end">Total</th>
+                        <th class="text-end">Acciones</th>
                     </tr>
-                    {% endfor %}
-                {% else %}
-                    <tr>
-                        <td colspan="6" class="text-center text-muted p-4">No hay cotizaciones para el rango y estado seleccionados.</td>
-                    </tr>
-                {% endif %}
-            </tbody>
-        </table>
-    </div>
+                </thead>
+                <tbody>
+                    {% if cotizaciones %}
+                        {% for cot in cotizaciones %}
+                        <tr>
+                            <td><span class="badge bg-secondary">#{{ cot.numero_cotizacion }}</span></td>
+                            <td>
+                                <strong>{{ cot.cliente_ref.nombre if cot.cliente_ref else cot.cliente }}</strong>
+                                {% if cot.cliente_razon_social %}<div class="small text-muted">{{ cot.cliente_razon_social }}</div>{% endif %}
+                            </td>
+                            <td>{{ cot.fecha.strftime('%d/%m/%Y %H:%M') }}</td>
+                            <td class="text-center">
+                                <span class="estado-pill {% if cot.estado == 'Aceptada' %}estado-aceptada{% elif cot.estado == 'Rechazada' %}estado-rechazada{% else %}estado-en-progreso{% endif %}">{{ cot.estado or 'En progreso' }}</span>
+                            </td>
+                            <td class="text-end fw-semibold">{{ cot.moneda or 'ARS' }}</td>
+                            <td class="text-end fw-bold">{{ "{:,.2f}".format(cot.total_final or 0) }}</td>
+                            <td class="text-end">
+                                <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-sm btn-edit-custom me-1"><i class="bi bi-pencil-square"></i> Editar</a>
+                                <a href="{{ url_for('ver_cotizacion', id=cot.id) }}" class="btn btn-sm btn-view-custom me-1"><i class="bi bi-eye"></i> Ver</a>
+                                <a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="btn btn-sm btn-dark-custom me-1"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+                                <a href="{{ url_for('ver_cotizacion', id=cot.id) }}?download=1" class="btn btn-sm btn-success"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr><td colspan="7" class="dash-empty"><i class="bi bi-inbox"></i>No hay cotizaciones para esta vista. Cambia el rango o el segmento.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </section>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script>
+    const trendLabels = {{ series.labels|tojson }};
+    const trendCreated = {{ series.creadas|tojson }};
+    const trendAccepted = {{ series.aceptadas|tojson }};
+    const statusData = {{ [resumen.en_progreso, resumen.aceptadas, resumen.rechazadas]|tojson }};
+
+    if (window.Chart && document.getElementById("trendChart")) {
+        new Chart(document.getElementById("trendChart"), {
+            type: "line",
+            data: {
+                labels: trendLabels,
+                datasets: [
+                    { label: "Creadas", data: trendCreated, borderColor: "#2563eb", backgroundColor: "rgba(37,99,235,.12)", pointBackgroundColor: "#2563eb", pointRadius: 3, borderWidth: 3, fill: true, tension: .35 },
+                    { label: "Aceptadas", data: trendAccepted, borderColor: "#16a34a", pointBackgroundColor: "#16a34a", pointRadius: 2.5, borderWidth: 2, fill: false, tension: .35 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: "index", intersect: false },
+                plugins: { legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8, padding: 18 } } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: "#64748b" } },
+                    y: { beginAtZero: true, ticks: { precision: 0, color: "#64748b" }, grid: { color: "rgba(148,163,184,.18)" } }
+                }
+            }
+        });
+    }
+
+    if (window.Chart && document.getElementById("statusChart")) {
+        new Chart(document.getElementById("statusChart"), {
+            type: "doughnut",
+            data: {
+                labels: ["En progreso", "Aceptadas", "Rechazadas"],
+                datasets: [{ data: statusData, backgroundColor: ["#f59e0b", "#16a34a", "#ef4444"], borderColor: ["#fff7ed", "#f0fdf4", "#fef2f2"], borderWidth: 6, hoverOffset: 6 }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } }, cutout: "68%" }
+        });
+    }
+</script>
 {% endblock %}
