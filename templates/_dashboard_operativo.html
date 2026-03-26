@@ -1,0 +1,76 @@
+<section class="dash-table" id="dashboard-operativo-section">
+    <div class="dash-toolbar">
+        <div>
+            <div class="dash-table-title">Detalle operativo</div>
+            <p class="dash-head-copy">Aca ves el listado operativo final. Los filtros por estado viven en esta seccion para no mezclar la lectura general del dashboard.</p>
+        </div>
+        <div class="dash-counter"><i class="bi bi-table"></i> {{ cotizaciones|length }} resultados</div>
+    </div>
+    <div class="dash-state-toolbar">
+        <div>
+            <div class="dash-label mb-2">Filtro de estado</div>
+            <div class="dash-state-row operativa">
+                {% for key, label in [('todos', 'Todo'), ('aceptadas', 'Aceptadas'), ('rechazadas', 'Rechazadas'), ('en_progreso', 'En progreso')] %}
+                <a
+                    class="dash-state-link {% if filtro_estado == key %}active{% endif %}"
+                    data-dashboard-estado="{{ key }}"
+                    href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=key, desde=filtro_desde, hasta=filtro_hasta, familia=filtro_familia, sector=filtro_sector, subsector=filtro_subsector, moneda=filtro_moneda) }}"
+                >{{ label }}</a>
+                {% endfor %}
+            </div>
+        </div>
+        <p class="dash-state-meta">Este filtro afecta solo el detalle operativo y te deja cambiar la vista sin desordenar el resto del tablero.</p>
+    </div>
+    <div class="table-responsive table-grid-outline">
+        <table class="table table-custom align-middle">
+            <thead class="thead-dark-custom">
+                <tr>
+                    <th>Nro</th>
+                    <th>Cliente</th>
+                    <th>Familia</th>
+                    <th>Fecha de creacion</th>
+                    <th class="text-center">Estado</th>
+                    <th class="text-end">Moneda</th>
+                    <th class="text-end">Total</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if cotizaciones %}
+                    {% for cot in cotizaciones %}
+                    <tr>
+                        <td><span class="badge bg-secondary">#{{ cot.numero_cotizacion }}</span></td>
+                        <td>
+                            <strong>{{ cot.cliente_ref.nombre if cot.cliente_ref else cot.cliente }}</strong>
+                            {% if cot.cliente_razon_social %}<div class="small text-muted">{{ cot.cliente_razon_social }}</div>{% endif %}
+                            <div class="dash-client-segment">
+                                <span class="dash-mini-pill">{{ cot.cliente_ref.sector if cot.cliente_ref and cot.cliente_ref.sector else 'Sin sector' }}</span>
+                                <span class="dash-mini-pill">{{ cot.cliente_ref.subsector if cot.cliente_ref and cot.cliente_ref.subsector else 'Sin subsector' }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="dash-mini-pill">{{ cot.familia or 'Sin familia' }}</span>
+                        </td>
+                        <td>{{ cot.fecha.strftime('%d/%m/%Y %H:%M') }}</td>
+                        <td class="text-center">
+                            <span class="estado-pill {% if cot.estado == 'Aceptada' %}estado-aceptada{% elif cot.estado == 'Rechazada' %}estado-rechazada{% else %}estado-en-progreso{% endif %}">{{ cot.estado or 'En progreso' }}</span>
+                        </td>
+                        <td class="text-end fw-semibold">{{ cot.moneda or 'ARS' }}</td>
+                        <td class="text-end fw-bold">{{ "{:,.2f}".format(cot.total_final or 0) }}</td>
+                        <td class="text-end dash-actions-cell">
+                            <div class="dash-actions-grid">
+                                <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-edit-custom dash-action-btn"><i class="bi bi-pencil-square"></i> Editar</a>
+                                <a href="{{ url_for('ver_cotizacion', id=cot.id) }}" class="btn btn-view-custom dash-action-btn"><i class="bi bi-eye"></i> Ver</a>
+                                <a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="btn btn-excel-custom dash-action-btn"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+                                <a href="{{ url_for('ver_cotizacion', id=cot.id) }}?download=1" class="btn btn-pdf-custom dash-action-btn"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr><td colspan="8" class="dash-empty"><i class="bi bi-inbox"></i>No hay cotizaciones para esta vista. Cambia el rango o el segmento.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</section>

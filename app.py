@@ -12,7 +12,7 @@ from io import BytesIO
 from pathlib import Path
 
 import jwt
-from flask import Flask, Response, g, jsonify, redirect, render_template, request, url_for
+from flask import Flask, Response, flash, g, jsonify, redirect, render_template, request, url_for
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from flask_sqlalchemy import SQLAlchemy
@@ -469,6 +469,17 @@ def normalizar_familia_cotizacion(valor):
     for familia in FAMILIAS_COTIZACION:
         if valor.lower() == familia.lower():
             return familia
+    return None
+
+
+def normalizar_subsector_dashboard(valor):
+    valor = (valor or "").strip()
+    if not valor:
+        return None
+    for subsectores in SECTORES_CLIENTE.values():
+        for subsector in subsectores:
+            if valor.lower() == subsector.lower():
+                return subsector
     return None
 
 
@@ -964,12 +975,18 @@ def construir_series_dashboard(cotizaciones, desde_date, hasta_date):
 
 
 def construir_top_clientes_dashboard(cotizaciones, limite=5):
-    acumulado = defaultdict(lambda: {"cantidad": 0, "total": 0.0, "aceptadas": 0})
+    acumulado = defaultdict(lambda: {"cantidad": 0, "total": 0.0, "aceptadas": 0, "total_ars": 0.0, "total_usd": 0.0})
     for cotizacion in cotizaciones:
         nombre = (cotizacion.cliente_ref.nombre if cotizacion.cliente_ref else cotizacion.cliente) or "Sin cliente"
         estado = normalizar_estado_cotizacion(cotizacion.estado) or "En progreso"
+        moneda = (cotizacion.moneda or "ARS").upper()
+        total_final = cotizacion.total_final or 0.0
         acumulado[nombre]["cantidad"] += 1
-        acumulado[nombre]["total"] += cotizacion.total_final or 0.0
+        acumulado[nombre]["total"] += total_final
+        if moneda == "USD":
+            acumulado[nombre]["total_usd"] += total_final
+        else:
+            acumulado[nombre]["total_ars"] += total_final
         if estado == "Aceptada":
             acumulado[nombre]["aceptadas"] += 1
 
@@ -981,11 +998,54 @@ def construir_top_clientes_dashboard(cotizaciones, limite=5):
                 "cantidad": data["cantidad"],
                 "aceptadas": data["aceptadas"],
                 "total": round(data["total"], 2),
+                "total_ars": round(data["total_ars"], 2),
+                "total_usd": round(data["total_usd"], 2),
             }
         )
 
     ranking.sort(key=lambda item: (-item["cantidad"], -item["total"], item["nombre"].lower()))
     return ranking[:limite]
+
+
+def construir_desglose_dashboard(cotizaciones, key_fn, default_label="Sin definir", limite=None):
+    acumulado = defaultdict(
+        lambda: {"cantidad": 0, "aceptadas": 0, "total": 0.0, "total_ars": 0.0, "total_usd": 0.0}
+    )
+    total_cotizaciones = len(cotizaciones)
+
+    for cotizacion in cotizaciones:
+        nombre = (key_fn(cotizacion) or "").strip() or default_label
+        estado = normalizar_estado_cotizacion(cotizacion.estado) or "En progreso"
+        moneda = (cotizacion.moneda or "ARS").upper()
+        total_final = cotizacion.total_final or 0.0
+        acumulado[nombre]["cantidad"] += 1
+        acumulado[nombre]["total"] += total_final
+        if moneda == "USD":
+            acumulado[nombre]["total_usd"] += total_final
+        else:
+            acumulado[nombre]["total_ars"] += total_final
+        if estado == "Aceptada":
+            acumulado[nombre]["aceptadas"] += 1
+
+    desglose = []
+    for nombre, data in acumulado.items():
+        cantidad = data["cantidad"]
+        desglose.append(
+            {
+                "nombre": nombre,
+                "cantidad": cantidad,
+                "aceptadas": data["aceptadas"],
+                "total": round(data["total"], 2),
+                "total_ars": round(data["total_ars"], 2),
+                "total_usd": round(data["total_usd"], 2),
+                "porcentaje": round((cantidad / total_cotizaciones) * 100.0, 1) if total_cotizaciones else 0.0,
+            }
+        )
+
+    desglose.sort(key=lambda item: (-item["cantidad"], -item["total"], item["nombre"].lower()))
+    if limite:
+        return desglose[:limite]
+    return desglose
 
 
 def aplicar_filtro_estado_dashboard(query, estado):
@@ -999,6 +1059,89 @@ def aplicar_filtro_estado_dashboard(query, estado):
     if estado == "en_progreso":
         return query.filter(Cotizacion.estado == "En progreso")
     return query
+
+
+def aplicar_filtros_segmentacion_dashboard(query, familia="", sector="", subsector="", moneda=""):
+    if familia:
+        query = query.filter(Cotizacion.familia == familia)
+    if sector:
+        query = query.filter(Cliente.sector == sector)
+    if subsector:
+        query = query.filter(Cliente.subsector == subsector)
+    if moneda in ("ARS", "USD"):
+        query = query.filter(Cotizacion.moneda == moneda)
+    return query
+
+
+def resolver_estado_dashboard(valor):
+    estado = (valor or "todos").strip().lower()
+    if estado == "cerradas":
+        estado = "aceptadas"
+    if estado not in ("todos", "en_progreso", "aceptadas", "rechazadas"):
+        estado = "todos"
+    return estado
+
+
+def resolver_filtros_dashboard_request():
+    estado = resolver_estado_dashboard(request.args.get("estado"))
+    familia = normalizar_familia_cotizacion(request.args.get("familia"))
+    sector = normalizar_sector_cliente(request.args.get("sector"))
+    subsector = (
+        normalizar_subsector_cliente(sector, request.args.get("subsector"))
+        if sector
+        else normalizar_subsector_dashboard(request.args.get("subsector"))
+    )
+    moneda = (request.args.get("moneda") or "").strip().upper()
+    if moneda not in ("ARS", "USD"):
+        moneda = ""
+
+    periodo, desde, hasta, desde_date, hasta_date = resolver_rango_dashboard(
+        request.args.get("periodo"),
+        request.args.get("desde"),
+        request.args.get("hasta"),
+    )
+
+    return {
+        "estado": estado,
+        "familia": familia,
+        "sector": sector,
+        "subsector": subsector,
+        "moneda": moneda,
+        "periodo": periodo,
+        "desde": desde,
+        "hasta": hasta,
+        "desde_date": desde_date,
+        "hasta_date": hasta_date,
+    }
+
+
+def construir_query_dashboard_periodo(filtros):
+    query_periodo = Cotizacion.query.outerjoin(Cliente, Cotizacion.cliente_id == Cliente.id)
+    query_periodo = aplicar_filtro_fecha_cotizaciones(query_periodo, filtros["desde"], filtros["hasta"])
+    query_periodo = aplicar_filtros_segmentacion_dashboard(
+        query_periodo,
+        familia=filtros["familia"],
+        sector=filtros["sector"],
+        subsector=filtros["subsector"],
+        moneda=filtros["moneda"],
+    )
+    return query_periodo
+
+
+def construir_contexto_dashboard_operativo(query_periodo, filtros):
+    query_tabla = aplicar_filtro_estado_dashboard(query_periodo, filtros["estado"])
+    cotizaciones = query_tabla.order_by(Cotizacion.fecha.desc(), Cotizacion.id.desc()).all()
+    return {
+        "cotizaciones": cotizaciones,
+        "filtro_estado": filtros["estado"],
+        "filtro_periodo": filtros["periodo"],
+        "filtro_desde": filtros["desde"],
+        "filtro_hasta": filtros["hasta"],
+        "filtro_familia": filtros["familia"] or "",
+        "filtro_sector": filtros["sector"] or "",
+        "filtro_subsector": filtros["subsector"] or "",
+        "filtro_moneda": filtros["moneda"] or "",
+    }
 
 
 def persistir_cotizacion_desde_form(cotizacion=None):
@@ -1135,7 +1278,13 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         eliminar_imagen_local(item_sobrante.imagen_url)
         db.session.delete(item_sobrante)
 
-    if not cotizacion.cliente or not cotizacion.items or not cotizacion.familia:
+    if not cotizacion.familia:
+        flash("Debes definir la familia de la cotizacion antes de guardarla.", "danger")
+        destino = "editar_cotizacion" if es_edicion else "index"
+        kwargs = {"id": cotizacion.id} if es_edicion else {}
+        return None, redirect(url_for(destino, **kwargs))
+
+    if not cotizacion.cliente or not cotizacion.items:
         destino = "editar_cotizacion" if es_edicion else "index"
         kwargs = {"id": cotizacion.id} if es_edicion else {}
         return None, redirect(url_for(destino, **kwargs))
@@ -1370,22 +1519,22 @@ def historial_page():
 @app.route("/dashboard")
 @token_required
 def dashboard_page():
-    estado = (request.args.get("estado") or "todos").strip().lower()
-    if estado == "cerradas":
-        estado = "aceptadas"
-    if estado not in ("todos", "en_progreso", "aceptadas", "rechazadas"):
-        estado = "todos"
+    filtros = resolver_filtros_dashboard_request()
+    estado = filtros["estado"]
+    familia = filtros["familia"]
+    sector = filtros["sector"]
+    subsector = filtros["subsector"]
+    moneda = filtros["moneda"]
+    periodo = filtros["periodo"]
+    desde = filtros["desde"]
+    hasta = filtros["hasta"]
+    desde_date = filtros["desde_date"]
+    hasta_date = filtros["hasta_date"]
 
-    periodo, desde, hasta, desde_date, hasta_date = resolver_rango_dashboard(
-        request.args.get("periodo"),
-        request.args.get("desde"),
-        request.args.get("hasta"),
-    )
-
-    query_periodo = aplicar_filtro_fecha_cotizaciones(Cotizacion.query, desde, hasta)
+    query_periodo = construir_query_dashboard_periodo(filtros)
     cotizaciones_periodo = query_periodo.order_by(Cotizacion.fecha.desc(), Cotizacion.id.desc()).all()
-    query_tabla = aplicar_filtro_estado_dashboard(query_periodo, estado)
-    cotizaciones = query_tabla.order_by(Cotizacion.fecha.desc(), Cotizacion.id.desc()).all()
+    contexto_operativo = construir_contexto_dashboard_operativo(query_periodo, filtros)
+    cotizaciones = contexto_operativo["cotizaciones"]
 
     total = len(cotizaciones_periodo)
     aceptadas = sum(1 for cot in cotizaciones_periodo if normalizar_estado_cotizacion(cot.estado) == "Aceptada")
@@ -1408,9 +1557,12 @@ def dashboard_page():
     dias_periodo = max((hasta_date - desde_date).days + 1, 1)
     desde_anterior = desde_date - timedelta(days=dias_periodo)
     hasta_anterior = desde_date - timedelta(days=1)
-    cotizaciones_previas = aplicar_filtro_fecha_cotizaciones(
-        Cotizacion.query, desde_anterior.isoformat(), hasta_anterior.isoformat()
-    ).all()
+    query_previo = Cotizacion.query.outerjoin(Cliente, Cotizacion.cliente_id == Cliente.id)
+    query_previo = aplicar_filtro_fecha_cotizaciones(query_previo, desde_anterior.isoformat(), hasta_anterior.isoformat())
+    query_previo = aplicar_filtros_segmentacion_dashboard(
+        query_previo, familia=familia, sector=sector, subsector=subsector, moneda=moneda
+    )
+    cotizaciones_previas = query_previo.all()
     total_previo = len(cotizaciones_previas)
     aceptadas_previas = sum(1 for cot in cotizaciones_previas if normalizar_estado_cotizacion(cot.estado) == "Aceptada")
 
@@ -1442,30 +1594,132 @@ def dashboard_page():
             "total": round(sum((cot.total_final or 0.0) for cot in cotizaciones_periodo if (cot.moneda or "ARS").upper() == "USD"), 2),
         },
     }
+    pipeline_por_moneda = {
+        "ARS": {
+            "cantidad": sum(
+                1
+                for cot in cotizaciones_periodo
+                if normalizar_estado_cotizacion(cot.estado) == "En progreso" and (cot.moneda or "ARS").upper() == "ARS"
+            ),
+            "total": round(
+                sum(
+                    (cot.total_final or 0.0)
+                    for cot in cotizaciones_periodo
+                    if normalizar_estado_cotizacion(cot.estado) == "En progreso" and (cot.moneda or "ARS").upper() == "ARS"
+                ),
+                2,
+            ),
+        },
+        "USD": {
+            "cantidad": sum(
+                1
+                for cot in cotizaciones_periodo
+                if normalizar_estado_cotizacion(cot.estado) == "En progreso" and (cot.moneda or "ARS").upper() == "USD"
+            ),
+            "total": round(
+                sum(
+                    (cot.total_final or 0.0)
+                    for cot in cotizaciones_periodo
+                    if normalizar_estado_cotizacion(cot.estado) == "En progreso" and (cot.moneda or "ARS").upper() == "USD"
+                ),
+                2,
+            ),
+        },
+    }
+    aceptado_por_moneda = {
+        "ARS": {
+            "cantidad": sum(
+                1
+                for cot in cotizaciones_periodo
+                if normalizar_estado_cotizacion(cot.estado) == "Aceptada" and (cot.moneda or "ARS").upper() == "ARS"
+            ),
+            "total": round(
+                sum(
+                    (cot.total_final or 0.0)
+                    for cot in cotizaciones_periodo
+                    if normalizar_estado_cotizacion(cot.estado) == "Aceptada" and (cot.moneda or "ARS").upper() == "ARS"
+                ),
+                2,
+            ),
+        },
+        "USD": {
+            "cantidad": sum(
+                1
+                for cot in cotizaciones_periodo
+                if normalizar_estado_cotizacion(cot.estado) == "Aceptada" and (cot.moneda or "ARS").upper() == "USD"
+            ),
+            "total": round(
+                sum(
+                    (cot.total_final or 0.0)
+                    for cot in cotizaciones_periodo
+                    if normalizar_estado_cotizacion(cot.estado) == "Aceptada" and (cot.moneda or "ARS").upper() == "USD"
+                ),
+                2,
+            ),
+        },
+    }
     top_clientes = construir_top_clientes_dashboard(cotizaciones_periodo)
-    estado_foco_label = {
-        "todos": "Todas las cotizaciones",
-        "aceptadas": "Cotizaciones aceptadas",
-        "rechazadas": "Cotizaciones rechazadas",
-        "en_progreso": "Cotizaciones en progreso",
-    }[estado]
+    familias_breakdown = construir_desglose_dashboard(
+        cotizaciones_periodo, lambda cot: cot.familia, default_label="Sin familia", limite=6
+    )
+    sectores_breakdown = construir_desglose_dashboard(
+        cotizaciones_periodo,
+        lambda cot: cot.cliente_ref.sector if cot.cliente_ref else "",
+        default_label="Sin sector",
+    )
+    subsectores_breakdown = construir_desglose_dashboard(
+        cotizaciones_periodo,
+        lambda cot: cot.cliente_ref.subsector if cot.cliente_ref else "",
+        default_label="Sin subsector",
+        limite=8,
+    )
+    estado_foco_label = "Vista general del periodo"
+    filtros_activos = []
+    if familia:
+        filtros_activos.append({"icon": "bi-diagram-3", "label": f"Familia: {familia}"})
+    if sector:
+        filtros_activos.append({"icon": "bi-building", "label": f"Sector: {sector}"})
+    if subsector:
+        filtros_activos.append({"icon": "bi-tags", "label": f"Subsector: {subsector}"})
+    if moneda:
+        filtros_activos.append({"icon": "bi-cash-stack", "label": f"Moneda: {moneda}"})
+
+    top_familia = familias_breakdown[0]["nombre"] if familias_breakdown else "Sin datos"
+    top_sector = sectores_breakdown[0]["nombre"] if sectores_breakdown else "Sin datos"
+    top_subsector = subsectores_breakdown[0]["nombre"] if subsectores_breakdown else "Sin datos"
 
     return render_template(
         "dashboard.html",
-        cotizaciones=cotizaciones,
         resumen=resumen,
         series=series,
         monedas=monedas,
+        pipeline_por_moneda=pipeline_por_moneda,
+        aceptado_por_moneda=aceptado_por_moneda,
         top_clientes=top_clientes,
+        familias_breakdown=familias_breakdown,
+        sectores_breakdown=sectores_breakdown,
+        subsectores_breakdown=subsectores_breakdown,
         estado_foco_label=estado_foco_label,
-        filtro_estado=estado,
-        filtro_periodo=periodo,
-        filtro_desde=desde,
-        filtro_hasta=hasta,
         filtro_desde_legible=desde_date.strftime("%d/%m/%Y"),
         filtro_hasta_legible=hasta_date.strftime("%d/%m/%Y"),
         dias_periodo=dias_periodo,
+        filtros_activos=filtros_activos,
+        familias_disponibles=FAMILIAS_COTIZACION,
+        sectores_cliente=SECTORES_CLIENTE,
+        top_familia=top_familia,
+        top_sector=top_sector,
+        top_subsector=top_subsector,
+        **contexto_operativo,
     )
+
+
+@app.route("/dashboard/detalle-operativo")
+@token_required
+def dashboard_detalle_operativo():
+    filtros = resolver_filtros_dashboard_request()
+    query_periodo = construir_query_dashboard_periodo(filtros)
+    contexto_operativo = construir_contexto_dashboard_operativo(query_periodo, filtros)
+    return render_template("_dashboard_operativo.html", **contexto_operativo)
 
 
 @app.route("/auditoria")

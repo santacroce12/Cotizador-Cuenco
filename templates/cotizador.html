@@ -73,6 +73,17 @@
             {{ "Editar Presupuesto" if modo_edicion else "Nuevo Presupuesto" }}
         </h2>
     </div>
+    {% with mensajes = get_flashed_messages(with_categories=true) %}
+    {% if mensajes %}
+    <div class="mb-4">
+        {% for categoria, mensaje in mensajes %}
+        <div class="alert alert-{{ 'danger' if categoria == 'danger' else 'secondary' }} border-0 shadow-sm mb-2" role="alert">
+            {{ mensaje }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
 
     <form method="POST" id="form-cotizador" enctype="multipart/form-data" action="{{ url_for('editar_cotizacion', id=cotizacion.id) if modo_edicion else url_for('index') }}">
         <input type="hidden" name="nombre_fantasia" value="Cuenco Tech">
@@ -313,6 +324,12 @@
         </div>
 
         <div class="text-end mt-4">
+            <div class="d-inline-flex align-items-center gap-2 me-3">
+                <span class="small text-muted text-uppercase fw-semibold">Familia</span>
+                <span id="familia-indicador" class="badge rounded-pill {% if cotizacion and cotizacion.familia %}text-bg-dark{% else %}text-bg-warning{% endif %}">
+                    {{ cotizacion.familia if cotizacion and cotizacion.familia else "Sin definir" }}
+                </span>
+            </div>
             <button type="button" onclick="prepararEnvio()" class="btn btn-success btn-lg px-5 shadow">{{ "Guardar Cambios" if modo_edicion else "Generar Presupuesto" }}</button>
         </div>
     </form>
@@ -328,12 +345,12 @@
             <div class="modal-body">
                 <label class="form-label fw-bold">¿A que familia pertenece este proyecto?</label>
                 <select id="select_familia" class="form-select form-select-lg mb-3">
-                    <option value="">Seleccionar Familia...</option>
+                    <option value="" disabled>Seleccionar Familia...</option>
                     {% for familia in familias_cotizacion %}
                     <option value="{{ familia }}">{{ familia }}</option>
                     {% endfor %}
                 </select>
-                <div class="small text-white-50">La familia se guarda en la cotizacion y despues queda disponible en historial, exportaciones y dashboard.</div>
+                <div class="small text-white-50">La familia es obligatoria y se usa en historial, dashboard y exportaciones.</div>
             </div>
             <div class="modal-footer border-secondary">
                 <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancelar</button>
@@ -350,6 +367,15 @@ let clienteTomSelect = null;
 let itemRowCounter = 0;
 const placeholderProductUrl = "{{ url_for('static', filename='placeholder_product.png') }}";
 const itemsPrecargados = {{ items_precargados|default([], true)|tojson }};
+
+function normalizarTextoCliente(texto) {
+    return (texto || "")
+        .toString()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+}
 
 function actualizarEstiloEstadoForm(select) {
     if (!select) {
@@ -418,6 +444,58 @@ function initClienteSelect() {
             sincronizarClienteSeleccionado();
         },
     });
+
+    if (clienteTomSelect.control_input) {
+        clienteTomSelect.control_input.addEventListener("blur", function () {
+            window.setTimeout(() => {
+                resolverClientePendiente();
+            }, 50);
+        });
+    }
+}
+
+function resolverClientePendiente() {
+    const select = document.getElementById("cliente_select");
+    const tom = select?.tomselect;
+    if (!select || !tom || select.value) {
+        return Boolean(select?.value);
+    }
+
+    const query = (tom.control_input?.value || tom.lastQuery || "").trim();
+    const queryNorm = normalizarTextoCliente(query);
+    if (!queryNorm) {
+        return false;
+    }
+
+    const limpiarTexto = (valor) => normalizarTextoCliente((valor || "").replace(/\s*\(.*?\)\s*$/, ""));
+    const opciones = Object.values(tom.options || {});
+
+    const matches = opciones.filter((opcion) => {
+        const text = normalizarTextoCliente(opcion.text);
+        const nombre = normalizarTextoCliente(opcion.nombre);
+        const razon = normalizarTextoCliente(opcion.razon || opcion.razon_social);
+        const cuit = normalizarTextoCliente(opcion.cuit);
+        const textLimpio = limpiarTexto(opcion.text);
+        return [text, textLimpio, nombre, razon, cuit].some((valor) => valor && valor.includes(queryNorm));
+    });
+
+    const exactMatches = matches.filter((opcion) => {
+        const text = normalizarTextoCliente(opcion.text);
+        const nombre = normalizarTextoCliente(opcion.nombre);
+        const razon = normalizarTextoCliente(opcion.razon || opcion.razon_social);
+        const cuit = normalizarTextoCliente(opcion.cuit);
+        const textLimpio = limpiarTexto(opcion.text);
+        return [text, textLimpio, nombre, razon, cuit].some((valor) => valor === queryNorm);
+    });
+
+    const elegida = exactMatches.length === 1 ? exactMatches[0] : matches.length === 1 ? matches[0] : null;
+    if (!elegida?.value) {
+        return false;
+    }
+
+    tom.setValue(elegida.value, true);
+    sincronizarClienteSeleccionado();
+    return true;
 }
 
 function sincronizarClienteSeleccionado() {
@@ -656,12 +734,31 @@ function guardarCliente() {
         });
 }
 
+function actualizarIndicadorFamilia() {
+    const inputFamilia = document.getElementById("input_familia_hidden");
+    const indicador = document.getElementById("familia-indicador");
+    const selectFamilia = document.getElementById("select_familia");
+    if (!indicador || !inputFamilia) {
+        return;
+    }
+    const familia = (inputFamilia.value || "").trim();
+    indicador.textContent = familia || "Sin definir";
+    indicador.classList.toggle("text-bg-dark", Boolean(familia));
+    indicador.classList.toggle("text-bg-warning", !familia);
+    if (selectFamilia && familia) {
+        selectFamilia.value = familia;
+    }
+}
+
 function prepararEnvio() {
     const form = document.getElementById("form-cotizador");
     const select = document.getElementById("cliente_select");
     const rows = document.querySelectorAll("#cuerpo-tabla tr");
     if (!form) {
         return;
+    }
+    if (select && !select.value) {
+        resolverClientePendiente();
     }
     if (select && !select.value) {
         alert("Selecciona un cliente antes de generar la cotizacion.");
@@ -702,6 +799,7 @@ function confirmarEnvio() {
         return;
     }
     inputFamilia.value = familia;
+    actualizarIndicadorFamilia();
     bootstrap.Modal.getOrCreateInstance(document.getElementById("modalFamilia")).hide();
     if (typeof form.requestSubmit === "function") {
         form.requestSubmit();
@@ -900,6 +998,9 @@ document.getElementById("cliente_select")?.addEventListener("change", sincroniza
 document.getElementById("form-cotizador")?.addEventListener("submit", function (event) {
     const select = document.getElementById("cliente_select");
     if (select && !select.value) {
+        resolverClientePendiente();
+    }
+    if (select && !select.value) {
         event.preventDefault();
         alert("Selecciona un cliente antes de generar la cotizacion.");
         if (select.tomselect) {
@@ -922,6 +1023,7 @@ window.onload = function () {
     initClienteSelect();
     actualizarEstiloEstadoForm(document.getElementById("estado_cotizacion"));
     toggleSeguimientoFields();
+    actualizarIndicadorFamilia();
     if (itemsPrecargados.length) {
         itemsPrecargados.forEach((item) => agregarFila(item));
     } else {

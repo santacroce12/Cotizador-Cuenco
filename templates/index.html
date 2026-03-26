@@ -135,7 +135,7 @@
                             <td class="fw-bold">${{ "{:,.2f}".format(c.total_final) }}</td>
                             <td class="text-end">
                                 <a href="/cotizacion/{{ c.id }}" class="btn btn-sm btn-view-custom">Ver</a>
-                                <a href="/cotizacion/{{ c.id }}?download=1" class="btn btn-sm btn-outline-success">PDF</a>
+                                <a href="/cotizacion/{{ c.id }}?download=1" class="btn btn-sm btn-pdf-custom">PDF</a>
                             </td>
                         </tr>
                         {% endfor %}
@@ -221,7 +221,7 @@ function aplicarFiltros() {
                         <td class="fw-bold text-primary">${c.total}</td>
                         <td class="text-end">
                             <a href="/cotizacion/${c.id}" class="btn btn-sm btn-view-custom">Ver</a>
-                            <a href="/cotizacion/${c.id}?download=1" class="btn btn-sm btn-outline-success">PDF</a>
+                            <a href="/cotizacion/${c.id}?download=1" class="btn btn-sm btn-pdf-custom">PDF</a>
                         </td>
                     </tr>
                 `;

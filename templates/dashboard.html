@@ -34,7 +34,17 @@
     }
     .dash-label { font-size:.75rem; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:#64748b; margin-bottom:.5rem; }
     .dash-hero-stat .dash-label { color:#cbd5e1; }
-    .dash-value { font-size:1.95rem; font-weight:800; line-height:1; color:#0f172a; margin-bottom:.35rem; }
+    .dash-value {
+        font-size:1.95rem;
+        font-weight:800;
+        line-height:1.02;
+        color:#0f172a;
+        margin-bottom:.35rem;
+        letter-spacing:-0.03em;
+        font-variant-numeric: tabular-nums;
+        overflow-wrap:anywhere;
+        word-break:break-word;
+    }
     .dash-hero-stat .dash-value { color:#f8fafc; }
     .dash-note { color:#64748b; font-size:.9rem; margin:0; }
     .dash-hero-stat .dash-note { color:#cbd5e1; }
@@ -46,22 +56,161 @@
         box-shadow:0 14px 28px rgba(15,23,42,.06);
     }
     .dash-controls { background:linear-gradient(180deg, rgba(244,248,252,.98), rgba(233,240,248,.98)); }
-    .dash-period-actions { display:flex; flex-wrap:wrap; gap:.5rem; }
-    .dash-period-actions .btn, .dash-state-link {
-        border-radius:999px; font-weight:700; padding-inline:.95rem;
+    .dash-controls .form-control,
+    .dash-controls .form-select {
+        min-height:48px;
+        border-radius:16px;
+        border:1px solid #cbd5e1;
+        background:rgba(255,255,255,.92);
+        box-shadow:none;
     }
-    .dash-state-row { display:flex; flex-wrap:wrap; gap:.5rem; }
+    .dash-controls .btn {
+        min-height:48px;
+        border-radius:16px;
+        font-weight:800;
+    }
+    .dash-period-actions {
+        display:flex; flex-wrap:wrap; gap:.45rem;
+        padding:.35rem;
+        border-radius:18px;
+        background:rgba(226,232,240,.78);
+        border:1px solid rgba(203,213,225,.95);
+    }
+    .dash-period-actions .btn {
+        min-width:86px;
+        border-radius:14px;
+        font-weight:800;
+        padding-inline:1rem;
+    }
+    .dash-state-toolbar {
+        display:flex; align-items:flex-end; justify-content:space-between; gap:1rem;
+        margin:1rem 0 .9rem;
+        padding:.95rem 1rem;
+        border-radius:18px;
+        background:linear-gradient(180deg, rgba(241,245,249,.94), rgba(226,232,240,.82));
+        border:1px solid rgba(203,213,225,.95);
+    }
+    .dash-state-meta {
+        max-width:360px;
+        margin:0;
+        color:#64748b;
+        font-size:.88rem;
+        text-align:right;
+    }
+    .dash-state-row {
+        display:inline-flex; flex-wrap:wrap; gap:.35rem;
+        padding:.25rem;
+        border-radius:999px;
+        background:rgba(255,255,255,.85);
+        border:1px solid #d7e0ea;
+    }
     .dash-state-link {
-        display:inline-flex; align-items:center; justify-content:center; min-width:120px;
-        text-decoration:none; padding:.55rem .85rem;
-        background:rgba(255,255,255,.72); border:1px solid #cbd5e1; color:#334155;
+        display:inline-flex; align-items:center; justify-content:center;
+        text-decoration:none;
+        padding:.62rem 1.05rem;
+        border-radius:999px;
+        border:1px solid transparent;
+        background:transparent;
+        color:#334155;
+        font-size:.95rem;
+        font-weight:800;
+        line-height:1;
+        transition:all .18s ease;
     }
-    .dash-state-link.active { background:linear-gradient(180deg, #111827 0%, #1e293b 100%); border-color:#0f172a; color:#f8fafc; }
-    .dash-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1rem; }
+    .dash-state-link:hover {
+        color:#0f172a;
+        background:rgba(226,232,240,.8);
+    }
+    .dash-state-link.active {
+        background:linear-gradient(180deg, #111827 0%, #1e293b 100%);
+        border-color:#0f172a;
+        color:#f8fafc;
+        box-shadow:0 10px 18px rgba(15,23,42,.16);
+    }
+    .dash-active-filters { display:flex; flex-wrap:wrap; gap:.55rem; margin-top:1rem; }
+    .dash-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; }
+    .dash-metrics > .dash-card {
+        min-width:0;
+        min-height:210px;
+        display:flex;
+        flex-direction:column;
+        justify-content:flex-start;
+    }
+    .dash-metrics .dash-value {
+        font-size:clamp(1.55rem, 1.5vw, 2.15rem);
+        line-height:1.04;
+    }
+    .dash-metrics .dash-note {
+        margin-top:auto;
+        overflow-wrap:anywhere;
+    }
     .dash-metric-dark { background:linear-gradient(160deg, #111827 0%, #1f2937 100%); }
     .dash-metric-dark .dash-label, .dash-metric-dark .dash-note { color:#cbd5e1; }
     .dash-metric-dark .dash-value { color:#f8fafc; }
+    .dash-volume-stack {
+        display:grid;
+        gap:.9rem;
+        margin-bottom:.85rem;
+    }
+    .dash-volume-row {
+        display:grid;
+        gap:.2rem;
+        padding:.85rem .95rem;
+        border-radius:18px;
+        background:rgba(255,255,255,.08);
+        border:1px solid rgba(255,255,255,.08);
+    }
+    .dash-volume-row + .dash-volume-row {
+        border-top:1px solid rgba(255,255,255,.08);
+    }
+    .dash-volume-meta {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:.75rem;
+        color:#cbd5e1;
+        font-size:.82rem;
+        font-weight:700;
+        text-transform:uppercase;
+        letter-spacing:.05em;
+    }
+    .dash-volume-row .dash-value {
+        margin-bottom:0;
+        color:#f8fafc;
+    }
+    .dash-volume-note {
+        color:rgba(226,232,240,.84);
+        font-size:.88rem;
+        margin:0;
+    }
+    .dash-card .dash-volume-row {
+        background:rgba(226,232,240,.38);
+        border:1px solid rgba(203,213,225,.82);
+    }
+    .dash-card .dash-volume-meta {
+        color:#64748b;
+    }
+    .dash-card .dash-volume-row .dash-value {
+        color:#0f172a;
+    }
+    .dash-card .dash-volume-note {
+        color:#64748b;
+    }
+    .dash-card.dash-metric-dark .dash-volume-row {
+        background:rgba(255,255,255,.08);
+        border:1px solid rgba(255,255,255,.08);
+    }
+    .dash-card.dash-metric-dark .dash-volume-meta {
+        color:#cbd5e1;
+    }
+    .dash-card.dash-metric-dark .dash-volume-row .dash-value {
+        color:#f8fafc;
+    }
+    .dash-card.dash-metric-dark .dash-volume-note {
+        color:rgba(226,232,240,.84);
+    }
     .dash-analytics { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(320px,.85fr); gap:1rem; }
+    .dash-segmentation { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; }
     .dash-secondary { display:grid; grid-template-columns:minmax(0,1fr) minmax(320px,.95fr); gap:1rem; }
     .dash-head { display:flex; align-items:start; justify-content:space-between; gap:.75rem; margin-bottom:1rem; }
     .dash-head-title { font-size:1.02rem; font-weight:800; color:#0f172a; margin-bottom:.2rem; }
@@ -93,14 +242,72 @@
     .dash-top-head { display:flex; align-items:center; justify-content:space-between; gap:.85rem; margin-bottom:.45rem; }
     .dash-top-name { font-weight:700; color:#0f172a; }
     .dash-top-meta { color:#64748b; font-size:.88rem; }
+    .dash-breakdown-list { display:grid; gap:.8rem; }
+    .dash-breakdown-row { padding:.95rem 1rem; border-radius:18px; background:rgba(255,255,255,.82); border:1px solid rgba(203,213,225,.85); }
+    .dash-breakdown-head { display:flex; align-items:flex-start; justify-content:space-between; gap:.85rem; margin-bottom:.45rem; }
+    .dash-breakdown-name { font-weight:800; color:#0f172a; }
+    .dash-breakdown-meta { color:#64748b; font-size:.85rem; }
+    .dash-mini-pill { display:inline-flex; align-items:center; gap:.35rem; border-radius:999px; padding:.3rem .6rem; background:#e2e8f0; color:#334155; font-size:.75rem; font-weight:700; }
+    .dash-breakdown-money {
+        display:grid;
+        gap:.18rem;
+        margin-top:.55rem;
+    }
+    .dash-breakdown-money-line {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:.85rem;
+        font-size:.82rem;
+        color:#64748b;
+    }
+    .dash-breakdown-money-line strong {
+        color:#334155;
+        font-weight:800;
+    }
+    .dash-client-segment { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.35rem; }
     .dash-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:1rem; }
     .dash-table-title { font-size:1.05rem; font-weight:800; color:#0f172a; margin-bottom:.2rem; }
     .dash-counter { display:inline-flex; align-items:center; gap:.45rem; padding:.48rem .8rem; border-radius:999px; background:#e2e8f0; color:#334155; font-size:.82rem; font-weight:700; }
+    .dash-actions-cell { min-width:248px; }
+    .dash-actions-grid {
+        display:grid;
+        grid-template-columns:repeat(2, minmax(104px, 1fr));
+        gap:.55rem;
+        justify-content:end;
+    }
+    .dash-action-btn {
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        gap:.42rem;
+        min-height:40px;
+        padding:.55rem .75rem;
+        border-radius:12px;
+        font-weight:800;
+        white-space:nowrap;
+    }
+    .dash-action-btn i { font-size:.9rem; }
+    .dash-operativo-wrapper.is-loading {
+        opacity:.58;
+        pointer-events:none;
+        transition:opacity .18s ease;
+    }
     .dash-empty { padding:2.6rem 1.3rem; text-align:center; color:#64748b; }
     .dash-empty i { display:block; font-size:2rem; color:#94a3b8; margin-bottom:.7rem; }
+    @media (max-width:1399px) { .dash-segmentation{grid-template-columns:1fr;} }
     @media (max-width:1199px) { .dash-metrics{grid-template-columns:repeat(2,minmax(0,1fr));} .dash-analytics,.dash-secondary{grid-template-columns:1fr;} }
     @media (max-width:991px) { .dash-hero-stats{grid-template-columns:1fr;} }
-    @media (max-width:767px) { .dash-metrics,.dash-currency{grid-template-columns:1fr;} .dash-chart{height:280px;} .dash-hero{padding:1.2rem;} }
+    @media (max-width:767px) {
+        .dash-metrics,.dash-currency{grid-template-columns:1fr;}
+        .dash-chart{height:280px;}
+        .dash-hero{padding:1.2rem;}
+        .dash-state-toolbar{flex-direction:column; align-items:flex-start;}
+        .dash-state-meta{text-align:left; max-width:none;}
+        .dash-period-actions .btn{flex:1 1 calc(50% - .45rem);}
+        .dash-actions-cell { min-width:220px; }
+        .dash-actions-grid { grid-template-columns:1fr 1fr; }
+    }
 </style>
 
 {% set total_periodo = resumen.total or 0 %}
@@ -120,6 +327,13 @@
                     <span class="dash-pill"><i class="bi bi-hourglass-split"></i> {{ dias_periodo }} dias</span>
                     <span class="dash-pill"><i class="bi bi-funnel"></i> {{ estado_foco_label }}</span>
                 </div>
+                {% if filtros_activos %}
+                <div class="dash-active-filters">
+                    {% for filtro in filtros_activos %}
+                    <span class="dash-pill"><i class="bi {{ filtro.icon }}"></i> {{ filtro.label }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
             </div>
             <div class="col-xl-5">
                 <div class="dash-hero-stats">
@@ -157,7 +371,7 @@
 
     <form method="GET" action="{{ url_for('dashboard_page') }}" class="dash-controls">
         <div class="row g-3 align-items-end">
-            <div class="col-xl-5">
+            <div class="col-xl-4">
                 <div class="dash-label">Rangos rapidos</div>
                 <div class="dash-period-actions">
                     <button type="submit" name="periodo" value="7" class="btn btn-sm {{ 'btn-dark-custom active' if filtro_periodo == '7' else 'btn-outline-dark' }}">7 dias</button>
@@ -167,55 +381,136 @@
                     <button type="submit" name="periodo" value="365" class="btn btn-sm {{ 'btn-dark-custom active' if filtro_periodo == '365' else 'btn-outline-dark' }}">12 meses</button>
                 </div>
             </div>
-            <div class="col-md-4 col-xl-2">
+            <div class="col-md-3 col-xl-2">
                 <div class="dash-label">Desde</div>
                 <input type="date" name="desde" class="form-control" value="{{ filtro_desde }}">
             </div>
-            <div class="col-md-4 col-xl-2">
+            <div class="col-md-3 col-xl-2">
                 <div class="dash-label">Hasta</div>
                 <input type="date" name="hasta" class="form-control" value="{{ filtro_hasta }}">
             </div>
-            <div class="col-md-4 col-xl-2">
-                <div class="dash-label">Vista</div>
-                <select name="estado" class="form-select">
-                    <option value="todos" {% if filtro_estado == 'todos' %}selected{% endif %}>Todas</option>
-                    <option value="aceptadas" {% if filtro_estado == 'aceptadas' %}selected{% endif %}>Aceptadas</option>
-                    <option value="rechazadas" {% if filtro_estado == 'rechazadas' %}selected{% endif %}>Rechazadas</option>
-                    <option value="en_progreso" {% if filtro_estado == 'en_progreso' %}selected{% endif %}>En progreso</option>
+            <div class="col-md-3 col-xl-2">
+                <div class="dash-label">Moneda</div>
+                <select name="moneda" class="form-select">
+                    <option value="" {% if not filtro_moneda %}selected{% endif %}>Todas</option>
+                    <option value="ARS" {% if filtro_moneda == 'ARS' %}selected{% endif %}>ARS</option>
+                    <option value="USD" {% if filtro_moneda == 'USD' %}selected{% endif %}>USD</option>
                 </select>
             </div>
-            <div class="col-xl-1 d-flex align-items-end">
-                <button type="submit" name="periodo" value="custom" class="btn btn-primary w-100"><i class="bi bi-funnel"></i></button>
-            </div>
         </div>
-        <div class="dash-state-row mt-3">
-            {% for key, label in [('todos', 'Todo'), ('aceptadas', 'Aceptadas'), ('rechazadas', 'Rechazadas'), ('en_progreso', 'En progreso')] %}
-            <a class="dash-state-link {% if filtro_estado == key %}active{% endif %}" href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=key, desde=filtro_desde, hasta=filtro_hasta) }}">{{ label }}</a>
-            {% endfor %}
-            <a class="dash-state-link" href="{{ url_for('dashboard_page') }}">Limpiar</a>
+        <div class="row g-3 align-items-end mt-1">
+            <div class="col-md-4 col-xl-3">
+                <div class="dash-label">Familia</div>
+                <select name="familia" class="form-select">
+                    <option value="" {% if not filtro_familia %}selected{% endif %}>Todas las familias</option>
+                    {% for familia in familias_disponibles %}
+                    <option value="{{ familia }}" {% if filtro_familia == familia %}selected{% endif %}>{{ familia }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 col-xl-3">
+                <div class="dash-label">Sector cliente</div>
+                <select name="sector" id="dashboard_sector" class="form-select">
+                    <option value="" {% if not filtro_sector %}selected{% endif %}>Todos los sectores</option>
+                    {% for sector_nombre in sectores_cliente.keys() %}
+                    <option value="{{ sector_nombre }}" {% if filtro_sector == sector_nombre %}selected{% endif %}>{{ sector_nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 col-xl-3">
+                <div class="dash-label">Subsector</div>
+                <select name="subsector" id="dashboard_subsector" class="form-select">
+                    <option value="">Todos los subsectores</option>
+                </select>
+            </div>
+            <div class="col-xl-3 d-flex align-items-end gap-2">
+                <button type="submit" name="periodo" value="custom" class="btn btn-primary flex-grow-1"><i class="bi bi-funnel me-2"></i>Aplicar</button>
+                <a class="btn btn-outline-dark" href="{{ url_for('dashboard_page') }}">Limpiar</a>
+            </div>
         </div>
     </form>
 
     <section class="dash-metrics">
         <article class="dash-card dash-metric-dark">
-            <div class="dash-label">Volumen total cotizado</div>
-            <div class="dash-value">{{ "{:,.2f}".format(resumen.total_importe) }}</div>
-            <p class="dash-note">Suma completa del periodo, respetando la moneda guardada en cada cotizacion.</p>
+            <div class="dash-label">Volumen cotizado por moneda</div>
+            <div class="dash-volume-stack">
+                <div class="dash-volume-row">
+                    <div class="dash-volume-meta">
+                        <span>Pesos argentinos</span>
+                        <span>ARS</span>
+                    </div>
+                    <div class="dash-value">{{ "{:,.2f}".format(monedas.ARS.total) }}</div>
+                    <p class="dash-volume-note">{{ monedas.ARS.cantidad }} cotizaciones emitidas en ARS.</p>
+                </div>
+                <div class="dash-volume-row">
+                    <div class="dash-volume-meta">
+                        <span>Dolares estadounidenses</span>
+                        <span>USD</span>
+                    </div>
+                    <div class="dash-value">{{ "{:,.2f}".format(monedas.USD.total) }}</div>
+                    <p class="dash-volume-note">{{ monedas.USD.cantidad }} cotizaciones emitidas en USD.</p>
+                </div>
+            </div>
+            <p class="dash-note">Separado por moneda para no mezclar importes incompatibles en una sola lectura.</p>
         </article>
         <article class="dash-card">
             <div class="dash-label">Pipeline abierto</div>
-            <div class="dash-value">{{ "{:,.2f}".format(resumen.importe_pipeline) }}</div>
-            <p class="dash-note">{{ resumen.en_progreso }} cotizaciones siguen activas.</p>
+            <div class="dash-volume-stack">
+                <div class="dash-volume-row">
+                    <div class="dash-volume-meta">
+                        <span>Pesos argentinos</span>
+                        <span>ARS</span>
+                    </div>
+                    <div class="dash-value">{{ "{:,.2f}".format(pipeline_por_moneda.ARS.total) }}</div>
+                    <p class="dash-volume-note">{{ pipeline_por_moneda.ARS.cantidad }} cotizaciones activas en ARS.</p>
+                </div>
+                <div class="dash-volume-row">
+                    <div class="dash-volume-meta">
+                        <span>Dolares estadounidenses</span>
+                        <span>USD</span>
+                    </div>
+                    <div class="dash-value">{{ "{:,.2f}".format(pipeline_por_moneda.USD.total) }}</div>
+                    <p class="dash-volume-note">{{ pipeline_por_moneda.USD.cantidad }} cotizaciones activas en USD.</p>
+                </div>
+            </div>
+            <p class="dash-note">{{ resumen.en_progreso }} cotizaciones siguen activas en total.</p>
         </article>
         <article class="dash-card">
-            <div class="dash-label">Volumen aceptado</div>
-            <div class="dash-value">{{ "{:,.2f}".format(resumen.importe_aceptado) }}</div>
-            <p class="dash-note">Importe asociado a cotizaciones aceptadas.</p>
+            <div class="dash-label">Volumen aceptado por moneda</div>
+            <div class="dash-volume-stack">
+                <div class="dash-volume-row">
+                    <div class="dash-volume-meta">
+                        <span>Pesos argentinos</span>
+                        <span>ARS</span>
+                    </div>
+                    <div class="dash-value">{{ "{:,.2f}".format(aceptado_por_moneda.ARS.total) }}</div>
+                    <p class="dash-volume-note">{{ aceptado_por_moneda.ARS.cantidad }} cotizaciones aceptadas en ARS.</p>
+                </div>
+                <div class="dash-volume-row">
+                    <div class="dash-volume-meta">
+                        <span>Dolares estadounidenses</span>
+                        <span>USD</span>
+                    </div>
+                    <div class="dash-value">{{ "{:,.2f}".format(aceptado_por_moneda.USD.total) }}</div>
+                    <p class="dash-volume-note">{{ aceptado_por_moneda.USD.cantidad }} cotizaciones aceptadas en USD.</p>
+                </div>
+            </div>
+            <p class="dash-note">Separado por moneda para leer aceptaciones sin mezclar ARS y USD.</p>
         </article>
         <article class="dash-card">
             <div class="dash-label">Ticket promedio</div>
             <div class="dash-value">{{ "{:,.2f}".format(resumen.ticket_promedio) }}</div>
             <p class="dash-note">{{ "{:,.1f}".format(resumen.promedio_diario) }} cotizaciones por dia en promedio.</p>
+        </article>
+        <article class="dash-card">
+            <div class="dash-label">Familia lider</div>
+            <div class="dash-value" style="font-size:1.2rem; line-height:1.2;">{{ top_familia }}</div>
+            <p class="dash-note">Familia con mas movimiento en el rango actual.</p>
+        </article>
+        <article class="dash-card">
+            <div class="dash-label">Segmento lider</div>
+            <div class="dash-value" style="font-size:1.2rem; line-height:1.2;">{{ top_sector }}{% if top_subsector and top_subsector != 'Sin datos' %}<span style="display:block; font-size:1rem; margin-top:.4rem; color:#64748b;">{{ top_subsector }}</span>{% endif %}</div>
+            <p class="dash-note">Lectura rapida del corte sectorial mas dominante.</p>
         </article>
     </section>
 
@@ -265,6 +560,101 @@
         </article>
     </section>
 
+    <section class="dash-segmentation">
+        <article class="dash-card">
+            <div class="dash-head">
+                <div>
+                    <div class="dash-head-title">Familias mas cotizadas</div>
+                    <p class="dash-head-copy">Te muestra que lineas de negocio dominan el periodo filtrado.</p>
+                </div>
+                <span class="dash-tag"><i class="bi bi-diagram-3"></i> Familias</span>
+            </div>
+            {% if familias_breakdown %}
+            <div class="dash-breakdown-list">
+                {% for item in familias_breakdown %}
+                <div class="dash-breakdown-row">
+                    <div class="dash-breakdown-head">
+                        <div>
+                            <div class="dash-breakdown-name">{{ item.nombre }}</div>
+                            <div class="dash-breakdown-meta">{{ item.cantidad }} cotizaciones · {{ item.aceptadas }} aceptadas</div>
+                        </div>
+                        <span class="dash-mini-pill">{{ "{:,.1f}".format(item.porcentaje) }}%</span>
+                    </div>
+                    <div class="dash-bar"><span style="width: {{ item.porcentaje }}%; background:#2563eb;"></span></div>
+                    <div class="small text-muted mt-2">Total cotizado: {{ "{:,.2f}".format(item.total) }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="dash-empty"><i class="bi bi-diagram-3"></i>No hay familias para mostrar en este rango.</div>
+            {% endif %}
+        </article>
+
+        <article class="dash-card">
+            <div class="dash-head">
+                <div>
+                    <div class="dash-head-title">Corte por sector</div>
+                    <p class="dash-head-copy">Sirve para ver rapido cuanto viene desde Publico y cuanto desde Privado.</p>
+                </div>
+                <span class="dash-tag"><i class="bi bi-building"></i> Sectores</span>
+            </div>
+            {% if sectores_breakdown %}
+            <div class="dash-breakdown-list">
+                {% for item in sectores_breakdown %}
+                <div class="dash-breakdown-row">
+                    <div class="dash-breakdown-head">
+                        <div>
+                            <div class="dash-breakdown-name">{{ item.nombre }}</div>
+                            <div class="dash-breakdown-meta">{{ item.cantidad }} cotizaciones · {{ item.aceptadas }} aceptadas</div>
+                        </div>
+                        <span class="dash-mini-pill">{{ "{:,.1f}".format(item.porcentaje) }}%</span>
+                    </div>
+                    <div class="dash-bar"><span style="width: {{ item.porcentaje }}%; background:#0f766e;"></span></div>
+                    <div class="dash-breakdown-money">
+                        <div class="dash-breakdown-money-line"><span>Total ARS</span><strong>{{ "{:,.2f}".format(item.total_ars) }}</strong></div>
+                        <div class="dash-breakdown-money-line"><span>Total USD</span><strong>{{ "{:,.2f}".format(item.total_usd) }}</strong></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="dash-empty"><i class="bi bi-building"></i>No hay sectores para mostrar en este rango.</div>
+            {% endif %}
+        </article>
+
+        <article class="dash-card">
+            <div class="dash-head">
+                <div>
+                    <div class="dash-head-title">Subsectores relevantes</div>
+                    <p class="dash-head-copy">Detalle fino del origen comercial para no perder granularidad.</p>
+                </div>
+                <span class="dash-tag"><i class="bi bi-tags"></i> Subsectores</span>
+            </div>
+            {% if subsectores_breakdown %}
+            <div class="dash-breakdown-list">
+                {% for item in subsectores_breakdown %}
+                <div class="dash-breakdown-row">
+                    <div class="dash-breakdown-head">
+                        <div>
+                            <div class="dash-breakdown-name">{{ item.nombre }}</div>
+                            <div class="dash-breakdown-meta">{{ item.cantidad }} cotizaciones · {{ item.aceptadas }} aceptadas</div>
+                        </div>
+                        <span class="dash-mini-pill">{{ "{:,.1f}".format(item.porcentaje) }}%</span>
+                    </div>
+                    <div class="dash-bar"><span style="width: {{ item.porcentaje }}%; background:#7c3aed;"></span></div>
+                    <div class="dash-breakdown-money">
+                        <div class="dash-breakdown-money-line"><span>Total ARS</span><strong>{{ "{:,.2f}".format(item.total_ars) }}</strong></div>
+                        <div class="dash-breakdown-money-line"><span>Total USD</span><strong>{{ "{:,.2f}".format(item.total_usd) }}</strong></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="dash-empty"><i class="bi bi-tags"></i>No hay subsectores para mostrar en este rango.</div>
+            {% endif %}
+        </article>
+    </section>
+
     <section class="dash-secondary">
         <article class="dash-card">
             <div class="dash-head">
@@ -306,7 +696,11 @@
                     </div>
                     <div class="small text-muted mb-2">{{ cliente.aceptadas }} aceptadas dentro del periodo</div>
                     <div class="dash-bar"><span style="width: {{ (cliente.cantidad / (top_clientes[0].cantidad or 1)) * 100 }}%; background:#2563eb;"></span></div>
-                    <div class="small text-muted mt-2">Total cotizado: {{ "{:,.2f}".format(cliente.total) }}</div>
+                    <div class="dash-breakdown-money">
+                        <div class="dash-breakdown-money-line"><span>Total ARS</span><strong>{{ "{:,.2f}".format(cliente.total_ars) }}</strong></div>
+                        <div class="dash-breakdown-money-line"><span>Total USD</span><strong>{{ "{:,.2f}".format(cliente.total_usd) }}</strong></div>
+                        <div class="dash-breakdown-money-line"><span>Total combinado</span><strong>{{ "{:,.2f}".format(cliente.total) }}</strong></div>
+                    </div>
                 </div>
                 {% endfor %}
             </div>
@@ -316,65 +710,115 @@
         </article>
     </section>
 
-    <section class="dash-table">
-        <div class="dash-toolbar">
-            <div>
-                <div class="dash-table-title">Detalle operativo</div>
-                <p class="dash-head-copy">{{ estado_foco_label }} dentro del rango seleccionado.</p>
-            </div>
-            <div class="dash-counter"><i class="bi bi-table"></i> {{ cotizaciones|length }} resultados</div>
-        </div>
-        <div class="table-responsive table-grid-outline">
-            <table class="table table-custom align-middle">
-                <thead class="thead-dark-custom">
-                    <tr>
-                        <th>Nro</th>
-                        <th>Cliente</th>
-                        <th>Fecha de creacion</th>
-                        <th class="text-center">Estado</th>
-                        <th class="text-end">Moneda</th>
-                        <th class="text-end">Total</th>
-                        <th class="text-end">Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% if cotizaciones %}
-                        {% for cot in cotizaciones %}
-                        <tr>
-                            <td><span class="badge bg-secondary">#{{ cot.numero_cotizacion }}</span></td>
-                            <td>
-                                <strong>{{ cot.cliente_ref.nombre if cot.cliente_ref else cot.cliente }}</strong>
-                                {% if cot.cliente_razon_social %}<div class="small text-muted">{{ cot.cliente_razon_social }}</div>{% endif %}
-                            </td>
-                            <td>{{ cot.fecha.strftime('%d/%m/%Y %H:%M') }}</td>
-                            <td class="text-center">
-                                <span class="estado-pill {% if cot.estado == 'Aceptada' %}estado-aceptada{% elif cot.estado == 'Rechazada' %}estado-rechazada{% else %}estado-en-progreso{% endif %}">{{ cot.estado or 'En progreso' }}</span>
-                            </td>
-                            <td class="text-end fw-semibold">{{ cot.moneda or 'ARS' }}</td>
-                            <td class="text-end fw-bold">{{ "{:,.2f}".format(cot.total_final or 0) }}</td>
-                            <td class="text-end">
-                                <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-sm btn-edit-custom me-1"><i class="bi bi-pencil-square"></i> Editar</a>
-                                <a href="{{ url_for('ver_cotizacion', id=cot.id) }}" class="btn btn-sm btn-view-custom me-1"><i class="bi bi-eye"></i> Ver</a>
-                                <a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="btn btn-sm btn-dark-custom me-1"><i class="bi bi-file-earmark-excel"></i> Excel</a>
-                                <a href="{{ url_for('ver_cotizacion', id=cot.id) }}?download=1" class="btn btn-sm btn-success"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    {% else %}
-                        <tr><td colspan="7" class="dash-empty"><i class="bi bi-inbox"></i>No hay cotizaciones para esta vista. Cambia el rango o el segmento.</td></tr>
-                    {% endif %}
-                </tbody>
-            </table>
-        </div>
-    </section>
+    <div id="dashboard-operativo-wrapper" class="dash-operativo-wrapper" data-fragment-url="{{ url_for('dashboard_detalle_operativo') }}">
+        {% include "_dashboard_operativo.html" %}
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script>
+    const sectoresClienteConfig = {{ sectores_cliente|tojson }};
+    const dashboardSectorSeleccionado = {{ filtro_sector|tojson }};
+    const dashboardSubsectorSeleccionado = {{ filtro_subsector|tojson }};
     const trendLabels = {{ series.labels|tojson }};
     const trendCreated = {{ series.creadas|tojson }};
     const trendAccepted = {{ series.aceptadas|tojson }};
     const statusData = {{ [resumen.en_progreso, resumen.aceptadas, resumen.rechazadas]|tojson }};
+    const dashboardOperativoWrapper = document.getElementById("dashboard-operativo-wrapper");
+
+    async function actualizarDetalleOperativo(estado, href) {
+        if (!dashboardOperativoWrapper) {
+            window.location.href = href;
+            return;
+        }
+
+        const fragmentUrl = dashboardOperativoWrapper.dataset.fragmentUrl;
+        if (!fragmentUrl) {
+            window.location.href = href;
+            return;
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        params.set("estado", estado);
+        const requestUrl = `${fragmentUrl}?${params.toString()}`;
+
+        dashboardOperativoWrapper.classList.add("is-loading");
+        try {
+            const response = await fetch(requestUrl, {
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+            });
+            if (response.redirected) {
+                window.location.href = response.url;
+                return;
+            }
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const html = await response.text();
+            dashboardOperativoWrapper.innerHTML = html;
+            const url = new URL(window.location.href);
+            url.search = params.toString();
+            window.history.replaceState({}, "", url);
+        } catch (error) {
+            window.location.href = href;
+        } finally {
+            dashboardOperativoWrapper.classList.remove("is-loading");
+        }
+    }
+
+    function actualizarSubsectoresDashboard() {
+        const sectorSelect = document.getElementById("dashboard_sector");
+        const subsectorSelect = document.getElementById("dashboard_subsector");
+        if (!sectorSelect || !subsectorSelect) {
+            return;
+        }
+
+        const sector = sectorSelect.value || "";
+        const opciones = sector ? (sectoresClienteConfig[sector] || []) : [];
+        subsectorSelect.innerHTML = '<option value="">Todos los subsectores</option>';
+
+        if (!sector) {
+            subsectorSelect.disabled = true;
+            return;
+        }
+
+        opciones.forEach((subsector) => {
+            const option = document.createElement("option");
+            option.value = subsector;
+            option.textContent = subsector;
+            if (subsector === dashboardSubsectorSeleccionado) {
+                option.selected = true;
+            }
+            subsectorSelect.appendChild(option);
+        });
+        subsectorSelect.disabled = false;
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        const sectorSelect = document.getElementById("dashboard_sector");
+        const subsectorSelect = document.getElementById("dashboard_subsector");
+        if (sectorSelect) {
+            sectorSelect.value = dashboardSectorSeleccionado || "";
+            sectorSelect.addEventListener("change", function () {
+                if (subsectorSelect) {
+                    subsectorSelect.value = "";
+                }
+                actualizarSubsectoresDashboard();
+            });
+            actualizarSubsectoresDashboard();
+        }
+
+        document.addEventListener("click", function (event) {
+            const link = event.target.closest("[data-dashboard-estado]");
+            if (!link) {
+                return;
+            }
+            event.preventDefault();
+            actualizarDetalleOperativo(link.dataset.dashboardEstado || "todos", link.href);
+        });
+    });
 
     if (window.Chart && document.getElementById("trendChart")) {
         new Chart(document.getElementById("trendChart"), {

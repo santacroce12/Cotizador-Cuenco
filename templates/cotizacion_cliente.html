@@ -28,9 +28,9 @@
 </style>
 
 <div class="container no-print text-center my-4">
-    <button onclick="window.print()" class="btn btn-success btn-lg px-5">Guardar como PDF / Imprimir</button>
+    <button onclick="window.print()" class="btn btn-pdf-custom btn-lg px-5">Guardar como PDF / Imprimir</button>
     <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-edit-custom btn-lg">Editar</a>
-    <a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="btn btn-dark-custom btn-lg">Exportar Excel</a>
+    <a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="btn btn-excel-custom btn-lg">Exportar Excel</a>
     <a href="/historial" class="btn btn-outline-secondary btn-lg">Volver al Historial</a>
 </div>
 
