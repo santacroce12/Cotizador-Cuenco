@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+database.db
+local_settings.json
+.env
+data/
+storage/uploads/productos/
+.claude/
+.mcp.json
+DONWEB_DEPLOY.md

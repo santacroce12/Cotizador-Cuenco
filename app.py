@@ -15,8 +15,10 @@ import jwt
 from flask import Flask, Response, flash, g, jsonify, redirect, render_template, request, url_for
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from PIL import Image, ImageOps, UnidentifiedImageError
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, or_
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -24,22 +26,38 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
-db_path = Path(app.root_path) / "database.db"
+
+
+def resolver_ruta_configurada(valor, default_path):
+    valor = (valor or "").strip()
+    if not valor:
+        return default_path
+    ruta = Path(valor)
+    if not ruta.is_absolute():
+        ruta = (Path(app.root_path) / ruta).resolve()
+    return ruta
+
+
+DATA_DIR = resolver_ruta_configurada(os.getenv("DATA_DIR"), Path(app.root_path))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+db_path = resolver_ruta_configurada(os.getenv("DATABASE_PATH"), DATA_DIR / "database.db")
+db_path.parent.mkdir(parents=True, exist_ok=True)
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path.as_posix()}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["MAX_CONTENT_LENGTH"] = 40 * 1024 * 1024
 db = SQLAlchemy(app)
 
 NOMBRE_FANTASIA = "Cuenco Tech"
 RAZON_SOCIAL = "Cuenco Tech S.A."
 CUIT = "30-71831614-2"
 DOMICILIO = "Rafael Cubillos 2056, M5500 Godoy Cruz, Mendoza"
-DEFAULT_FOLLOWUP_EMAIL = "jsantacroce@cuencotech.com"
+DEFAULT_FOLLOWUP_EMAIL = "cotizador@cuencotech.com"
 DEFAULT_SMTP_HOST = "a0021139.ferozo.com"
 DEFAULT_SMTP_PORT = 465
 DEFAULT_SMTP_USERNAME = "cotizador@cuencotech.com"
 DEFAULT_SMTP_FROM = "cotizador@cuencotech.com"
 DEFAULT_APP_BASE_URL = "https://cuencotech.com"
-LOCAL_SETTINGS_PATH = Path(app.root_path) / "local_settings.json"
+LOCAL_SETTINGS_PATH = resolver_ruta_configurada(os.getenv("LOCAL_SETTINGS_PATH"), Path(app.root_path) / "local_settings.json")
 
 
 def cargar_local_settings():
@@ -64,9 +82,18 @@ AUTH_COOKIE_SECURE = str(
 ).strip().lower() in ("1", "true", "yes")
 
 PLACEHOLDER_PRODUCTO = "placeholder_product.png"
-UPLOADS_PRODUCTOS_DIR = Path(app.static_folder) / "uploads" / "productos"
+UPLOADS_PRODUCTOS_DIR = resolver_ruta_configurada(
+    os.getenv("UPLOADS_PRODUCTOS_DIR"), Path(app.static_folder) / "uploads" / "productos"
+)
 UPLOADS_PRODUCTOS_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+MAX_IMAGE_UPLOAD_BYTES = 6 * 1024 * 1024
+PRODUCT_IMAGE_MAX_DIMENSION = 1400
+PRODUCT_IMAGE_TARGET_BYTES = 450 * 1024
+PRODUCT_IMAGE_QUALITY_STEPS = (82, 76, 70, 64, 58)
+HISTORIAL_PER_PAGE = 20
+DASHBOARD_OPERATIVO_PER_PAGE = 15
+AUDITORIA_PER_PAGE = 25
 ESTADOS_COTIZACION = ("En progreso", "Aceptada", "Rechazada")
 FAMILIAS_COTIZACION = (
     "SEGURIDAD URBANA",
@@ -149,6 +176,7 @@ class Usuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -211,10 +239,30 @@ def token_required(f):
         token = request.cookies.get("x-access-token")
         current_user = obtener_usuario_desde_token(token)
         if not current_user:
-            if request.endpoint in {"agregar_cliente", "actualizar_estado_cotizacion", "filtrar_historial"}:
+            if request.endpoint in {"agregar_cliente", "actualizar_estado_cotizacion", "filtrar_historial", "eliminar_cotizacion"}:
                 return jsonify({"error": "auth_required"}), 401
             return redirect(url_for("login", next=request.path))
         g.current_user = current_user
+        return f(*args, **kwargs)
+
+    return decorated
+
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        current_user = getattr(g, "current_user", None)
+        if not current_user:
+            token = request.cookies.get("x-access-token")
+            current_user = obtener_usuario_desde_token(token)
+            if current_user:
+                g.current_user = current_user
+        if not current_user:
+            return redirect(url_for("login", next=request.path))
+        if not current_user.is_admin:
+            if request.endpoint in {"eliminar_cotizacion"}:
+                return jsonify({"error": "admin_required"}), 403
+            return redirect(url_for("index"))
         return f(*args, **kwargs)
 
     return decorated
@@ -301,6 +349,17 @@ with app.app_context():
             db.text("ALTER TABLE cliente ADD COLUMN condicion_iva VARCHAR(50) DEFAULT 'Consumidor Final'")
         )
         db.session.commit()
+    columnas_usuario = [col[1] for col in db.session.execute(db.text("PRAGMA table_info(usuario)")).fetchall()]
+    if "is_admin" not in columnas_usuario:
+        db.session.execute(db.text("ALTER TABLE usuario ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
+        db.session.commit()
+    db.session.execute(db.text("UPDATE usuario SET is_admin = 0 WHERE is_admin IS NULL"))
+    db.session.commit()
+    if not db.session.query(Usuario.id).filter(Usuario.is_admin.is_(True)).first():
+        primer_usuario = Usuario.query.order_by(Usuario.id.asc()).first()
+        if primer_usuario:
+            primer_usuario.is_admin = True
+            db.session.commit()
     cotizaciones_ordenadas = Cotizacion.query.order_by(Cotizacion.fecha.asc(), Cotizacion.id.asc()).all()
     secuencias_por_anio = {}
     hubo_cambios_numeracion = False
@@ -313,23 +372,73 @@ with app.app_context():
             hubo_cambios_numeracion = True
     if hubo_cambios_numeracion:
         db.session.commit()
+    for sql in (
+        "CREATE INDEX IF NOT EXISTS ix_cotizacion_fecha_id ON cotizacion (fecha DESC, id DESC)",
+        "CREATE INDEX IF NOT EXISTS ix_cotizacion_estado_fecha ON cotizacion (estado, fecha DESC)",
+        "CREATE INDEX IF NOT EXISTS ix_cotizacion_moneda_fecha ON cotizacion (moneda, fecha DESC)",
+        "CREATE INDEX IF NOT EXISTS ix_cotizacion_familia_fecha ON cotizacion (familia, fecha DESC)",
+        "CREATE INDEX IF NOT EXISTS ix_cotizacion_cliente_fecha ON cotizacion (cliente_id, fecha DESC)",
+        "CREATE INDEX IF NOT EXISTS ix_cliente_nombre ON cliente (nombre)",
+        "CREATE INDEX IF NOT EXISTS ix_cliente_sector ON cliente (sector)",
+        "CREATE INDEX IF NOT EXISTS ix_cliente_subsector ON cliente (subsector)",
+        "CREATE INDEX IF NOT EXISTS ix_auditoria_fecha_id ON auditoria (fecha DESC, id DESC)",
+        "CREATE INDEX IF NOT EXISTS ix_item_cotizacion_cotizacion_id ON item_cotizacion (cotizacion_id)",
+    ):
+        db.session.execute(db.text(sql))
+    db.session.commit()
 
 
 def archivo_imagen_permitido(filename):
     return Path(filename or "").suffix.lower() in ALLOWED_IMAGE_EXTENSIONS
 
 
+def optimizar_bytes_imagen(raw_bytes):
+    if not raw_bytes:
+        raise ValueError("La imagen subida esta vacia.")
+    if len(raw_bytes) > MAX_IMAGE_UPLOAD_BYTES:
+        raise ValueError("Cada imagen debe pesar como maximo 6 MB antes de subirse.")
+
+    try:
+        image = Image.open(BytesIO(raw_bytes))
+        image = ImageOps.exif_transpose(image)
+        if getattr(image, "is_animated", False):
+            image.seek(0)
+    except (UnidentifiedImageError, OSError):
+        raise ValueError("El archivo seleccionado no es una imagen valida.")
+
+    if image.mode in ("RGBA", "LA", "P"):
+        flattened = Image.new("RGB", image.size, (255, 255, 255))
+        alpha = image.getchannel("A") if "A" in image.getbands() else None
+        flattened.paste(image.convert("RGBA"), mask=alpha)
+        image = flattened
+    elif image.mode != "RGB":
+        image = image.convert("RGB")
+
+    image.thumbnail((PRODUCT_IMAGE_MAX_DIMENSION, PRODUCT_IMAGE_MAX_DIMENSION), Image.Resampling.LANCZOS)
+
+    optimized_bytes = None
+    for quality in PRODUCT_IMAGE_QUALITY_STEPS:
+        buffer = BytesIO()
+        image.save(buffer, format="JPEG", quality=quality, optimize=True, progressive=True)
+        optimized_bytes = buffer.getvalue()
+        if len(optimized_bytes) <= PRODUCT_IMAGE_TARGET_BYTES:
+            break
+
+    return optimized_bytes
+
+
 def guardar_imagen_producto(file_storage, descripcion, row_id):
     if not file_storage or not file_storage.filename:
         return None
     if not archivo_imagen_permitido(file_storage.filename):
-        return None
+        raise ValueError("Formato de imagen no permitido. Usa PNG, JPG, WEBP o GIF.")
 
     base = secure_filename(descripcion) or "producto"
-    ext = Path(file_storage.filename).suffix.lower()
-    nombre_archivo = f"{datetime.utcnow():%Y%m%d%H%M%S%f}_{secure_filename(str(row_id))}_{base}{ext}"
+    nombre_archivo = f"{datetime.utcnow():%Y%m%d%H%M%S%f}_{secure_filename(str(row_id))}_{base}.jpg"
     destino = UPLOADS_PRODUCTOS_DIR / nombre_archivo
-    file_storage.save(destino)
+    file_storage.stream.seek(0)
+    optimized_bytes = optimizar_bytes_imagen(file_storage.read())
+    destino.write_bytes(optimized_bytes)
     return f"uploads/productos/{nombre_archivo}"
 
 
@@ -429,6 +538,13 @@ def obtener_admin_setup_token():
     return str(os.getenv("ADMIN_SETUP_TOKEN") or LOCAL_SETTINGS.get("ADMIN_SETUP_TOKEN") or "").strip()
 
 
+def buscar_usuario_por_username(username):
+    username = (username or "").strip()
+    if not username:
+        return None
+    return Usuario.query.filter(func.lower(Usuario.username) == username.lower()).first()
+
+
 def registrar_auditoria(accion, tipo_entidad, entidad_id=None, entidad_ref=None, detalle=None, usuario=None, username=None):
     usuario_actual = usuario or getattr(g, "current_user", None)
     username_final = username or (usuario_actual.username if usuario_actual else "sistema")
@@ -450,6 +566,13 @@ def registrar_auditoria(accion, tipo_entidad, entidad_id=None, entidad_ref=None,
     except Exception as exc:
         db.session.rollback()
         print(f"[auditoria] No se pudo registrar la accion '{accion}': {exc}")
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_request_entity_too_large(_error):
+    flash("La carga total de archivos excede el maximo permitido para una sola cotizacion.", "danger")
+    destino = request.referrer or url_for("index")
+    return redirect(destino)
 
 
 def normalizar_estado_cotizacion(valor):
@@ -538,7 +661,9 @@ def validar_payload_cliente(data, cliente_actual=None):
 
 
 def parsear_entero_positivo(valor, default=None):
-    valor = (valor or "").strip()
+    if valor is None:
+        valor = ""
+    valor = str(valor).strip()
     if not valor:
         return default
     try:
@@ -548,16 +673,54 @@ def parsear_entero_positivo(valor, default=None):
     return numero if numero > 0 else default
 
 
+def paginar_query(query, page=1, per_page=20):
+    page = max(parsear_entero_positivo(page, default=1) or 1, 1)
+    per_page = max(parsear_entero_positivo(per_page, default=20) or 20, 1)
+    total = query.order_by(None).count()
+    pages = max((total + per_page - 1) // per_page, 1)
+    if page > pages:
+        page = pages
+    items = query.limit(per_page).offset((page - 1) * per_page).all()
+    start = ((page - 1) * per_page) + 1 if total else 0
+    end = min(page * per_page, total) if total else 0
+    return {
+        "items": items,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "pages": pages,
+        "has_prev": page > 1,
+        "has_next": page < pages,
+        "prev_page": page - 1 if page > 1 else None,
+        "next_page": page + 1 if page < pages else None,
+        "start": start,
+        "end": end,
+    }
+
+
+def construir_paginas_visibles(page, pages, radius=2):
+    if pages <= 1:
+        return [1]
+    inicio = max(page - radius, 1)
+    fin = min(page + radius, pages)
+    paginas = list(range(inicio, fin + 1))
+    if 1 not in paginas:
+        paginas.insert(0, 1)
+    if pages not in paginas:
+        paginas.append(pages)
+    resultado = []
+    anterior = None
+    for numero in paginas:
+        if anterior and numero - anterior > 1:
+            resultado.append(None)
+        resultado.append(numero)
+        anterior = numero
+    return resultado
+
+
 def normalizar_followup_email(valor, cliente_sel=None):
-    email = (valor or "").strip()
-    if email:
-        return email
     config = obtener_config_smtp()
-    if config["default_to"]:
-        return config["default_to"]
-    if cliente_sel and cliente_sel.email:
-        return cliente_sel.email.strip()
-    return ""
+    return config["default_to"] or DEFAULT_FOLLOWUP_EMAIL
 
 
 def construir_link_cotizacion(cotizacion, editar=False):
@@ -577,7 +740,7 @@ def preparar_seguimiento_cotizacion(cotizacion, cliente_sel=None):
 
     if not activo:
         cotizacion.seguimiento_activo = False
-        cotizacion.seguimiento_email = email_raw or None
+        cotizacion.seguimiento_email = email or None
         cotizacion.seguimiento_cada_dias = dias
         cotizacion.seguimiento_proximo_envio = None
         return
@@ -1073,6 +1236,23 @@ def aplicar_filtros_segmentacion_dashboard(query, familia="", sector="", subsect
     return query
 
 
+def aplicar_filtro_cliente_dashboard(query, cliente=""):
+    cliente = (cliente or "").strip()
+    if not cliente:
+        return query
+    patron = f"%{cliente}%"
+    return query.filter(
+        or_(
+            Cotizacion.cliente.ilike(patron),
+            Cotizacion.cliente_razon_social.ilike(patron),
+            Cotizacion.cliente_cuit.ilike(patron),
+            Cliente.nombre.ilike(patron),
+            Cliente.razon_social.ilike(patron),
+            Cliente.cuit.ilike(patron),
+        )
+    )
+
+
 def resolver_estado_dashboard(valor):
     estado = (valor or "todos").strip().lower()
     if estado == "cerradas":
@@ -1094,6 +1274,7 @@ def resolver_filtros_dashboard_request():
     moneda = (request.args.get("moneda") or "").strip().upper()
     if moneda not in ("ARS", "USD"):
         moneda = ""
+    cliente = (request.args.get("cliente") or "").strip()
 
     periodo, desde, hasta, desde_date, hasta_date = resolver_rango_dashboard(
         request.args.get("periodo"),
@@ -1107,17 +1288,20 @@ def resolver_filtros_dashboard_request():
         "sector": sector,
         "subsector": subsector,
         "moneda": moneda,
+        "cliente": cliente,
         "periodo": periodo,
         "desde": desde,
         "hasta": hasta,
         "desde_date": desde_date,
         "hasta_date": hasta_date,
+        "op_page": parsear_entero_positivo(request.args.get("op_page"), default=1) or 1,
     }
 
 
 def construir_query_dashboard_periodo(filtros):
     query_periodo = Cotizacion.query.outerjoin(Cliente, Cotizacion.cliente_id == Cliente.id)
     query_periodo = aplicar_filtro_fecha_cotizaciones(query_periodo, filtros["desde"], filtros["hasta"])
+    query_periodo = aplicar_filtro_cliente_dashboard(query_periodo, filtros["cliente"])
     query_periodo = aplicar_filtros_segmentacion_dashboard(
         query_periodo,
         familia=filtros["familia"],
@@ -1130,9 +1314,17 @@ def construir_query_dashboard_periodo(filtros):
 
 def construir_contexto_dashboard_operativo(query_periodo, filtros):
     query_tabla = aplicar_filtro_estado_dashboard(query_periodo, filtros["estado"])
-    cotizaciones = query_tabla.order_by(Cotizacion.fecha.desc(), Cotizacion.id.desc()).all()
+    paginacion = paginar_query(
+        query_tabla.order_by(Cotizacion.fecha.desc(), Cotizacion.id.desc()),
+        page=filtros.get("op_page", 1),
+        per_page=DASHBOARD_OPERATIVO_PER_PAGE,
+    )
     return {
-        "cotizaciones": cotizaciones,
+        "cotizaciones": paginacion["items"],
+        "paginacion_operativa": {
+            **paginacion,
+            "pages_visible": construir_paginas_visibles(paginacion["page"], paginacion["pages"]),
+        },
         "filtro_estado": filtros["estado"],
         "filtro_periodo": filtros["periodo"],
         "filtro_desde": filtros["desde"],
@@ -1141,6 +1333,8 @@ def construir_contexto_dashboard_operativo(query_periodo, filtros):
         "filtro_sector": filtros["sector"] or "",
         "filtro_subsector": filtros["subsector"] or "",
         "filtro_moneda": filtros["moneda"] or "",
+        "filtro_cliente": filtros["cliente"] or "",
+        "filtro_op_page": paginacion["page"],
     }
 
 
@@ -1247,7 +1441,13 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         row_id = row_ids[i] if i < len(row_ids) else str(i)
         item_id = (item_ids[i] if i < len(item_ids) else "").strip()
         imagen_actual = (imagenes_actuales[i] if i < len(imagenes_actuales) else "").strip()
-        imagen_local = guardar_imagen_producto(request.files.get(f"foto_{row_id}"), desc, row_id)
+        try:
+            imagen_local = guardar_imagen_producto(request.files.get(f"foto_{row_id}"), desc, row_id)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            destino = "editar_cotizacion" if es_edicion else "index"
+            kwargs = {"id": cotizacion.id} if es_edicion else {}
+            return None, redirect(url_for(destino, **kwargs))
 
         item = items_existentes.pop(item_id, None) if item_id else None
         if item and not imagen_actual:
@@ -1337,12 +1537,14 @@ def setup_admin():
             error = "La clave de instalacion es invalida."
         elif not username or not password:
             error = "Usuario y contraseña son obligatorios."
+        elif buscar_usuario_por_username(username):
+            error = "Ese usuario ya existe."
         elif password != password_confirm:
             error = "Las contraseñas no coinciden."
         elif len(password) < 8:
             error = "La contraseña debe tener al menos 8 caracteres."
         else:
-            nuevo = Usuario(username=username)
+            nuevo = Usuario(username=username, is_admin=True)
             nuevo.set_password(password)
             db.session.add(nuevo)
             db.session.commit()
@@ -1351,7 +1553,7 @@ def setup_admin():
                 "Usuario",
                 entidad_id=nuevo.id,
                 entidad_ref=nuevo.username,
-                detalle="Alta inicial del cotizador.",
+                detalle="Alta inicial del cotizador como administrador.",
                 usuario=nuevo,
                 username=nuevo.username,
             )
@@ -1373,7 +1575,7 @@ def login():
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
-        user = Usuario.query.filter_by(username=username).first()
+        user = buscar_usuario_por_username(username)
         if user and user.check_password(password):
             token = generar_token_usuario(user)
             destino = request.args.get("next") or request.form.get("next") or url_for("index")
@@ -1392,6 +1594,54 @@ def logout():
     res = redirect(url_for("login"))
     res.delete_cookie("x-access-token")
     return res
+
+
+@app.route("/usuarios", methods=["GET", "POST"])
+@token_required
+@admin_required
+def usuarios_page():
+    error = None
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        password_confirm = request.form.get("password_confirm") or ""
+        is_admin = request.form.get("is_admin") == "1"
+
+        if not username:
+            error = "El usuario es obligatorio."
+        elif buscar_usuario_por_username(username):
+            error = "Ese usuario ya existe."
+        elif not password:
+            error = "La contraseña es obligatoria."
+        elif password != password_confirm:
+            error = "Las contraseñas no coinciden."
+        elif len(password) < 8:
+            error = "La contraseña debe tener al menos 8 caracteres."
+        else:
+            nuevo = Usuario(username=username, is_admin=is_admin)
+            nuevo.set_password(password)
+            db.session.add(nuevo)
+            db.session.commit()
+            registrar_auditoria(
+                "Creo usuario",
+                "Usuario",
+                entidad_id=nuevo.id,
+                entidad_ref=nuevo.username,
+                detalle=f"Rol asignado: {'Administrador' if nuevo.is_admin else 'Operador'}.",
+            )
+            flash(f"Usuario {nuevo.username} creado correctamente.", "success")
+            return redirect(url_for("usuarios_page"))
+
+    usuarios = Usuario.query.order_by(Usuario.is_admin.desc(), func.lower(Usuario.username).asc()).all()
+    total_usuarios = len(usuarios)
+    total_admins = sum(1 for usuario in usuarios if usuario.is_admin)
+    return render_template(
+        "usuarios.html",
+        error=error,
+        usuarios=usuarios,
+        total_usuarios=total_usuarios,
+        total_admins=total_admins,
+    )
 
 
 @app.route("/api/clientes", methods=["POST"])
@@ -1683,6 +1933,8 @@ def dashboard_page():
         filtros_activos.append({"icon": "bi-tags", "label": f"Subsector: {subsector}"})
     if moneda:
         filtros_activos.append({"icon": "bi-cash-stack", "label": f"Moneda: {moneda}"})
+    if filtros["cliente"]:
+        filtros_activos.append({"icon": "bi-person-vcard", "label": f"Cliente: {filtros['cliente']}"})
 
     top_familia = familias_breakdown[0]["nombre"] if familias_breakdown else "Sin datos"
     top_sector = sectores_breakdown[0]["nombre"] if sectores_breakdown else "Sin datos"
@@ -1725,8 +1977,27 @@ def dashboard_detalle_operativo():
 @app.route("/auditoria")
 @token_required
 def auditoria_page():
-    registros = Auditoria.query.order_by(Auditoria.fecha.desc(), Auditoria.id.desc()).limit(250).all()
-    return render_template("auditoria.html", registros=registros)
+    usuario_filtro = (request.args.get("usuario") or "").strip()
+    page = parsear_entero_positivo(request.args.get("page"), default=1) or 1
+    query = Auditoria.query
+    if usuario_filtro:
+        query = query.filter(Auditoria.username == usuario_filtro)
+    paginacion = paginar_query(
+        query.order_by(Auditoria.fecha.desc(), Auditoria.id.desc()),
+        page=page,
+        per_page=AUDITORIA_PER_PAGE,
+    )
+    usuarios_auditoria = [row[0] for row in db.session.query(Auditoria.username).distinct().order_by(Auditoria.username.asc()).all()]
+    return render_template(
+        "auditoria.html",
+        registros=paginacion["items"],
+        usuario_filtro=usuario_filtro,
+        usuarios_auditoria=usuarios_auditoria,
+        paginacion={
+            **paginacion,
+            "pages_visible": construir_paginas_visibles(paginacion["page"], paginacion["pages"]),
+        },
+    )
 
 
 @app.route("/filtrar_historial")
@@ -1737,6 +2008,7 @@ def filtrar_historial():
     desde = (request.args.get("desde") or "").strip()
     hasta = (request.args.get("hasta") or "").strip()
     moneda = (request.args.get("moneda") or "").strip().upper()
+    page = parsear_entero_positivo(request.args.get("page"), default=1) or 1
 
     query = Cotizacion.query.outerjoin(Cliente, Cotizacion.cliente_id == Cliente.id)
     if cliente_id_raw.isdigit():
@@ -1770,7 +2042,8 @@ def filtrar_historial():
     if moneda in ("ARS", "USD"):
         query = query.filter(Cotizacion.moneda == moneda)
 
-    cotizaciones = query.order_by(Cotizacion.id.desc()).all()
+    paginacion = paginar_query(query.order_by(Cotizacion.id.desc()), page=page, per_page=HISTORIAL_PER_PAGE)
+    cotizaciones = paginacion["items"]
     resultados = [
         {
             "id": c.id,
@@ -1786,7 +2059,15 @@ def filtrar_historial():
         }
         for c in cotizaciones
     ]
-    return jsonify(resultados)
+    return jsonify(
+        {
+            "items": resultados,
+            "pagination": {
+                **{k: paginacion[k] for k in ("page", "per_page", "total", "pages", "has_prev", "has_next", "prev_page", "next_page", "start", "end")},
+                "pages_visible": construir_paginas_visibles(paginacion["page"], paginacion["pages"]),
+            },
+        }
+    )
 
 
 @app.route("/cotizacion/<int:id>")
@@ -1807,6 +2088,35 @@ def exportar_cotizacion_xlsx(id):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{nombre_base}.xlsx"'},
     )
+
+
+@app.route("/cotizacion/<int:id>/eliminar", methods=["POST"])
+@token_required
+@admin_required
+def eliminar_cotizacion(id):
+    cotizacion = Cotizacion.query.get_or_404(id)
+    numero_ref = cotizacion.numero_cotizacion or str(cotizacion.id)
+    cliente_ref = cotizacion.cliente or "Sin cliente"
+    familia_ref = cotizacion.familia or "Sin familia"
+    moneda_ref = cotizacion.moneda or "ARS"
+    total_ref = cotizacion.total_final or 0.0
+    estado_ref = cotizacion.estado or "En progreso"
+
+    for item in cotizacion.items:
+        eliminar_imagen_local(item.imagen_url)
+
+    db.session.delete(cotizacion)
+    db.session.commit()
+
+    registrar_auditoria(
+        "Eliminó cotización",
+        "Cotización",
+        entidad_id=id,
+        entidad_ref=numero_ref,
+        detalle=f"Cliente: {cliente_ref}. Familia: {familia_ref}. Estado: {estado_ref}. Total: {moneda_ref} {total_ref:,.2f}.",
+    )
+
+    return jsonify({"ok": True, "id": id, "numero_cotizacion": numero_ref}), 200
 
 
 if __name__ == "__main__":

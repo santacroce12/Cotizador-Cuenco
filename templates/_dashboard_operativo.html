@@ -4,7 +4,7 @@
             <div class="dash-table-title">Detalle operativo</div>
             <p class="dash-head-copy">Aca ves el listado operativo final. Los filtros por estado viven en esta seccion para no mezclar la lectura general del dashboard.</p>
         </div>
-        <div class="dash-counter"><i class="bi bi-table"></i> {{ cotizaciones|length }} resultados</div>
+        <div class="dash-counter"><i class="bi bi-table"></i> {{ paginacion_operativa.total }} resultados</div>
     </div>
     <div class="dash-state-toolbar">
         <div>
@@ -13,8 +13,8 @@
                 {% for key, label in [('todos', 'Todo'), ('aceptadas', 'Aceptadas'), ('rechazadas', 'Rechazadas'), ('en_progreso', 'En progreso')] %}
                 <a
                     class="dash-state-link {% if filtro_estado == key %}active{% endif %}"
-                    data-dashboard-estado="{{ key }}"
-                    href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=key, desde=filtro_desde, hasta=filtro_hasta, familia=filtro_familia, sector=filtro_sector, subsector=filtro_subsector, moneda=filtro_moneda) }}"
+                    data-dashboard-operativo-link="1"
+                    href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=key, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, sector=filtro_sector, subsector=filtro_subsector, moneda=filtro_moneda, op_page=1) }}"
                 >{{ label }}</a>
                 {% endfor %}
             </div>
@@ -73,4 +73,30 @@
             </tbody>
         </table>
     </div>
+    {% if paginacion_operativa.total %}
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mt-3">
+        <div class="small text-muted">
+            Mostrando <strong>{{ paginacion_operativa.start }}</strong> a <strong>{{ paginacion_operativa.end }}</strong> de <strong>{{ paginacion_operativa.total }}</strong> cotizaciones
+        </div>
+        <nav aria-label="Paginacion detalle operativo">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item {% if not paginacion_operativa.has_prev %}disabled{% endif %}">
+                    <a class="page-link" {% if paginacion_operativa.has_prev %}data-dashboard-operativo-link="1" href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=filtro_estado, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, sector=filtro_sector, subsector=filtro_subsector, moneda=filtro_moneda, op_page=paginacion_operativa.prev_page) }}"{% endif %}>Anterior</a>
+                </li>
+                {% for page in paginacion_operativa.pages_visible %}
+                    {% if page is none %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% else %}
+                    <li class="page-item {% if page == paginacion_operativa.page %}active{% endif %}">
+                        <a class="page-link" data-dashboard-operativo-link="1" href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=filtro_estado, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, sector=filtro_sector, subsector=filtro_subsector, moneda=filtro_moneda, op_page=page) }}">{{ page }}</a>
+                    </li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if not paginacion_operativa.has_next %}disabled{% endif %}">
+                    <a class="page-link" {% if paginacion_operativa.has_next %}data-dashboard-operativo-link="1" href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=filtro_estado, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, sector=filtro_sector, subsector=filtro_subsector, moneda=filtro_moneda, op_page=paginacion_operativa.next_page) }}"{% endif %}>Siguiente</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
 </section>

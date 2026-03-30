@@ -291,6 +291,25 @@
             border-color: rgba(254, 202, 202, 0.34);
         }
 
+        .btn-delete-custom {
+            background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
+            color: #9a3412;
+            border: 1px solid rgba(234, 88, 12, 0.28);
+            box-shadow: none;
+        }
+
+        .btn-delete-custom:hover {
+            background: linear-gradient(180deg, #ffedd5 0%, #fed7aa 100%);
+            color: #7c2d12;
+            border-color: rgba(194, 65, 12, 0.42);
+        }
+
+        .btn-delete-compact {
+            padding: 0.35rem 0.5rem;
+            min-width: 2rem;
+            line-height: 1;
+        }
+
         .ts-wrapper.single .ts-control,
         .ts-wrapper.single.input-active .ts-control {
             border: 1px solid #ced4da;
@@ -441,7 +460,7 @@
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {% if request.path == '/auditoria' %}active{% endif %}" href="/auditoria">
-                        <i class="bi bi-journal-text"></i> Auditoria
+                        <i class="bi bi-journal-text"></i> Auditoría
                     </a>
                 </li>
                 <li class="nav-item">
@@ -451,6 +470,11 @@
                 </li>
             </ul>
             <div class="d-flex align-items-center gap-2 ms-auto mt-3 mt-lg-0">
+                {% if current_user.is_admin %}
+                <a class="btn btn-sm {% if request.path == '/usuarios' %}btn-light text-dark{% else %}btn-outline-light{% endif %}" href="/usuarios">
+                    <i class="bi bi-people"></i> Usuarios
+                </a>
+                {% endif %}
                 <span class="navbar-text text-light opacity-75">{{ current_user.username }}</span>
                 <a class="btn btn-sm btn-outline-light" href="{{ url_for('logout') }}">
                     <i class="bi bi-box-arrow-right"></i> Salir

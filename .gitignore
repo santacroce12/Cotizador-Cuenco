@@ -7,3 +7,7 @@ local_settings.json
 .venv/
 venv/
 static/uploads/productos/
+data/*
+!data/.gitkeep
+storage/uploads/productos/*
+!storage/uploads/productos/.gitkeep

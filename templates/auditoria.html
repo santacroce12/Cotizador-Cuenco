@@ -4,10 +4,28 @@
 <div class="card p-4 page-surface">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
-            <h2 class="text-dark m-0"><i class="bi bi-journal-text me-2"></i>Auditoria</h2>
+            <h2 class="text-dark m-0"><i class="bi bi-journal-text me-2"></i>Auditoría</h2>
             <div class="small text-muted mt-2">Registro de acciones realizadas dentro del cotizador.</div>
         </div>
     </div>
+
+    <form method="GET" action="{{ url_for('auditoria_page') }}" class="row g-3 align-items-end mb-4">
+        <div class="col-md-6 col-xl-4">
+            <label class="form-label fw-semibold text-uppercase small text-muted">Persona</label>
+            <select name="usuario" class="form-select">
+                <option value="">Todas las personas</option>
+                {% for usuario in usuarios_auditoria %}
+                <option value="{{ usuario }}" {% if usuario_filtro == usuario %}selected{% endif %}>{{ usuario }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-6 col-xl-4 d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-dark-custom">
+                <i class="bi bi-funnel me-2"></i>Filtrar
+            </button>
+            <a href="{{ url_for('auditoria_page') }}" class="btn btn-outline-dark">Limpiar</a>
+        </div>
+    </form>
 
     <div class="table-responsive table-grid-outline">
         <table class="table table-custom align-middle">
@@ -15,7 +33,7 @@
                 <tr>
                     <th>Fecha</th>
                     <th>Usuario</th>
-                    <th>Accion</th>
+                    <th>Acción</th>
                     <th>Entidad</th>
                     <th>Referencia</th>
                     <th>Detalle</th>
@@ -30,7 +48,7 @@
                         <td>{{ registro.accion }}</td>
                         <td>{{ registro.tipo_entidad }}</td>
                         <td>
-                            {% if registro.tipo_entidad == 'Cotización' and registro.entidad_id %}
+                            {% if registro.tipo_entidad == 'Cotización' and registro.entidad_id and registro.accion != 'Eliminó cotización' %}
                             <a href="{{ url_for('ver_cotizacion', id=registro.entidad_id) }}" class="text-decoration-none">
                                 {{ registro.entidad_ref or registro.entidad_id }}
                             </a>
@@ -43,11 +61,37 @@
                     {% endfor %}
                 {% else %}
                     <tr>
-                        <td colspan="6" class="text-center text-muted p-4">Todavia no hay eventos registrados.</td>
+                        <td colspan="6" class="text-center text-muted p-4">Todavía no hay eventos registrados.</td>
                     </tr>
                 {% endif %}
             </tbody>
         </table>
     </div>
+    {% if paginacion.total %}
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mt-3">
+        <div class="small text-muted">
+            Mostrando <strong>{{ paginacion.start }}</strong> a <strong>{{ paginacion.end }}</strong> de <strong>{{ paginacion.total }}</strong> eventos
+        </div>
+        <nav aria-label="Paginación auditoría">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item {% if not paginacion.has_prev %}disabled{% endif %}">
+                    <a class="page-link" {% if paginacion.has_prev %}href="{{ url_for('auditoria_page', usuario=usuario_filtro, page=paginacion.prev_page) }}"{% endif %}>Anterior</a>
+                </li>
+                {% for page in paginacion.pages_visible %}
+                    {% if page is none %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% else %}
+                    <li class="page-item {% if page == paginacion.page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('auditoria_page', usuario=usuario_filtro, page=page) }}">{{ page }}</a>
+                    </li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if not paginacion.has_next %}disabled{% endif %}">
+                    <a class="page-link" {% if paginacion.has_next %}href="{{ url_for('auditoria_page', usuario=usuario_filtro, page=paginacion.next_page) }}"{% endif %}>Siguiente</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

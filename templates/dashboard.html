@@ -399,7 +399,11 @@
             </div>
         </div>
         <div class="row g-3 align-items-end mt-1">
-            <div class="col-md-4 col-xl-3">
+            <div class="col-lg-6 col-xl-3">
+                <div class="dash-label">Cliente</div>
+                <input type="text" name="cliente" class="form-control" placeholder="Nombre, razon social o CUIT/CUIL" value="{{ filtro_cliente }}">
+            </div>
+            <div class="col-md-4 col-xl-2">
                 <div class="dash-label">Familia</div>
                 <select name="familia" class="form-select">
                     <option value="" {% if not filtro_familia %}selected{% endif %}>Todas las familias</option>
@@ -408,7 +412,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-4 col-xl-3">
+            <div class="col-md-4 col-xl-2">
                 <div class="dash-label">Sector cliente</div>
                 <select name="sector" id="dashboard_sector" class="form-select">
                     <option value="" {% if not filtro_sector %}selected{% endif %}>Todos los sectores</option>
@@ -417,13 +421,13 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-4 col-xl-3">
+            <div class="col-md-4 col-xl-2">
                 <div class="dash-label">Subsector</div>
                 <select name="subsector" id="dashboard_subsector" class="form-select">
                     <option value="">Todos los subsectores</option>
                 </select>
             </div>
-            <div class="col-xl-3 d-flex align-items-end gap-2">
+            <div class="col-lg-6 col-xl-3 d-flex align-items-end gap-2">
                 <button type="submit" name="periodo" value="custom" class="btn btn-primary flex-grow-1"><i class="bi bi-funnel me-2"></i>Aplicar</button>
                 <a class="btn btn-outline-dark" href="{{ url_for('dashboard_page') }}">Limpiar</a>
             </div>
@@ -726,7 +730,7 @@
     const statusData = {{ [resumen.en_progreso, resumen.aceptadas, resumen.rechazadas]|tojson }};
     const dashboardOperativoWrapper = document.getElementById("dashboard-operativo-wrapper");
 
-    async function actualizarDetalleOperativo(estado, href) {
+    async function actualizarDetalleOperativo(href) {
         if (!dashboardOperativoWrapper) {
             window.location.href = href;
             return;
@@ -738,8 +742,8 @@
             return;
         }
 
-        const params = new URLSearchParams(window.location.search);
-        params.set("estado", estado);
+        const nextUrl = new URL(href, window.location.origin);
+        const params = new URLSearchParams(nextUrl.search);
         const requestUrl = `${fragmentUrl}?${params.toString()}`;
 
         dashboardOperativoWrapper.classList.add("is-loading");
@@ -811,12 +815,12 @@
         }
 
         document.addEventListener("click", function (event) {
-            const link = event.target.closest("[data-dashboard-estado]");
+            const link = event.target.closest("[data-dashboard-operativo-link]");
             if (!link) {
                 return;
             }
             event.preventDefault();
-            actualizarDetalleOperativo(link.dataset.dashboardEstado || "todos", link.href);
+            actualizarDetalleOperativo(link.href);
         });
     });
 

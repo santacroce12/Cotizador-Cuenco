@@ -56,11 +56,14 @@
             <tbody id="tabla-historial"></tbody>
         </table>
     </div>
+    <div id="historial-paginacion" class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mt-3"></div>
 </div>
 
 <script>
 let filtroMoneda = "";
 let historialClienteTomSelect = null;
+let historialPage = 1;
+const historialPuedeEliminar = {{ "true" if current_user and current_user.is_admin else "false" }};
 document.addEventListener("DOMContentLoaded", function () {
     initHistorialClienteSelect();
     aplicarFiltros();
@@ -107,6 +110,7 @@ function initHistorialClienteSelect() {
             },
         },
         onChange: function () {
+            historialPage = 1;
             aplicarFiltros();
         },
     });
@@ -114,6 +118,7 @@ function initHistorialClienteSelect() {
 
 function setFiltroMoneda(moneda) {
     filtroMoneda = moneda;
+    historialPage = 1;
     document.getElementById("btn-moneda-todas").className = `btn btn-sm ${moneda === "" ? "btn-dark-custom active" : "btn-outline-dark"}`;
     document.getElementById("btn-moneda-ars").className = `btn btn-sm ${moneda === "ARS" ? "btn-dark-custom active" : "btn-outline-dark"}`;
     document.getElementById("btn-moneda-usd").className = `btn btn-sm ${moneda === "USD" ? "btn-dark-custom active" : "btn-outline-dark"}`;
@@ -130,13 +135,93 @@ function claseEstado(estado) {
     return "estado-en-progreso";
 }
 
-function aplicarFiltros() {
+function renderHistorialPaginacion(meta) {
+    const contenedor = document.getElementById("historial-paginacion");
+    if (!contenedor) {
+        return;
+    }
+    if (!meta || !meta.total) {
+        contenedor.innerHTML = "";
+        return;
+    }
+
+    const resumen = `<div class="small text-muted">Mostrando <strong>${meta.start}</strong> a <strong>${meta.end}</strong> de <strong>${meta.total}</strong> cotizaciones</div>`;
+    const paginas = (meta.pages_visible || []).map((page) => {
+        if (page === null) {
+            return `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        const active = page === meta.page ? " active" : "";
+        return `<li class="page-item${active}"><button type="button" class="page-link" onclick="irPaginaHistorial(${page})">${page}</button></li>`;
+    }).join("");
+
+    const prevDisabled = meta.has_prev ? "" : " disabled";
+    const nextDisabled = meta.has_next ? "" : " disabled";
+    contenedor.innerHTML = `
+        ${resumen}
+        <nav aria-label="Paginacion historial">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item${prevDisabled}">
+                    <button type="button" class="page-link" ${meta.has_prev ? `onclick="irPaginaHistorial(${meta.prev_page})"` : ""}>Anterior</button>
+                </li>
+                ${paginas}
+                <li class="page-item${nextDisabled}">
+                    <button type="button" class="page-link" ${meta.has_next ? `onclick="irPaginaHistorial(${meta.next_page})"` : ""}>Siguiente</button>
+                </li>
+            </ul>
+        </nav>
+    `;
+}
+
+function irPaginaHistorial(page) {
+    historialPage = page;
+    aplicarFiltros();
+}
+
+function eliminarCotizacion(id, numeroCotizacion) {
+    if (!historialPuedeEliminar) {
+        return;
+    }
+    const confirmado = window.confirm(`¿Estás seguro de querer borrar por completo la cotización #${numeroCotizacion}? Esta acción no se puede deshacer.`);
+    if (!confirmado) {
+        return;
+    }
+
+    fetch(`/cotizacion/${id}/eliminar`, {
+        method: "POST",
+        headers: {
+            "X-Requested-With": "XMLHttpRequest",
+        },
+    })
+        .then((response) => response.json().then((data) => ({ ok: response.ok, status: response.status, data })))
+        .then(({ ok, status, data }) => {
+            if (!ok) {
+                if (status === 401 && data?.error === "auth_required") {
+                    window.location.href = "{{ url_for('login') }}";
+                    return;
+                }
+                if (status === 403 && data?.error === "admin_required") {
+                    alert("Solo un administrador puede borrar cotizaciones.");
+                    return;
+                }
+                alert(data?.error || "No se pudo borrar la cotización.");
+                return;
+            }
+            aplicarFiltros(historialPage);
+        })
+        .catch(() => {
+            alert("No se pudo borrar la cotización.");
+        });
+}
+
+function aplicarFiltros(page = historialPage) {
     const clienteSelect = document.getElementById("filtro_cliente_id");
     const clienteId = clienteSelect?.value || "";
     const clienteTexto = clienteSelect?.tomselect?.control_input?.value?.trim() || "";
     const desde = document.getElementById("filtro_desde").value;
     const hasta = document.getElementById("filtro_hasta").value;
     const params = new URLSearchParams({ desde, hasta });
+    historialPage = page || 1;
+    params.set("page", historialPage);
     if (clienteId) {
         params.set("cliente_id", clienteId);
     } else if (clienteTexto) {
@@ -149,7 +234,7 @@ function aplicarFiltros() {
     fetch(`/filtrar_historial?${params.toString()}`)
         .then((response) => response.json())
         .then((data) => {
-            if (!Array.isArray(data)) {
+            if (!data || !Array.isArray(data.items)) {
                 if (data && data.error === "auth_required") {
                     window.location.href = "{{ url_for('login') }}";
                 }
@@ -157,13 +242,14 @@ function aplicarFiltros() {
             }
             const tbody = document.getElementById("tabla-historial");
             tbody.innerHTML = "";
+            renderHistorialPaginacion(data.pagination);
 
-            if (data.length === 0) {
+            if (data.items.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted p-4">No se encontraron cotizaciones para este filtro.</td></tr>`;
                 return;
             }
 
-            data.forEach((c) => {
+            data.items.forEach((c) => {
                 const numeroCot = c.numero_cotizacion || String(c.id).padStart(4, "0");
                 const estado = c.estado || "En progreso";
                 const estadoClass = claseEstado(estado);
@@ -200,6 +286,11 @@ function aplicarFiltros() {
                             <a href="/cotizacion/${c.id}?download=1" class="btn btn-sm btn-pdf-custom">
                                 <i class="bi bi-file-earmark-pdf"></i> PDF
                             </a>
+                            ${historialPuedeEliminar ? `
+                            <button type="button" class="btn btn-sm btn-delete-custom btn-delete-compact ms-1" onclick="eliminarCotizacion(${c.id}, '${numeroCot}')" title="Borrar cotización">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            ` : ""}
                         </td>
                     </tr>
                 `;

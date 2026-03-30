@@ -180,7 +180,7 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-bold small text-muted text-uppercase">Enviar a</label>
-                        <input type="email" name="seguimiento_email" id="seguimiento_email" class="form-control" value="{{ (cotizacion.seguimiento_email if cotizacion else followup_default_email) or '' }}" placeholder="tu@email.com">
+                        <input type="email" name="seguimiento_email" id="seguimiento_email" class="form-control" value="{{ followup_default_email or 'cotizador@cuencotech.com' }}" readonly>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label fw-bold small text-muted text-uppercase">Cada (días)</label>
@@ -863,6 +863,9 @@ function agregarFila(data = {}) {
     calcularTodo();
 }
 
+const MAX_IMAGE_UPLOAD_MB = 6;
+const MAX_IMAGE_UPLOAD_BYTES = MAX_IMAGE_UPLOAD_MB * 1024 * 1024;
+
 function previsualizarFoto(input) {
     const fila = input.closest("tr");
     if (!fila) {
@@ -885,6 +888,20 @@ function previsualizarFoto(input) {
     }
 
     if (!archivo) {
+        if (imagenActual && preview.dataset.existingSrc) {
+            trigger.classList.add("has-image");
+            preview.src = preview.dataset.existingSrc;
+        } else {
+            trigger.classList.remove("has-image");
+            preview.src = placeholderProductUrl;
+        }
+        removeButton.classList.add("d-none");
+        return;
+    }
+
+    if (archivo.size > MAX_IMAGE_UPLOAD_BYTES) {
+        alert(`La imagen es demasiado pesada. El maximo permitido por archivo es ${MAX_IMAGE_UPLOAD_MB} MB.`);
+        input.value = "";
         if (imagenActual && preview.dataset.existingSrc) {
             trigger.classList.add("has-image");
             preview.src = preview.dataset.existingSrc;
