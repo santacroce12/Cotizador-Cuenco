@@ -11,3 +11,5 @@ data/*
 !data/.gitkeep
 storage/uploads/productos/*
 !storage/uploads/productos/.gitkeep
+.aidesigner/*
+!.aidesigner/.gitkeep

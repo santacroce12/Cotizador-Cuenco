@@ -3,7 +3,7 @@
 ## 1. Requisitos
 
 - Ubuntu Server con Docker y Docker Compose plugin instalados
-- Puerto `8000` libre en el servidor, o un reverse proxy delante
+- Puerto `9000` libre en el servidor, o un reverse proxy delante
 - Dominio configurado para apuntar al servidor si vas a usar `https://cuencotech.com`
 
 ## 2. Archivos persistentes
@@ -53,9 +53,9 @@ docker compose ps
 
 El contenedor expone la app en:
 
-- `http://IP_DEL_SERVIDOR:8000`
+- `http://IP_DEL_SERVIDOR:9000`
 
-Si vas a publicar con dominio, lo correcto es poner Nginx o Apache delante y dejar Docker escuchando en `8000`.
+Si vas a publicar con dominio, lo correcto es poner Nginx o Apache delante y dejar Docker escuchando en `9000`.
 
 ## 6. Reverse proxy recomendado
 
@@ -67,7 +67,7 @@ server {
     server_name cuencotech.com;
 
     location / {
-        proxy_pass http://127.0.0.1:8000;
+        proxy_pass http://127.0.0.1:9000;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;

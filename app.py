@@ -782,6 +782,16 @@ def parsear_entero_positivo(valor, default=None):
     return numero if numero > 0 else default
 
 
+def normalizar_cantidad_entera(valor, default=1):
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return default
+    if numero < 1:
+        return default
+    return int(numero)
+
+
 def paginar_query(query, page=1, per_page=20):
     page = max(parsear_entero_positivo(page, default=1) or 1, 1)
     per_page = max(parsear_entero_positivo(per_page, default=20) or 20, 1)
@@ -982,7 +992,7 @@ def construir_items_precargados(cotizacion):
                 "item_id": item.id,
                 "descripcion": item.descripcion or "",
                 "detalle": item.detalle or "",
-                "cantidad": item.cantidad or 0,
+                "cantidad": normalizar_cantidad_entera(item.cantidad, default=1),
                 "costo_unitario": item.costo_unitario or 0,
                 "costo_extra": item.costo_extra or 0,
                 "margen": round((item.margen or 0) * 100, 2),
@@ -1092,7 +1102,7 @@ def generar_excel_cotizacion(cotizacion):
         values = [
             item.descripcion or "",
             item.detalle or "",
-            item.cantidad or 0,
+            normalizar_cantidad_entera(item.cantidad, default=1),
             item.costo_unitario or 0,
             item.costo_extra or 0,
             (item.margen or 0) * 100,
@@ -1544,14 +1554,13 @@ def persistir_cotizacion_desde_form(cotizacion=None):
             continue
 
         try:
-            cantidad = float(cants[i] if i < len(cants) else 0)
             costo = float(costs[i] if i < len(costs) else 0)
             extra_pct = float(extras[i] if i < len(extras) else 5.0)
             margen_pct = float(margs[i] if i < len(margs) else 0)
         except ValueError:
             continue
 
-        cantidad = max(0.0, cantidad)
+        cantidad = normalizar_cantidad_entera(cants[i] if i < len(cants) else 1, default=1)
         costo = max(0.0, costo)
         extra_pct = max(0.0, extra_pct)
         margen_pct = max(0.0, margen_pct)

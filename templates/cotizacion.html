@@ -33,10 +33,27 @@
         }
 
         .items-table thead th {
-            background: #dce3ea;
-            color: #23323d;
+            background: #dbe4ee;
+            color: #111111;
             white-space: nowrap;
-            font-size: 0.92rem;
+            font-size: 0.82rem;
+            font-weight: 700;
+            line-height: 1.1;
+            letter-spacing: 0;
+            padding: 0.68rem 0.42rem;
+            text-align: center;
+            vertical-align: middle;
+            border-color: #b0bfd0;
+        }
+
+        .items-table tbody td {
+            background: #eef3f8;
+            border-color: #c3cfdb;
+            color: #223247;
+        }
+
+        .items-table tbody tr:nth-child(even) td {
+            background: #e7edf5;
         }
 
         .product-img {
@@ -49,10 +66,19 @@
         }
 
         .totals-card {
-            background: #f1f4f9;
+            background: #e7eef6;
             padding: 15px;
             border-radius: 12px;
-            border-right: 8px solid #0d6efd;
+            border-right: 8px solid #3f6ea1;
+            border: 1px solid #c3cfdb;
+        }
+
+        .quote-doc-number {
+            display: inline-block;
+            white-space: nowrap;
+            font-size: clamp(1.45rem, 2vw, 1.8rem);
+            line-height: 1.05;
+            letter-spacing: -0.02em;
         }
 
         @media print {
@@ -86,6 +112,7 @@
                         <img src="{{ url_for('logo') }}" alt="Logo Cuenco Tech" style="width: 96px; height: auto;">
                         <div>
                             <p class="meta-label mb-2">Presupuesto comercial</p>
+                            <p class="mb-1 fw-bold fs-5 text-dark">Cuencotech SA</p>
                             <p class="mb-1">CUIT {{ cotizacion.cuit }}</p>
                             <p class="mb-1">{{ domicilio_empresa }}</p>
                             <p class="text-muted mb-0">Cotizacion #{{ cotizacion.numero_cotizacion or cotizacion.id }}</p>
@@ -94,6 +121,7 @@
 
                     <div class="text-md-end">
                         <p class="meta-label mb-2">Datos de la cotizacion</p>
+                        <p class="mb-1 fw-bold quote-doc-number">Cotizacion #{{ cotizacion.numero_cotizacion or cotizacion.id }}</p>
                         <p class="mb-1"><strong>Fecha:</strong> {{ cotizacion.fecha.strftime('%d/%m/%Y %H:%M') }}</p>
                         <p class="mb-1"><strong>Cliente:</strong> {{ cotizacion.cliente }}</p>
                         {% if cotizacion.cliente_razon_social %}
@@ -116,8 +144,8 @@
                                     <th class="text-center">Cant.</th>
                                     <th class="text-end">Costo unit.</th>
                                     <th class="text-end">Margen</th>
-                                    <th class="text-end">Venta unit.</th>
-                                    <th class="text-end">Venta total</th>
+                                    <th class="text-end">V. unit.</th>
+                                    <th class="text-end">Total</th>
                                     <th class="text-end">Subtotal final</th>
                                 </tr>
                             </thead>
@@ -139,7 +167,7 @@
                                         </div>
                                     </td>
                                     <td>{{ item.detalle or "-" }}</td>
-                                    <td class="text-center">{{ '%.2f'|format(item.cantidad) }}</td>
+                                    <td class="text-center">{{ (item.cantidad or 0)|int }}</td>
                                     <td class="text-end">${{ '%.2f'|format(item.costo_unitario) }}</td>
                                     <td class="text-end">{{ '%.2f'|format(item.margen * 100) }}%</td>
                                     <td class="text-end">${{ '%.2f'|format(item.precio_venta) }}</td>

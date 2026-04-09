@@ -951,7 +951,7 @@ function agregarFila(data = {}) {
     const rowId = `item_${itemRowCounter}`;
     const descripcion = data.descripcion || "";
     const detalle = data.detalle || "";
-    const cantidad = data.cantidad ?? 1;
+    const cantidad = Math.max(1, parseInt(data.cantidad ?? 1, 10) || 1);
     const costoUnitario = data.costo_unitario ?? 0;
     const costoExtra = data.costo_extra ?? 5;
     const margen = data.margen ?? 75;
@@ -980,7 +980,7 @@ function agregarFila(data = {}) {
         </td>
         <td><input type="text" name="desc[]" class="form-control" placeholder="Producto o servicio..." value="${descripcionHtml}" required></td>
         <td><textarea name="detalle[]" class="form-control" rows="2" placeholder="Descripcion adicional del item...">${detalleHtml}</textarea></td>
-        <td><input type="number" name="cant[]" class="form-control text-center" value="${cantidad}" min="1" oninput="validarPositivo(this); calcularTodo()"></td>
+        <td><input type="number" name="cant[]" class="form-control text-center" value="${cantidad}" min="1" step="1" inputmode="numeric" oninput="validarCantidadEntera(this); calcularTodo()"></td>
         <td><input type="number" name="costo[]" class="form-control text-end" value="${costoUnitario}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()"></td>
         <td><input type="number" name="extra[]" class="form-control text-end" value="${costoExtra}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()"></td>
         <td><input type="number" name="margen[]" class="form-control text-end" value="${margen}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()"></td>
@@ -1148,6 +1148,15 @@ function validarPositivo(input) {
     }
 }
 
+function validarCantidadEntera(input) {
+    const valor = Number(String(input.value || "").replace(",", "."));
+    if (!Number.isFinite(valor)) {
+        input.value = 1;
+        return;
+    }
+    input.value = Math.max(1, Math.trunc(valor));
+}
+
 function calcularTodo() {
     const tc = parseFloat(document.getElementById("tipo_cambio")?.value) || 1;
     const condicionIva = document.getElementById("condicion_iva")?.value || "Exento";
@@ -1159,7 +1168,7 @@ function calcularTodo() {
 
     const rows = document.querySelectorAll("#cuerpo-tabla tr");
     rows.forEach((row) => {
-        const cant = Math.max(0, parseFloat(row.querySelector('[name="cant[]"]')?.value) || 0);
+        const cant = Math.max(1, parseInt(row.querySelector('[name="cant[]"]')?.value, 10) || 0);
         const costoUnitario = Math.max(0, parseFloat(row.querySelector('[name="costo[]"]')?.value) || 0);
         const extraPerc = Math.max(0, parseFloat(row.querySelector('[name="extra[]"]')?.value) || 0);
         const margenPct = Math.max(0, parseFloat(row.querySelector('[name="margen[]"]')?.value) || 0);
