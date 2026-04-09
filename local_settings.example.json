@@ -8,6 +8,6 @@
   "SMTP_USERNAME": "tu_usuario@example.com",
   "SMTP_PASSWORD": "tu_password",
   "SMTP_FROM": "tu_usuario@example.com",
-  "APP_BASE_URL": "https://tu-dominio.com",
+  "APP_BASE_URL": "http://192.168.0.200:9000",
   "FOLLOWUP_DEFAULT_TO_EMAIL": "cotizador@cuencotech.com"
 }

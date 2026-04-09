@@ -18,6 +18,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from PIL import Image, ImageOps, UnidentifiedImageError
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, or_
+from sqlalchemy.exc import OperationalError
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -56,7 +57,7 @@ DEFAULT_SMTP_HOST = "a0021139.ferozo.com"
 DEFAULT_SMTP_PORT = 465
 DEFAULT_SMTP_USERNAME = "cotizador@cuencotech.com"
 DEFAULT_SMTP_FROM = "cotizador@cuencotech.com"
-DEFAULT_APP_BASE_URL = "https://cuencotech.com"
+DEFAULT_APP_BASE_URL = "http://192.168.0.200:9000"
 LOCAL_SETTINGS_PATH = resolver_ruta_configurada(os.getenv("LOCAL_SETTINGS_PATH"), Path(app.root_path) / "local_settings.json")
 
 
@@ -143,6 +144,7 @@ class ItemCotizacion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     cotizacion_id = db.Column(db.Integer, db.ForeignKey("cotizacion.id"))
     descripcion = db.Column(db.String(200))
+    detalle = db.Column(db.Text)
     cantidad = db.Column(db.Float)
     costo_unitario = db.Column(db.Float)
     costo_extra = db.Column(db.Float, default=5.0)
@@ -156,6 +158,15 @@ class ItemCotizacion(db.Model):
     def iva_porcentaje(self):
         # Alias para compatibilidad con plantillas previas.
         return self.iva_item or 0.0
+
+    @property
+    def precio_venta_unitario(self):
+        # Alias para plantillas/exportaciones internas.
+        return self.precio_venta or 0.0
+
+    @property
+    def precio_venta_total(self):
+        return (self.precio_venta or 0.0) * (self.cantidad or 0.0)
 
 
 class Cliente(db.Model):
@@ -183,6 +194,13 @@ class Usuario(db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+
+class FamiliaCotizacion(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(50), unique=True, nullable=False)
+    activa = db.Column(db.Boolean, default=True, nullable=False)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 class Auditoria(db.Model):
@@ -239,7 +257,13 @@ def token_required(f):
         token = request.cookies.get("x-access-token")
         current_user = obtener_usuario_desde_token(token)
         if not current_user:
-            if request.endpoint in {"agregar_cliente", "actualizar_estado_cotizacion", "filtrar_historial", "eliminar_cotizacion"}:
+            if request.endpoint in {
+                "agregar_cliente",
+                "agregar_familia_api",
+                "actualizar_estado_cotizacion",
+                "filtrar_historial",
+                "eliminar_cotizacion",
+            }:
                 return jsonify({"error": "auth_required"}), 401
             return redirect(url_for("login", next=request.path))
         g.current_user = current_user
@@ -260,7 +284,7 @@ def admin_required(f):
         if not current_user:
             return redirect(url_for("login", next=request.path))
         if not current_user.is_admin:
-            if request.endpoint in {"eliminar_cotizacion"}:
+            if request.endpoint in {"agregar_familia_api", "eliminar_cotizacion"}:
                 return jsonify({"error": "admin_required"}), 403
             return redirect(url_for("index"))
         return f(*args, **kwargs)
@@ -276,8 +300,19 @@ def inject_current_user():
 
 
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+    except OperationalError as exc:
+        # Gunicorn puede bootear varios workers a la vez. En SQLite eso puede
+        # disparar un "table already exists" transitorio durante el bootstrap.
+        # Si ya se creó en otro worker, seguimos con la fase de migración liviana.
+        if "already exists" not in str(exc).lower():
+            raise
+        db.session.rollback()
     columnas_item = [col[1] for col in db.session.execute(db.text("PRAGMA table_info(item_cotizacion)")).fetchall()]
+    if "detalle" not in columnas_item:
+        db.session.execute(db.text("ALTER TABLE item_cotizacion ADD COLUMN detalle TEXT"))
+        db.session.commit()
     if "iva_item" not in columnas_item:
         db.session.execute(db.text("ALTER TABLE item_cotizacion ADD COLUMN iva_item FLOAT DEFAULT 21.0"))
         db.session.commit()
@@ -353,6 +388,22 @@ with app.app_context():
     if "is_admin" not in columnas_usuario:
         db.session.execute(db.text("ALTER TABLE usuario ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
         db.session.commit()
+    columnas_familia = [
+        col[1] for col in db.session.execute(db.text("PRAGMA table_info(familia_cotizacion)")).fetchall()
+    ]
+    if "activa" not in columnas_familia:
+        db.session.execute(db.text("ALTER TABLE familia_cotizacion ADD COLUMN activa BOOLEAN DEFAULT 1"))
+        db.session.commit()
+    if "fecha_creacion" not in columnas_familia:
+        db.session.execute(db.text("ALTER TABLE familia_cotizacion ADD COLUMN fecha_creacion DATETIME"))
+        db.session.commit()
+    db.session.execute(db.text("UPDATE familia_cotizacion SET activa = 1 WHERE activa IS NULL"))
+    for familia_default in FAMILIAS_COTIZACION:
+        db.session.execute(
+            db.text("INSERT OR IGNORE INTO familia_cotizacion (nombre, activa, fecha_creacion) VALUES (:nombre, 1, :fecha)"),
+            {"nombre": familia_default, "fecha": datetime.utcnow()},
+        )
+    db.session.commit()
     db.session.execute(db.text("UPDATE usuario SET is_admin = 0 WHERE is_admin IS NULL"))
     db.session.commit()
     if not db.session.query(Usuario.id).filter(Usuario.is_admin.is_(True)).first():
@@ -427,17 +478,28 @@ def optimizar_bytes_imagen(raw_bytes):
     return optimized_bytes
 
 
-def guardar_imagen_producto(file_storage, descripcion, row_id):
+def preparar_imagen_producto(file_storage):
     if not file_storage or not file_storage.filename:
         return None
     if not archivo_imagen_permitido(file_storage.filename):
         raise ValueError("Formato de imagen no permitido. Usa PNG, JPG, WEBP o GIF.")
+    file_storage.stream.seek(0)
+    optimized_bytes = optimizar_bytes_imagen(file_storage.read())
+    file_storage.stream.seek(0)
+    return optimized_bytes
+
+
+def guardar_imagen_producto(file_storage, descripcion, row_id, optimized_bytes=None):
+    if not file_storage or not file_storage.filename:
+        return None
+    if optimized_bytes is None:
+        optimized_bytes = preparar_imagen_producto(file_storage)
+    if not optimized_bytes:
+        return None
 
     base = secure_filename(descripcion) or "producto"
     nombre_archivo = f"{datetime.utcnow():%Y%m%d%H%M%S%f}_{secure_filename(str(row_id))}_{base}.jpg"
     destino = UPLOADS_PRODUCTOS_DIR / nombre_archivo
-    file_storage.stream.seek(0)
-    optimized_bytes = optimizar_bytes_imagen(file_storage.read())
     destino.write_bytes(optimized_bytes)
     return f"uploads/productos/{nombre_archivo}"
 
@@ -585,13 +647,60 @@ def normalizar_estado_cotizacion(valor):
     return None
 
 
-def normalizar_familia_cotizacion(valor):
-    valor = (valor or "").strip()
+def normalizar_nombre_familia(valor):
+    valor = re.sub(r"\s+", " ", (valor or "").strip())
     if not valor:
         return None
-    for familia in FAMILIAS_COTIZACION:
-        if valor.lower() == familia.lower():
-            return familia
+    return valor.upper()[:50]
+
+
+def obtener_familias_activas():
+    return [
+        familia.nombre
+        for familia in FamiliaCotizacion.query.filter(FamiliaCotizacion.activa.is_(True))
+        .order_by(func.lower(FamiliaCotizacion.nombre).asc())
+        .all()
+    ]
+
+
+def obtener_familias_para_selector(valor_actual=None):
+    familias = obtener_familias_activas()
+    familia_actual = normalizar_familia_cotizacion(valor_actual)
+    if familia_actual and familia_actual not in familias:
+        familias.append(familia_actual)
+    return sorted(familias, key=lambda item: item.lower())
+
+
+def obtener_familias_para_filtros():
+    familias = set(obtener_familias_activas())
+    for (familia_usada,) in db.session.query(Cotizacion.familia).filter(
+        Cotizacion.familia.isnot(None), func.trim(Cotizacion.familia) != ""
+    ).distinct():
+        familias.add(familia_usada)
+    return sorted(familias, key=lambda item: item.lower())
+
+
+def buscar_familia_por_nombre(nombre):
+    nombre_normalizado = normalizar_nombre_familia(nombre)
+    if not nombre_normalizado:
+        return None
+    return FamiliaCotizacion.query.filter(func.lower(FamiliaCotizacion.nombre) == nombre_normalizado.lower()).first()
+
+
+def normalizar_familia_cotizacion(valor):
+    valor = normalizar_nombre_familia(valor)
+    if not valor:
+        return None
+    familia = buscar_familia_por_nombre(valor)
+    if familia:
+        return familia.nombre
+    familia_usada = (
+        db.session.query(Cotizacion.familia)
+        .filter(Cotizacion.familia.isnot(None), func.lower(Cotizacion.familia) == valor.lower())
+        .first()
+    )
+    if familia_usada:
+        return familia_usada[0]
     return None
 
 
@@ -872,10 +981,11 @@ def construir_items_precargados(cotizacion):
             {
                 "item_id": item.id,
                 "descripcion": item.descripcion or "",
+                "detalle": item.detalle or "",
                 "cantidad": item.cantidad or 0,
                 "costo_unitario": item.costo_unitario or 0,
                 "costo_extra": item.costo_extra or 0,
-                "margen": item.margen or 0,
+                "margen": round((item.margen or 0) * 100, 2),
                 "iva_item": item.iva_item or 0,
                 "imagen_url": item.imagen_url or "",
                 "preview_url": preview_url,
@@ -892,7 +1002,7 @@ def renderizar_cotizador(cotizacion=None):
         cotizacion=cotizacion,
         modo_edicion=bool(cotizacion),
         items_precargados=construir_items_precargados(cotizacion),
-        familias_cotizacion=FAMILIAS_COTIZACION,
+        familias_cotizacion=obtener_familias_para_selector(cotizacion.familia if cotizacion else None),
         smtp_configurado=smtp_esta_configurado(),
         followup_default_email=obtener_config_smtp()["default_to"],
     )
@@ -930,7 +1040,7 @@ def generar_excel_cotizacion(cotizacion):
         ws.cell(row=row_idx, column=1).border = border
         ws.cell(row=row_idx, column=2).border = border
 
-    ws.merge_cells("A1:H1")
+    ws.merge_cells("A1:J1")
     ws["A1"] = f"Cotizacion {cotizacion.numero_cotizacion or cotizacion.id}"
     ws["A1"].font = title_font
     ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
@@ -960,31 +1070,35 @@ def generar_excel_cotizacion(cotizacion):
 
     row += 1
     headers = [
+        "Producto / Servicio",
         "Descripcion",
         "Cantidad",
         "Costo unitario",
         "Costo extra %",
-        "Margen",
+        "Margen %",
         "IVA %",
         "Precio venta unitario",
-        "Subtotal",
+        "Precio venta total",
+        "Subtotal final",
     ]
     for col_idx, header in enumerate(headers, 1):
         ws.cell(row=row, column=col_idx, value=header)
     style_row(row, fill=dark_fill, font=white_font, alignment=Alignment(horizontal="center"))
 
-    money_columns = {3, 7, 8}
-    percentage_columns = {4, 5, 6}
+    money_columns = {4, 8, 9, 10}
+    percentage_columns = {5, 6, 7}
     for item in cotizacion.items:
         row += 1
         values = [
             item.descripcion or "",
+            item.detalle or "",
             item.cantidad or 0,
             item.costo_unitario or 0,
             item.costo_extra or 0,
-            item.margen or 0,
+            (item.margen or 0) * 100,
             item.iva_item or 0,
             item.precio_venta or 0,
+            item.precio_venta_total or 0,
             item.subtotal or 0,
         ]
         for col_idx, value in enumerate(values, 1):
@@ -1004,26 +1118,28 @@ def generar_excel_cotizacion(cotizacion):
     ]
     for idx, (label, value) in enumerate(resumen):
         r = resumen_inicio + idx
-        ws.cell(row=r, column=6, value=label)
-        ws.cell(row=r, column=7, value=value)
-        ws.cell(row=r, column=6).font = bold_font
-        ws.cell(row=r, column=6).fill = total_fill
-        ws.cell(row=r, column=6).border = border
-        ws.cell(row=r, column=7).border = border
-        ws.cell(row=r, column=7).number_format = '#,##0.00'
+        ws.cell(row=r, column=8, value=label)
+        ws.cell(row=r, column=9, value=value)
+        ws.cell(row=r, column=8).font = bold_font
+        ws.cell(row=r, column=8).fill = total_fill
+        ws.cell(row=r, column=8).border = border
+        ws.cell(row=r, column=9).border = border
+        ws.cell(row=r, column=9).number_format = '#,##0.00'
         if label == "Total final":
-            ws.cell(row=r, column=6).font = Font(bold=True, color="0F172A")
-            ws.cell(row=r, column=7).font = Font(bold=True, color="0F172A")
+            ws.cell(row=r, column=8).font = Font(bold=True, color="0F172A")
+            ws.cell(row=r, column=9).font = Font(bold=True, color="0F172A")
 
     for column, width in {
-        "A": 34,
-        "B": 28,
+        "A": 28,
+        "B": 34,
         "C": 14,
         "D": 14,
         "E": 12,
         "F": 12,
-        "G": 18,
-        "H": 16,
+        "G": 12,
+        "H": 18,
+        "I": 18,
+        "J": 16,
     }.items():
         ws.column_dimensions[column].width = width
 
@@ -1394,6 +1510,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     preparar_seguimiento_cotizacion(cotizacion, cliente_sel=cliente_sel)
 
     descs = request.form.getlist("desc[]")
+    detalles = request.form.getlist("detalle[]")
     row_ids = request.form.getlist("row_id[]")
     item_ids = request.form.getlist("item_id[]")
     imagenes_actuales = request.form.getlist("imagen_actual[]")
@@ -1406,9 +1523,23 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     items_existentes = {str(item.id): item for item in cotizacion.items if item.id}
     neto_total = 0.0
     iva_total = 0.0
+    imagenes_preparadas = {}
+
+    try:
+        for row_id in row_ids:
+            file_storage = request.files.get(f"foto_{row_id}")
+            imagen_preparada = preparar_imagen_producto(file_storage)
+            if imagen_preparada:
+                imagenes_preparadas[row_id] = imagen_preparada
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        destino = "editar_cotizacion" if es_edicion else "index"
+        kwargs = {"id": cotizacion.id} if es_edicion else {}
+        return None, redirect(url_for(destino, **kwargs))
 
     for i, desc in enumerate(descs):
         desc = (desc or "").strip()
+        detalle = (detalles[i] if i < len(detalles) else "").strip()
         if not desc:
             continue
 
@@ -1416,14 +1547,15 @@ def persistir_cotizacion_desde_form(cotizacion=None):
             cantidad = float(cants[i] if i < len(cants) else 0)
             costo = float(costs[i] if i < len(costs) else 0)
             extra_pct = float(extras[i] if i < len(extras) else 5.0)
-            margen = float(margs[i] if i < len(margs) else 0)
+            margen_pct = float(margs[i] if i < len(margs) else 0)
         except ValueError:
             continue
 
         cantidad = max(0.0, cantidad)
         costo = max(0.0, costo)
         extra_pct = max(0.0, extra_pct)
-        margen = max(0.0, margen)
+        margen_pct = max(0.0, margen_pct)
+        margen_ratio = margen_pct / 100.0
 
         try:
             iva_pct = float(iva_items[i] if i < len(iva_items) else 21.0)
@@ -1433,7 +1565,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
             iva_pct = 21.0
 
         costo_con_extra = costo * (1 + (extra_pct / 100.0))
-        p_venta_neto = costo_con_extra * (1 + margen)
+        p_venta_neto = costo_con_extra * (1 + margen_ratio)
         sub_neto = cantidad * p_venta_neto
         iva_pct_aplicado = iva_pct if cotizacion.condicion_iva != "Exento" else 0.0
         monto_iva_item = sub_neto * (iva_pct_aplicado / 100.0)
@@ -1441,13 +1573,9 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         row_id = row_ids[i] if i < len(row_ids) else str(i)
         item_id = (item_ids[i] if i < len(item_ids) else "").strip()
         imagen_actual = (imagenes_actuales[i] if i < len(imagenes_actuales) else "").strip()
-        try:
-            imagen_local = guardar_imagen_producto(request.files.get(f"foto_{row_id}"), desc, row_id)
-        except ValueError as exc:
-            flash(str(exc), "danger")
-            destino = "editar_cotizacion" if es_edicion else "index"
-            kwargs = {"id": cotizacion.id} if es_edicion else {}
-            return None, redirect(url_for(destino, **kwargs))
+        imagen_local = guardar_imagen_producto(
+            request.files.get(f"foto_{row_id}"), desc, row_id, optimized_bytes=imagenes_preparadas.get(row_id)
+        )
 
         item = items_existentes.pop(item_id, None) if item_id else None
         if item and not imagen_actual:
@@ -1462,10 +1590,11 @@ def persistir_cotizacion_desde_form(cotizacion=None):
             cotizacion.items.append(item)
 
         item.descripcion = desc
+        item.detalle = detalle
         item.cantidad = cantidad
         item.costo_unitario = costo
         item.costo_extra = extra_pct
-        item.margen = margen
+        item.margen = margen_ratio
         item.iva_item = iva_pct_aplicado
         item.precio_venta = round(p_venta_neto, 2)
         item.subtotal = round(sub_neto + monto_iva_item, 2)
@@ -1642,6 +1771,131 @@ def usuarios_page():
         total_usuarios=total_usuarios,
         total_admins=total_admins,
     )
+
+
+@app.route("/familias", methods=["GET", "POST"])
+@token_required
+@admin_required
+def familias_page():
+    if request.method == "POST":
+        nombre = normalizar_nombre_familia(request.form.get("nombre"))
+        if not nombre:
+            flash("El nombre de la familia es obligatorio.", "danger")
+            return redirect(url_for("familias_page"))
+
+        familia_existente = buscar_familia_por_nombre(nombre)
+        if familia_existente:
+            if not familia_existente.activa:
+                familia_existente.activa = True
+                db.session.commit()
+                registrar_auditoria(
+                    "Reactivó familia",
+                    "Familia",
+                    entidad_id=familia_existente.id,
+                    entidad_ref=familia_existente.nombre,
+                )
+                flash(f"Familia {familia_existente.nombre} reactivada.", "success")
+            else:
+                flash("Esa familia ya existe.", "warning")
+            return redirect(url_for("familias_page"))
+
+        nueva = FamiliaCotizacion(nombre=nombre, activa=True)
+        db.session.add(nueva)
+        db.session.commit()
+        registrar_auditoria("Creó familia", "Familia", entidad_id=nueva.id, entidad_ref=nueva.nombre)
+        flash(f"Familia {nueva.nombre} creada correctamente.", "success")
+        return redirect(url_for("familias_page"))
+
+    familias = FamiliaCotizacion.query.order_by(FamiliaCotizacion.activa.desc(), func.lower(FamiliaCotizacion.nombre)).all()
+    usos = dict(db.session.query(Cotizacion.familia, func.count(Cotizacion.id)).group_by(Cotizacion.familia).all())
+    return render_template("familias.html", familias=familias, usos_familias=usos)
+
+
+@app.route("/familias/<int:id>/editar", methods=["POST"])
+@token_required
+@admin_required
+def editar_familia(id):
+    familia = FamiliaCotizacion.query.get_or_404(id)
+    nombre_anterior = familia.nombre
+    nombre_nuevo = normalizar_nombre_familia(request.form.get("nombre"))
+    activa = request.form.get("activa") == "1"
+
+    if not nombre_nuevo:
+        flash("El nombre de la familia es obligatorio.", "danger")
+        return redirect(url_for("familias_page"))
+
+    existente = buscar_familia_por_nombre(nombre_nuevo)
+    if existente and existente.id != familia.id:
+        flash("Ya existe otra familia con ese nombre.", "danger")
+        return redirect(url_for("familias_page"))
+
+    familia.nombre = nombre_nuevo
+    familia.activa = activa
+    actualizadas = 0
+    if nombre_anterior != nombre_nuevo:
+        actualizadas = Cotizacion.query.filter(Cotizacion.familia == nombre_anterior).update(
+            {Cotizacion.familia: nombre_nuevo}, synchronize_session=False
+        )
+    db.session.commit()
+    registrar_auditoria(
+        "Modificó familia",
+        "Familia",
+        entidad_id=familia.id,
+        entidad_ref=familia.nombre,
+        detalle=f"Nombre anterior: {nombre_anterior}. Activa: {'si' if familia.activa else 'no'}. Cotizaciones actualizadas: {actualizadas}.",
+    )
+    flash("Familia actualizada correctamente.", "success")
+    return redirect(url_for("familias_page"))
+
+
+@app.route("/familias/<int:id>/eliminar", methods=["POST"])
+@token_required
+@admin_required
+def eliminar_familia(id):
+    familia = FamiliaCotizacion.query.get_or_404(id)
+    uso = Cotizacion.query.filter(Cotizacion.familia == familia.nombre).count()
+    nombre_ref = familia.nombre
+    if uso:
+        familia.activa = False
+        db.session.commit()
+        registrar_auditoria(
+            "Desactivó familia",
+            "Familia",
+            entidad_id=familia.id,
+            entidad_ref=nombre_ref,
+            detalle=f"No se borro fisicamente porque tiene {uso} cotizaciones asociadas.",
+        )
+        flash(f"Familia {nombre_ref} desactivada. Se mantiene en cotizaciones historicas.", "warning")
+    else:
+        db.session.delete(familia)
+        db.session.commit()
+        registrar_auditoria("Eliminó familia", "Familia", entidad_id=id, entidad_ref=nombre_ref)
+        flash(f"Familia {nombre_ref} eliminada.", "success")
+    return redirect(url_for("familias_page"))
+
+
+@app.route("/api/familias", methods=["POST"])
+@token_required
+@admin_required
+def agregar_familia_api():
+    data = request.get_json(silent=True) or {}
+    nombre = normalizar_nombre_familia(data.get("nombre"))
+    if not nombre:
+        return jsonify({"error": "Nombre de familia requerido."}), 400
+
+    familia = buscar_familia_por_nombre(nombre)
+    if familia:
+        if not familia.activa:
+            familia.activa = True
+            db.session.commit()
+            registrar_auditoria("Reactivó familia", "Familia", entidad_id=familia.id, entidad_ref=familia.nombre)
+        return jsonify({"id": familia.id, "nombre": familia.nombre, "activa": bool(familia.activa)}), 200
+
+    familia = FamiliaCotizacion(nombre=nombre, activa=True)
+    db.session.add(familia)
+    db.session.commit()
+    registrar_auditoria("Creó familia", "Familia", entidad_id=familia.id, entidad_ref=familia.nombre)
+    return jsonify({"id": familia.id, "nombre": familia.nombre, "activa": True}), 201
 
 
 @app.route("/api/clientes", methods=["POST"])
@@ -1956,7 +2210,7 @@ def dashboard_page():
         filtro_hasta_legible=hasta_date.strftime("%d/%m/%Y"),
         dias_periodo=dias_periodo,
         filtros_activos=filtros_activos,
-        familias_disponibles=FAMILIAS_COTIZACION,
+        familias_disponibles=obtener_familias_para_filtros(),
         sectores_cliente=SECTORES_CLIENTE,
         top_familia=top_familia,
         top_sector=top_sector,

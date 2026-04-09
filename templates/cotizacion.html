@@ -86,8 +86,6 @@
                         <img src="{{ url_for('logo') }}" alt="Logo Cuenco Tech" style="width: 96px; height: auto;">
                         <div>
                             <p class="meta-label mb-2">Presupuesto comercial</p>
-                            <h1 class="h3 mb-1">{{ cotizacion.nombre_empresa }}</h1>
-                            <p class="mb-1">{{ cotizacion.razon_social }}</p>
                             <p class="mb-1">CUIT {{ cotizacion.cuit }}</p>
                             <p class="mb-1">{{ domicilio_empresa }}</p>
                             <p class="text-muted mb-0">Cotizacion #{{ cotizacion.numero_cotizacion or cotizacion.id }}</p>
@@ -114,11 +112,13 @@
                             <thead class="table-secondary">
                                 <tr>
                                     <th>Producto</th>
+                                    <th>Descripcion</th>
                                     <th class="text-center">Cant.</th>
                                     <th class="text-end">Costo unit.</th>
                                     <th class="text-end">Margen</th>
                                     <th class="text-end">Venta unit.</th>
-                                    <th class="text-end">Subtotal</th>
+                                    <th class="text-end">Venta total</th>
+                                    <th class="text-end">Subtotal final</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -138,10 +138,12 @@
                                             <span>{{ item.descripcion }}</span>
                                         </div>
                                     </td>
+                                    <td>{{ item.detalle or "-" }}</td>
                                     <td class="text-center">{{ '%.2f'|format(item.cantidad) }}</td>
                                     <td class="text-end">${{ '%.2f'|format(item.costo_unitario) }}</td>
                                     <td class="text-end">{{ '%.2f'|format(item.margen * 100) }}%</td>
-                                    <td class="text-end">${{ '%.2f'|format(item.precio_venta_unitario) }}</td>
+                                    <td class="text-end">${{ '%.2f'|format(item.precio_venta) }}</td>
+                                    <td class="text-end">${{ '%.2f'|format(item.precio_venta_total) }}</td>
                                     <td class="text-end">${{ '%.2f'|format(item.subtotal) }}</td>
                                 </tr>
                                 {% endfor %}

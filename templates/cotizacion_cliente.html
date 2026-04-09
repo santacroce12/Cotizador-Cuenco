@@ -39,8 +39,7 @@
         <div class="col-6 d-flex align-items-center">
             <img src="{{ url_for('static', filename='LOGO color.png') }}" alt="Logo Cuenco Tech" style="max-width: 120px; margin-right: 15px;" onerror="this.onerror=null;this.src='{{ url_for('static', filename='logo.png') }}';">
             <div>
-                <h3 class="mb-0" style="color: #000;">{{ cot.nombre_fantasia }}</h3>
-                <small>{{ cot.razon_social }}<br>CUIT: {{ cot.cuit }}<br>{{ domicilio_empresa }}</small>
+                <small>CUIT: {{ cot.cuit }}<br>{{ domicilio_empresa }}</small>
             </div>
         </div>
         <div class="col-6 text-end">
@@ -66,10 +65,11 @@
         <thead style="background-color: #000; color: #fff;">
             <tr>
                 <th style="width: 76px;" class="text-center">Imagen</th>
+                <th>Producto / Servicio</th>
                 <th>Descripcion</th>
                 <th class="text-center">Cant.</th>
                 <th class="text-end">Precio Unit.</th>
-                <th class="text-end">Subtotal</th>
+                <th class="text-end">Precio venta total</th>
             </tr>
         </thead>
         <tbody>
@@ -93,6 +93,7 @@
                     >
                 </td>
                 <td>{{ item.descripcion }}</td>
+                <td>{{ item.detalle or "-" }}</td>
                 <td class="text-center">{{ item.cantidad }}</td>
                 {% if cot.condicion_iva == 'Responsable Inscrito' %}
                 <td class="text-end">$ {{ "{:,.2f}".format(item.precio_venta) }}</td>

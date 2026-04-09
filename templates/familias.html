@@ -1,0 +1,115 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="card p-4 page-surface">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+        <div>
+            <h2 class="m-0 text-primary"><i class="bi bi-diagram-3 me-2"></i>Familias</h2>
+            <p class="text-muted mb-0">Administracion de familias disponibles para cotizaciones y dashboards.</p>
+        </div>
+        <div class="surface-strip px-4 py-3">
+            <div class="small text-uppercase text-muted fw-semibold">Familias activas</div>
+            <div class="fs-4 fw-bold">{{ familias|selectattr("activa")|list|length }}</div>
+        </div>
+    </div>
+
+    {% with mensajes = get_flashed_messages(with_categories=true) %}
+        {% if mensajes %}
+        <div class="mb-3">
+            {% for categoria, mensaje in mensajes %}
+            <div class="alert alert-{{ categoria }}" role="alert">{{ mensaje }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
+
+    <div class="row g-4">
+        <div class="col-xl-4">
+            <div class="card soft-card border-0 h-100">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>Alta de familia</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('familias_page') }}" class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Nombre</label>
+                            <input type="text" name="nombre" class="form-control" placeholder="Ej: DATA CENTER" maxlength="50" required>
+                            <div class="form-text">Se normaliza en mayusculas para mantener datos limpios.</div>
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-dark-custom w-100">
+                                <i class="bi bi-check-circle me-2"></i>Crear familia
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-8">
+            <div class="card soft-card border-0">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Listado</h5>
+                    <span class="badge bg-light text-dark">{{ familias|length }} cargadas</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Familia</th>
+                                    <th class="text-center">Estado</th>
+                                    <th class="text-center">Cotizaciones</th>
+                                    <th class="text-end">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for familia in familias %}
+                                {% set uso = usos_familias.get(familia.nombre, 0) %}
+                                <tr>
+                                    <td style="min-width: 280px;">
+                                        <form id="form-familia-{{ familia.id }}" method="POST" action="{{ url_for('editar_familia', id=familia.id) }}" class="d-flex gap-2">
+                                            <input type="text" name="nombre" class="form-control" value="{{ familia.nombre }}" maxlength="50" required>
+                                        </form>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="form-check form-switch d-inline-flex align-items-center gap-2">
+                                            <input class="form-check-input" type="checkbox" name="activa" value="1" form="form-familia-{{ familia.id }}" {% if familia.activa %}checked{% endif %}>
+                                            <span class="badge {% if familia.activa %}text-bg-success{% else %}text-bg-secondary{% endif %}">
+                                                {{ "Activa" if familia.activa else "Inactiva" }}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge text-bg-light">{{ uso }}</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="d-inline-flex gap-2">
+                                            <button type="submit" form="form-familia-{{ familia.id }}" class="btn btn-sm btn-edit-custom">
+                                                <i class="bi bi-save"></i> Guardar
+                                            </button>
+                                            <form method="POST" action="{{ url_for('eliminar_familia', id=familia.id) }}" onsubmit="return confirm('¿Seguro que queres dar de baja esta familia?');">
+                                                <button type="submit" class="btn btn-sm btn-delete-custom">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-4">No hay familias cargadas.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="small text-muted p-3 border-top">
+                        Si una familia tiene cotizaciones asociadas, la baja la deja inactiva para no romper historicos ni dashboards.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -471,6 +471,9 @@
             </ul>
             <div class="d-flex align-items-center gap-2 ms-auto mt-3 mt-lg-0">
                 {% if current_user.is_admin %}
+                <a class="btn btn-sm {% if request.path.startswith('/familias') %}btn-light text-dark{% else %}btn-outline-light{% endif %}" href="/familias">
+                    <i class="bi bi-diagram-3"></i> Familias
+                </a>
                 <a class="btn btn-sm {% if request.path == '/usuarios' %}btn-light text-dark{% else %}btn-outline-light{% endif %}" href="/usuarios">
                     <i class="bi bi-people"></i> Usuarios
                 </a>

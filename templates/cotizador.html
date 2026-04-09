@@ -2,8 +2,60 @@
 
 {% block content %}
 <style>
+    .cotizador-items-table {
+        width: 100%;
+        table-layout: fixed;
+    }
+
+    .cotizador-items-table thead th {
+        font-size: 0.76rem;
+        letter-spacing: 0.03em;
+        vertical-align: middle;
+        white-space: normal;
+        padding: 0.9rem 0.45rem;
+    }
+
+    .cotizador-items-table td {
+        padding: 0.7rem 0.35rem;
+    }
+
+    .cotizador-items-table .form-control,
+    .cotizador-items-table .form-select {
+        width: 100%;
+        padding: 0.55rem 0.6rem;
+        font-size: 0.95rem;
+    }
+
+    .cotizador-items-table textarea.form-control {
+        min-height: 66px;
+        resize: vertical;
+    }
+
+    .cotizador-items-table .ganancia-badge,
+    .cotizador-items-table .venta-total-badge {
+        min-width: 92px;
+        display: inline-flex;
+        justify-content: center;
+        font-size: 0.84rem;
+        padding: 0.65rem 0.45rem !important;
+    }
+
+    .cotizador-items-table .select-iva {
+        min-width: 0;
+        max-width: none;
+        width: 100%;
+        padding-inline: 0.45rem 1.65rem;
+        text-align-last: center;
+        font-size: 0.84rem;
+    }
+
+    .table-grid-outline.table-responsive {
+        overflow: visible;
+    }
+
     .image-upload-cell {
-        min-width: 112px;
+        width: 88px;
+        min-width: 88px;
     }
 
     .image-upload-input {
@@ -11,16 +63,16 @@
     }
 
     .image-upload-trigger {
-        width: 92px;
-        height: 92px;
+        width: 78px;
+        height: 78px;
         border: 1px dashed #adb5bd;
-        border-radius: 12px;
+        border-radius: 10px;
         background: #f8f9fa;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 6px;
+        gap: 4px;
         cursor: pointer;
         transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
         overflow: hidden;
@@ -49,21 +101,32 @@
     }
 
     .image-upload-icon {
-        font-size: 1.15rem;
+        font-size: 1rem;
         color: #6c757d;
     }
 
     .image-upload-text {
-        font-size: 0.72rem;
+        font-size: 0.64rem;
         font-weight: 600;
         color: #495057;
         text-align: center;
         line-height: 1.1;
-        padding: 0 8px;
+        padding: 0 6px;
     }
 
     .image-upload-actions {
         min-height: 20px;
+    }
+
+    @media (max-width: 1399.98px) {
+        .table-grid-outline.table-responsive {
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        .cotizador-items-table {
+            min-width: 1180px;
+        }
     }
 </style>
 <div class="card p-4 page-surface">
@@ -274,18 +337,33 @@
 
         <div class="table-container mt-4">
         <div class="table-responsive table-grid-outline">
-            <table class="table table-hover align-middle mb-0 table-custom">
+            <table class="table table-hover align-middle mb-0 table-custom cotizador-items-table">
+                <colgroup>
+                    <col style="width: 88px;">
+                    <col style="width: 18%;">
+                    <col style="width: 21%;">
+                    <col style="width: 6%;">
+                    <col style="width: 7%;">
+                    <col style="width: 7%;">
+                    <col style="width: 7%;">
+                    <col style="width: 9%;">
+                    <col style="width: 9%;">
+                    <col style="width: 6%;">
+                    <col style="width: 38px;">
+                </colgroup>
                 <thead class="thead-dark-custom">
                     <tr>
-                        <th style="width: 110px;" class="text-center">Foto</th>
-                        <th style="width: 30%;">Producto / Servicio</th>
-                        <th style="width: 8%;" class="text-center">Cant.</th>
-                        <th style="width: 12%;" class="text-center">Costo U.</th>
-                        <th style="width: 10%;" class="text-center">+% Extra</th>
-                        <th style="width: 10%;" class="text-center">Margen %</th>
-                        <th style="width: 15%;" class="text-center">Ganancia U.</th>
-                        <th style="width: 12%;" class="text-center">IVA</th>
-                        <th style="width: 5%;"></th>
+                        <th class="text-center">Foto</th>
+                        <th>Producto / Servicio</th>
+                        <th>Descripcion</th>
+                        <th class="text-center">Cant.</th>
+                        <th class="text-center">Costo U.</th>
+                        <th class="text-center">+% Extra</th>
+                        <th class="text-center">Margen %</th>
+                        <th class="text-center">Ganancia U.</th>
+                        <th class="text-center">Venta total</th>
+                        <th class="text-center">IVA</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody id="cuerpo-tabla"></tbody>
@@ -351,6 +429,18 @@
                     {% endfor %}
                 </select>
                 <div class="small text-white-50">La familia es obligatoria y se usa en historial, dashboard y exportaciones.</div>
+                {% if current_user and current_user.is_admin %}
+                <div class="border border-secondary rounded-3 p-3 mt-3">
+                    <label class="form-label fw-bold small text-white-50 text-uppercase">No aparece la familia?</label>
+                    <div class="input-group">
+                        <input type="text" id="nueva_familia_nombre" class="form-control" maxlength="50" placeholder="Ej: DATA CENTER">
+                        <button type="button" class="btn btn-outline-light" onclick="crearFamiliaDesdeModal()">
+                            <i class="bi bi-plus-circle me-1"></i>Crear
+                        </button>
+                    </div>
+                    <div class="small text-white-50 mt-2">Se agrega al selector y queda disponible para dashboards.</div>
+                </div>
+                {% endif %}
             </div>
             <div class="modal-footer border-secondary">
                 <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancelar</button>
@@ -808,28 +898,79 @@ function confirmarEnvio() {
     }
 }
 
+async function crearFamiliaDesdeModal() {
+    const input = document.getElementById("nueva_familia_nombre");
+    const select = document.getElementById("select_familia");
+    const nombre = (input?.value || "").trim();
+    if (!nombre) {
+        alert("Escribi el nombre de la familia.");
+        input?.focus();
+        return;
+    }
+
+    try {
+        const response = await fetch("{{ url_for('agregar_familia_api') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nombre }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            alert(data.error || "No se pudo crear la familia.");
+            return;
+        }
+        if (select && data.nombre) {
+            let option = Array.from(select.options).find((item) => item.value === data.nombre);
+            if (!option) {
+                option = new Option(data.nombre, data.nombre);
+                select.add(option);
+            }
+            select.value = data.nombre;
+        }
+        if (input) {
+            input.value = "";
+        }
+    } catch (_error) {
+        alert("No se pudo crear la familia. Revisa la conexion y volve a intentar.");
+    }
+}
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 function agregarFila(data = {}) {
     const cuerpo = document.getElementById("cuerpo-tabla");
     const fila = document.createElement("tr");
     itemRowCounter += 1;
     const rowId = `item_${itemRowCounter}`;
     const descripcion = data.descripcion || "";
+    const detalle = data.detalle || "";
     const cantidad = data.cantidad ?? 1;
     const costoUnitario = data.costo_unitario ?? 0;
     const costoExtra = data.costo_extra ?? 5;
-    const margen = data.margen ?? 0.75;
+    const margen = data.margen ?? 75;
     const ivaItem = data.iva_item ?? 21;
     const imagenActual = data.imagen_url || "";
     const previewUrl = data.preview_url || placeholderProductUrl;
     const hasImageClass = imagenActual ? "has-image" : "";
+    const descripcionHtml = escapeHtml(descripcion);
+    const detalleHtml = escapeHtml(detalle);
+    const imagenActualHtml = escapeHtml(imagenActual);
+    const previewUrlHtml = escapeHtml(previewUrl);
     fila.innerHTML = `
         <td class="text-center image-upload-cell">
             <input type="hidden" name="row_id[]" value="${rowId}">
-            <input type="hidden" name="item_id[]" value="${data.item_id || ""}">
-            <input type="hidden" name="imagen_actual[]" value="${imagenActual}">
-            <input type="file" name="foto_${rowId}" id="foto_${rowId}" class="image-upload-input" accept="image/*" onchange="previsualizarFoto(this)">
+            <input type="hidden" name="item_id[]" value="${escapeHtml(data.item_id || "")}">
+            <input type="hidden" name="imagen_actual[]" value="${imagenActualHtml}">
+            <input type="file" name="foto_${rowId}" id="foto_${rowId}" class="image-upload-input" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif" onchange="previsualizarFoto(this)">
             <label class="image-upload-trigger ${hasImageClass}" for="foto_${rowId}" title="Cargar imagen del producto">
-                <img src="${previewUrl}" alt="Vista previa" class="image-upload-preview" data-existing-src="${previewUrl}">
+                <img src="${previewUrlHtml}" alt="Vista previa" class="image-upload-preview" data-existing-src="${previewUrlHtml}">
                 <i class="bi bi-camera image-upload-icon"></i>
                 <span class="image-upload-text">Agregar foto</span>
             </label>
@@ -837,12 +978,14 @@ function agregarFila(data = {}) {
                 <button type="button" class="btn btn-link btn-sm p-0 text-danger d-none" onclick="quitarFoto(this)">Deshacer</button>
             </div>
         </td>
-        <td><input type="text" name="desc[]" class="form-control" placeholder="Descripcion..." value="${descripcion}" required></td>
+        <td><input type="text" name="desc[]" class="form-control" placeholder="Producto o servicio..." value="${descripcionHtml}" required></td>
+        <td><textarea name="detalle[]" class="form-control" rows="2" placeholder="Descripcion adicional del item...">${detalleHtml}</textarea></td>
         <td><input type="number" name="cant[]" class="form-control text-center" value="${cantidad}" min="1" oninput="validarPositivo(this); calcularTodo()"></td>
         <td><input type="number" name="costo[]" class="form-control text-end" value="${costoUnitario}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()"></td>
         <td><input type="number" name="extra[]" class="form-control text-end" value="${costoExtra}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()"></td>
         <td><input type="number" name="margen[]" class="form-control text-end" value="${margen}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()"></td>
         <td class="text-center"><span class="badge py-2 px-3 ganancia-badge">$ 0.00</span></td>
+        <td class="text-center"><span class="badge py-2 px-3 text-bg-dark venta-total-badge">$ 0.00</span></td>
         <td>
             <select name="iva_item[]" class="form-select form-select-sm select-iva" onchange="calcularTodo()">
                 <option value="21" ${Number(ivaItem) === 21 ? "selected" : ""}>21%</option>
@@ -865,6 +1008,39 @@ function agregarFila(data = {}) {
 
 const MAX_IMAGE_UPLOAD_MB = 6;
 const MAX_IMAGE_UPLOAD_BYTES = MAX_IMAGE_UPLOAD_MB * 1024 * 1024;
+const ALLOWED_IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+function validarArchivoImagen(archivo) {
+    if (!archivo) {
+        return true;
+    }
+    const nombre = (archivo.name || "").toLowerCase();
+    const extensionValida = ALLOWED_IMAGE_EXTENSIONS.some((extension) => nombre.endsWith(extension));
+    const tipoValido = !archivo.type || ALLOWED_IMAGE_TYPES.has(archivo.type);
+    if (!extensionValida || !tipoValido) {
+        alert("Formato de imagen no permitido. Usa PNG, JPG, WEBP o GIF.");
+        return false;
+    }
+    if (archivo.size > MAX_IMAGE_UPLOAD_BYTES) {
+        alert(`La imagen es demasiado pesada. El maximo permitido por archivo es ${MAX_IMAGE_UPLOAD_MB} MB.`);
+        return false;
+    }
+    return true;
+}
+
+function validarImagenesAntesDeEnviar() {
+    const inputs = document.querySelectorAll(".image-upload-input");
+    for (const input of inputs) {
+        const archivo = input.files && input.files[0];
+        if (archivo && !validarArchivoImagen(archivo)) {
+            input.value = "";
+            previsualizarFoto(input);
+            return false;
+        }
+    }
+    return true;
+}
 
 function previsualizarFoto(input) {
     const fila = input.closest("tr");
@@ -886,6 +1062,7 @@ function previsualizarFoto(input) {
         URL.revokeObjectURL(preview.dataset.objectUrl);
         delete preview.dataset.objectUrl;
     }
+    preview.onerror = null;
 
     if (!archivo) {
         if (imagenActual && preview.dataset.existingSrc) {
@@ -899,8 +1076,7 @@ function previsualizarFoto(input) {
         return;
     }
 
-    if (archivo.size > MAX_IMAGE_UPLOAD_BYTES) {
-        alert(`La imagen es demasiado pesada. El maximo permitido por archivo es ${MAX_IMAGE_UPLOAD_MB} MB.`);
+    if (!validarArchivoImagen(archivo)) {
         input.value = "";
         if (imagenActual && preview.dataset.existingSrc) {
             trigger.classList.add("has-image");
@@ -914,6 +1090,23 @@ function previsualizarFoto(input) {
     }
 
     const objectUrl = URL.createObjectURL(archivo);
+    preview.onerror = () => {
+        alert("No se pudo leer la imagen seleccionada. Usa PNG, JPG, WEBP o GIF validos.");
+        input.value = "";
+        if (preview.dataset.objectUrl) {
+            URL.revokeObjectURL(preview.dataset.objectUrl);
+            delete preview.dataset.objectUrl;
+        }
+        preview.onerror = null;
+        if (imagenActual && preview.dataset.existingSrc) {
+            trigger.classList.add("has-image");
+            preview.src = preview.dataset.existingSrc;
+        } else {
+            trigger.classList.remove("has-image");
+            preview.src = placeholderProductUrl;
+        }
+        removeButton.classList.add("d-none");
+    };
     preview.src = objectUrl;
     preview.dataset.objectUrl = objectUrl;
     trigger.classList.add("has-image");
@@ -969,7 +1162,8 @@ function calcularTodo() {
         const cant = Math.max(0, parseFloat(row.querySelector('[name="cant[]"]')?.value) || 0);
         const costoUnitario = Math.max(0, parseFloat(row.querySelector('[name="costo[]"]')?.value) || 0);
         const extraPerc = Math.max(0, parseFloat(row.querySelector('[name="extra[]"]')?.value) || 0);
-        const margen = Math.max(0, parseFloat(row.querySelector('[name="margen[]"]')?.value) || 0);
+        const margenPct = Math.max(0, parseFloat(row.querySelector('[name="margen[]"]')?.value) || 0);
+        const margen = margenPct / 100;
         const ivaPerc = Math.max(0, parseFloat(row.querySelector('[name="iva_item[]"]')?.value) || 0);
 
         const costoBaseTotalFila = cant * costoUnitario;
@@ -992,6 +1186,11 @@ function calcularTodo() {
         const gananciaNode = row.querySelector(".ganancia-badge");
         if (gananciaNode) {
             gananciaNode.innerText = `$ ${gananciaU.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+        }
+        const ventaTotalNode = row.querySelector(".venta-total-badge");
+        if (ventaTotalNode) {
+            const ventaTotalFila = subNetoFila + ivaFila;
+            ventaTotalNode.innerText = `$ ${ventaTotalFila.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
         }
     });
 
@@ -1031,6 +1230,10 @@ document.getElementById("form-cotizador")?.addEventListener("submit", function (
     if (!inputFamilia || !inputFamilia.value.trim()) {
         event.preventDefault();
         prepararEnvio();
+        return;
+    }
+    if (!validarImagenesAntesDeEnviar()) {
+        event.preventDefault();
         return;
     }
     sincronizarClienteSeleccionado();
