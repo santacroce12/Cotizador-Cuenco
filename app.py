@@ -149,6 +149,7 @@ class ItemCotizacion(db.Model):
     costo_unitario = db.Column(db.Float)
     costo_extra = db.Column(db.Float, default=5.0)
     margen = db.Column(db.Float)
+    descuento_pct = db.Column(db.Float, default=0.0)
     iva_item = db.Column(db.Float, default=21.0)
     precio_venta = db.Column(db.Float)
     subtotal = db.Column(db.Float)
@@ -167,6 +168,21 @@ class ItemCotizacion(db.Model):
     @property
     def precio_venta_total(self):
         return (self.precio_venta or 0.0) * (self.cantidad or 0.0)
+
+    @property
+    def descuento_porcentaje(self):
+        return self.descuento_pct or 0.0
+
+    @property
+    def precio_lista_unitario(self):
+        costo = self.costo_unitario or 0.0
+        extra = (self.costo_extra or 0.0) / 100.0
+        margen = self.margen or 0.0
+        return costo * (1 + extra) * (1 + margen)
+
+    @property
+    def descuento_total(self):
+        return max(0.0, self.precio_lista_unitario - (self.precio_venta or 0.0)) * (self.cantidad or 0.0)
 
 
 class Cliente(db.Model):
@@ -318,6 +334,9 @@ with app.app_context():
         db.session.commit()
     if "costo_extra" not in columnas_item:
         db.session.execute(db.text("ALTER TABLE item_cotizacion ADD COLUMN costo_extra FLOAT DEFAULT 5.0"))
+        db.session.commit()
+    if "descuento_pct" not in columnas_item:
+        db.session.execute(db.text("ALTER TABLE item_cotizacion ADD COLUMN descuento_pct FLOAT DEFAULT 0.0"))
         db.session.commit()
     columnas_cot = [col[1] for col in db.session.execute(db.text("PRAGMA table_info(cotizacion)")).fetchall()]
     if "moneda" not in columnas_cot:
@@ -996,6 +1015,7 @@ def construir_items_precargados(cotizacion):
                 "costo_unitario": item.costo_unitario or 0,
                 "costo_extra": item.costo_extra or 0,
                 "margen": round((item.margen or 0) * 100, 2),
+                "descuento_pct": item.descuento_pct or 0,
                 "iva_item": item.iva_item or 0,
                 "imagen_url": item.imagen_url or "",
                 "preview_url": preview_url,
@@ -1086,6 +1106,7 @@ def generar_excel_cotizacion(cotizacion):
         "Costo unitario",
         "Costo extra %",
         "Margen %",
+        "Descuento %",
         "IVA %",
         "Precio venta unitario",
         "Precio venta total",
@@ -1095,8 +1116,8 @@ def generar_excel_cotizacion(cotizacion):
         ws.cell(row=row, column=col_idx, value=header)
     style_row(row, fill=dark_fill, font=white_font, alignment=Alignment(horizontal="center"))
 
-    money_columns = {4, 8, 9, 10}
-    percentage_columns = {5, 6, 7}
+    money_columns = {4, 9, 10, 11}
+    percentage_columns = {5, 6, 7, 8}
     for item in cotizacion.items:
         row += 1
         values = [
@@ -1106,6 +1127,7 @@ def generar_excel_cotizacion(cotizacion):
             item.costo_unitario or 0,
             item.costo_extra or 0,
             (item.margen or 0) * 100,
+            item.descuento_pct or 0,
             item.iva_item or 0,
             item.precio_venta or 0,
             item.precio_venta_total or 0,
@@ -1123,6 +1145,7 @@ def generar_excel_cotizacion(cotizacion):
     resumen_inicio = row
     resumen = [
         ("Subtotal neto", cotizacion.total_neto or 0),
+        ("Descuento total", round(sum((item.descuento_total or 0.0) for item in cotizacion.items), 2)),
         ("IVA total", cotizacion.total_iva or 0),
         ("Total final", cotizacion.total_final or 0),
     ]
@@ -1528,6 +1551,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     costs = request.form.getlist("costo[]")
     extras = request.form.getlist("extra[]")
     margs = request.form.getlist("margen[]")
+    descuentos = request.form.getlist("descuento[]")
     iva_items = request.form.getlist("iva_item[]")
 
     items_existentes = {str(item.id): item for item in cotizacion.items if item.id}
@@ -1557,6 +1581,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
             costo = float(costs[i] if i < len(costs) else 0)
             extra_pct = float(extras[i] if i < len(extras) else 5.0)
             margen_pct = float(margs[i] if i < len(margs) else 0)
+            descuento_pct = float(descuentos[i] if i < len(descuentos) else 0)
         except ValueError:
             continue
 
@@ -1564,7 +1589,9 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         costo = max(0.0, costo)
         extra_pct = max(0.0, extra_pct)
         margen_pct = max(0.0, margen_pct)
+        descuento_pct = min(100.0, max(0.0, descuento_pct))
         margen_ratio = margen_pct / 100.0
+        descuento_ratio = descuento_pct / 100.0
 
         try:
             iva_pct = float(iva_items[i] if i < len(iva_items) else 21.0)
@@ -1574,7 +1601,8 @@ def persistir_cotizacion_desde_form(cotizacion=None):
             iva_pct = 21.0
 
         costo_con_extra = costo * (1 + (extra_pct / 100.0))
-        p_venta_neto = costo_con_extra * (1 + margen_ratio)
+        p_venta_lista = costo_con_extra * (1 + margen_ratio)
+        p_venta_neto = p_venta_lista * (1 - descuento_ratio)
         sub_neto = cantidad * p_venta_neto
         iva_pct_aplicado = iva_pct if cotizacion.condicion_iva != "Exento" else 0.0
         monto_iva_item = sub_neto * (iva_pct_aplicado / 100.0)
@@ -1604,6 +1632,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         item.costo_unitario = costo
         item.costo_extra = extra_pct
         item.margen = margen_ratio
+        item.descuento_pct = descuento_pct
         item.iva_item = iva_pct_aplicado
         item.precio_venta = round(p_venta_neto, 2)
         item.subtotal = round(sub_neto + monto_iva_item, 2)
@@ -2337,7 +2366,13 @@ def filtrar_historial():
 @token_required
 def ver_cotizacion(id):
     cot = Cotizacion.query.get_or_404(id)
-    return render_template("cotizacion_cliente.html", cot=cot, domicilio_empresa=DOMICILIO)
+    mostrar_descuento = any((item.descuento_pct or 0.0) > 0 for item in cot.items)
+    return render_template(
+        "cotizacion_cliente.html",
+        cot=cot,
+        domicilio_empresa=DOMICILIO,
+        mostrar_descuento=mostrar_descuento,
+    )
 
 
 @app.route("/cotizacion/<int:id>/xlsx")

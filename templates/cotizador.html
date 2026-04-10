@@ -33,7 +33,7 @@
 
     .cotizador-items-table .ganancia-badge,
     .cotizador-items-table .venta-total-badge {
-        min-width: 92px;
+        min-width: 84px;
         display: inline-flex;
         justify-content: center;
         font-size: 0.84rem;
@@ -340,14 +340,15 @@
             <table class="table table-hover align-middle mb-0 table-custom cotizador-items-table">
                 <colgroup>
                     <col style="width: 88px;">
-                    <col style="width: 18%;">
-                    <col style="width: 21%;">
+                    <col style="width: 16%;">
+                    <col style="width: 19%;">
                     <col style="width: 6%;">
                     <col style="width: 7%;">
-                    <col style="width: 7%;">
-                    <col style="width: 7%;">
-                    <col style="width: 9%;">
-                    <col style="width: 9%;">
+                    <col style="width: 6.5%;">
+                    <col style="width: 6.5%;">
+                    <col style="width: 6.5%;">
+                    <col style="width: 8%;">
+                    <col style="width: 8%;">
                     <col style="width: 6%;">
                     <col style="width: 38px;">
                 </colgroup>
@@ -360,6 +361,7 @@
                         <th class="text-center">Costo U.</th>
                         <th class="text-center">+% Extra</th>
                         <th class="text-center">Margen %</th>
+                        <th class="text-center">Desc. %</th>
                         <th class="text-center">Ganancia U.</th>
                         <th class="text-center">Venta total</th>
                         <th class="text-center">IVA</th>
@@ -383,6 +385,10 @@
                     <div class="d-flex justify-content-between mb-2">
                         <span class="text-warning">Total Gastos Extras (+%):</span>
                         <span id="total-extras-interno" class="text-warning">$ 0.00</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-danger">Total descuentos (-%):</span>
+                        <span id="total-descuentos-interno" class="text-danger">$ 0.00</span>
                     </div>
                     <div class="d-flex justify-content-between mb-2">
                         <span class="text-info">IVA Acumulado:</span>
@@ -955,6 +961,7 @@ function agregarFila(data = {}) {
     const costoUnitario = data.costo_unitario ?? 0;
     const costoExtra = data.costo_extra ?? 5;
     const margen = data.margen ?? 75;
+    const descuento = data.descuento_pct ?? 0;
     const ivaItem = data.iva_item ?? 21;
     const imagenActual = data.imagen_url || "";
     const previewUrl = data.preview_url || placeholderProductUrl;
@@ -984,6 +991,7 @@ function agregarFila(data = {}) {
         <td><input type="number" name="costo[]" class="form-control text-end" value="${costoUnitario}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()"></td>
         <td><input type="number" name="extra[]" class="form-control text-end" value="${costoExtra}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()"></td>
         <td><input type="number" name="margen[]" class="form-control text-end" value="${margen}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()"></td>
+        <td><input type="number" name="descuento[]" class="form-control text-end" value="${descuento}" min="0" max="100" step="0.01" oninput="validarPorcentaje(this); calcularTodo()"></td>
         <td class="text-center"><span class="badge py-2 px-3 ganancia-badge">$ 0.00</span></td>
         <td class="text-center"><span class="badge py-2 px-3 text-bg-dark venta-total-badge">$ 0.00</span></td>
         <td>
@@ -1148,6 +1156,14 @@ function validarPositivo(input) {
     }
 }
 
+function validarPorcentaje(input) {
+    validarPositivo(input);
+    const valor = parseFloat(input.value);
+    if (Number.isFinite(valor) && valor > 100) {
+        input.value = "100";
+    }
+}
+
 function validarCantidadEntera(input) {
     const valor = Number(String(input.value || "").replace(",", "."));
     if (!Number.isFinite(valor)) {
@@ -1163,6 +1179,7 @@ function calcularTodo() {
 
     let subtotalBaseAcumulado = 0;
     let totalExtrasAcumulado = 0;
+    let totalDescuentosAcumulado = 0;
     let subtotalVentaNeto = 0;
     let ivaTotalAcumulado = 0;
 
@@ -1172,13 +1189,17 @@ function calcularTodo() {
         const costoUnitario = Math.max(0, parseFloat(row.querySelector('[name="costo[]"]')?.value) || 0);
         const extraPerc = Math.max(0, parseFloat(row.querySelector('[name="extra[]"]')?.value) || 0);
         const margenPct = Math.max(0, parseFloat(row.querySelector('[name="margen[]"]')?.value) || 0);
+        const descuentoPct = Math.min(100, Math.max(0, parseFloat(row.querySelector('[name="descuento[]"]')?.value) || 0));
         const margen = margenPct / 100;
+        const descuento = descuentoPct / 100;
         const ivaPerc = Math.max(0, parseFloat(row.querySelector('[name="iva_item[]"]')?.value) || 0);
 
         const costoBaseTotalFila = cant * costoUnitario;
         const montoExtraFila = costoBaseTotalFila * (extraPerc / 100);
         const costoConExtra = costoUnitario * (1 + (extraPerc / 100));
-        const pVentaNeto = costoConExtra * (1 + margen);
+        const pVentaLista = costoConExtra * (1 + margen);
+        const descuentoFila = (cant * pVentaLista) * descuento;
+        const pVentaNeto = pVentaLista * (1 - descuento);
         const subNetoFila = cant * pVentaNeto;
 
         let ivaFila = 0;
@@ -1188,6 +1209,7 @@ function calcularTodo() {
 
         subtotalBaseAcumulado += costoBaseTotalFila;
         totalExtrasAcumulado += montoExtraFila;
+        totalDescuentosAcumulado += descuentoFila;
         subtotalVentaNeto += subNetoFila;
         ivaTotalAcumulado += ivaFila;
 
@@ -1207,6 +1229,7 @@ function calcularTodo() {
 
     document.getElementById("subtotal-interno").innerText = `$ ${subtotalBaseAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
     document.getElementById("total-extras-interno").innerText = `$ ${totalExtrasAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+    document.getElementById("total-descuentos-interno").innerText = `$ ${totalDescuentosAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
     document.getElementById("total-iva-interno").innerText = `$ ${ivaTotalAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
     document.getElementById("total-vista").innerText = `$ ${totalFinal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
 
