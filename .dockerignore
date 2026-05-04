@@ -10,5 +10,13 @@ local_settings.json
 data/
 storage/uploads/productos/
 .claude/
+.codex/
+.agents/
+.aidesigner/
 .mcp.json
 DONWEB_DEPLOY.md
+GUIA_COTIZOCUENCO_PC_LOCAL.md
+tests/
+tmp_*
+*.log
+*.png

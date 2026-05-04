@@ -97,6 +97,37 @@
         font-size:.88rem;
         text-align:right;
     }
+    .dash-operativo-panel {
+        display:grid;
+        grid-template-columns:minmax(0, 1.25fr) minmax(300px, .75fr);
+        gap:1rem;
+        align-items:stretch;
+        margin:1rem 0 .9rem;
+    }
+    .dash-operativo-filter-card {
+        padding:.95rem 1rem;
+        border-radius:18px;
+        background:linear-gradient(180deg, rgba(241,245,249,.94), rgba(226,232,240,.82));
+        border:1px solid rgba(203,213,225,.95);
+    }
+    .dash-operativo-form {
+        display:grid;
+        grid-template-columns:minmax(190px, 1fr) auto auto;
+        gap:.6rem;
+        align-items:end;
+    }
+    .dash-operativo-form .form-select,
+    .dash-operativo-form .btn {
+        min-height:44px;
+        border-radius:14px;
+        font-weight:800;
+    }
+    .dash-operativo-active {
+        display:flex;
+        flex-wrap:wrap;
+        gap:.45rem;
+        margin-top:.65rem;
+    }
     .dash-state-row {
         display:inline-flex; flex-wrap:wrap; gap:.35rem;
         padding:.25rem;
@@ -302,6 +333,8 @@
         .dash-metrics,.dash-currency{grid-template-columns:1fr;}
         .dash-chart{height:280px;}
         .dash-hero{padding:1.2rem;}
+        .dash-operativo-panel{grid-template-columns:1fr;}
+        .dash-operativo-form{grid-template-columns:1fr;}
         .dash-state-toolbar{flex-direction:column; align-items:flex-start;}
         .dash-state-meta{text-align:left; max-width:none;}
         .dash-period-actions .btn{flex:1 1 calc(50% - .45rem);}
@@ -821,6 +854,25 @@
             }
             event.preventDefault();
             actualizarDetalleOperativo(link.href);
+        });
+
+        document.addEventListener("submit", function (event) {
+            const form = event.target.closest("[data-dashboard-operativo-form]");
+            if (!form) {
+                return;
+            }
+            event.preventDefault();
+            const targetUrl = new URL(form.getAttribute("action") || window.location.href, window.location.origin);
+            targetUrl.search = new URLSearchParams(new FormData(form)).toString();
+            actualizarDetalleOperativo(targetUrl.toString());
+        });
+
+        document.addEventListener("change", function (event) {
+            const control = event.target.closest("[data-dashboard-operativo-autosubmit]");
+            if (!control || !control.form) {
+                return;
+            }
+            control.form.requestSubmit();
         });
     });
 

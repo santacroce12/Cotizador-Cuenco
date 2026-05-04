@@ -8,10 +8,12 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from functools import wraps
+from html import unescape
 from io import BytesIO
 from pathlib import Path
 
 import jwt
+import requests
 from flask import Flask, Response, flash, g, jsonify, redirect, render_template, request, url_for
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -112,6 +114,11 @@ REMINDER_POLL_SECONDS = 60
 _reminder_worker_lock = threading.Lock()
 _reminder_worker_started = False
 NUMERO_COTIZACION_PREFIX = "CT"
+BNA_PERSONAS_URL = "https://www.bna.com.ar/Personas"
+BNA_TC_CACHE_SECONDS = 30 * 60
+BNA_USD_SOURCE = str(os.getenv("BNA_USD_SOURCE") or LOCAL_SETTINGS.get("BNA_USD_SOURCE") or "billetes_venta").strip().lower()
+_bna_exchange_rate_lock = threading.Lock()
+_bna_exchange_rate_cache = {"fetched_at": None, "payload": None}
 
 
 class Cotizacion(db.Model):
@@ -132,8 +139,12 @@ class Cotizacion(db.Model):
     cliente_cuit = db.Column(db.String(50))
     familia = db.Column(db.String(50))
     fecha = db.Column(db.DateTime, default=datetime.utcnow)
-    moneda = db.Column(db.String(10), default="ARS")
+    moneda = db.Column(db.String(10), default="USD")
+    tipo_cambio_usado = db.Column(db.Float)
     condicion_iva = db.Column(db.String(50))
+    carga_fiscal_pct = db.Column(db.Float, default=0.0)
+    carga_fiscal_monto = db.Column(db.Float, default=0.0)
+    total_carga_fiscal = db.Column(db.Float, default=0.0)
     total_neto = db.Column(db.Float)
     total_iva = db.Column(db.Float)
     total_final = db.Column(db.Float)
@@ -147,9 +158,11 @@ class ItemCotizacion(db.Model):
     detalle = db.Column(db.Text)
     cantidad = db.Column(db.Float)
     costo_unitario = db.Column(db.Float)
+    iva_compra_pct = db.Column(db.Float, default=0.0)
     costo_extra = db.Column(db.Float, default=5.0)
     margen = db.Column(db.Float)
     descuento_pct = db.Column(db.Float, default=0.0)
+    carga_fiscal = db.Column(db.Float, default=0.0)
     iva_item = db.Column(db.Float, default=21.0)
     precio_venta = db.Column(db.Float)
     subtotal = db.Column(db.Float)
@@ -176,9 +189,10 @@ class ItemCotizacion(db.Model):
     @property
     def precio_lista_unitario(self):
         costo = self.costo_unitario or 0.0
+        iva_compra = (self.iva_compra_pct or 0.0) / 100.0
         extra = (self.costo_extra or 0.0) / 100.0
         margen = self.margen or 0.0
-        return costo * (1 + extra) * (1 + margen)
+        return costo * (1 + iva_compra + extra) * (1 + margen)
 
     @property
     def descuento_total(self):
@@ -229,9 +243,196 @@ class Auditoria(db.Model):
     entidad_ref = db.Column(db.String(80))
     detalle = db.Column(db.Text)
     fecha = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
     usuario = db.relationship("Usuario", backref="auditorias", lazy=True)
 
+
+def parsear_numero_bna(valor):
+    texto = re.sub(r"[^0-9,.\-]", "", str(valor or "").strip())
+    if not texto:
+        raise ValueError("Valor vacio")
+    if "," in texto and "." in texto:
+        if texto.rfind(",") > texto.rfind("."):
+            texto = texto.replace(".", "").replace(",", ".")
+        else:
+            texto = texto.replace(",", "")
+    elif "," in texto:
+        texto = texto.replace(",", ".")
+    return float(texto)
+
+
+def obtener_configuracion_fuente_bna():
+    fuente = BNA_USD_SOURCE
+    if fuente == "divisas_venta":
+        return {
+            "source_code": "divisas_venta",
+            "tab_id": "divisas",
+            "label": "BNA divisa vendedora",
+            "item": "Dolar U.S.A",
+        }
+    return {
+        "source_code": "billetes_venta",
+        "tab_id": "billetes",
+        "label": "BNA billete vendedor",
+        "item": "Dolar U.S.A",
+    }
+
+
+def extraer_tipo_cambio_bna(html):
+    config = obtener_configuracion_fuente_bna()
+    contenido = unescape(html or "")
+    tabla = re.search(
+        rf'<div class="tab-pane[^"]*" id="{config["tab_id"]}".*?<table class="table cotizacion">(.*?)</table>',
+        contenido,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if not tabla:
+        raise ValueError(f"No se encontro la tabla {config['tab_id']} en BNA")
+
+    bloque_tabla = tabla.group(1)
+    fecha_match = re.search(r'<th class="fechaCot">\s*([^<]+)\s*</th>', bloque_tabla, re.IGNORECASE)
+    fila_match = re.search(
+        rf'<td class="tit">\s*{re.escape(config["item"])}\s*</td>\s*<td>\s*([^<]+)\s*</td>\s*<td>\s*([^<]+)\s*</td>',
+        bloque_tabla,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if not fila_match:
+        raise ValueError(f"No se encontro la fila {config['item']} en BNA")
+
+    compra_raw, venta_raw = fila_match.groups()
+    hora_match = re.search(
+        rf'<div class="tab-pane[^"]*" id="{config["tab_id"]}".*?Hora Actualizaci[oó]n:\s*([^<]+)</div>',
+        contenido,
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    return {
+        "ok": True,
+        "rate": parsear_numero_bna(venta_raw),
+        "buy_rate": parsear_numero_bna(compra_raw),
+        "date": (fecha_match.group(1).strip() if fecha_match else ""),
+        "time": (hora_match.group(1).strip() if hora_match else ""),
+        "label": config["label"],
+        "source_code": config["source_code"],
+        "item": config["item"],
+        "source_url": BNA_PERSONAS_URL,
+    }
+
+
+def obtener_tipo_cambio_oficial_bna(force=False):
+    ahora = time.time()
+    with _bna_exchange_rate_lock:
+        cache = _bna_exchange_rate_cache.get("payload")
+        fetched_at = _bna_exchange_rate_cache.get("fetched_at")
+        if not force and cache and fetched_at and (ahora - fetched_at) < BNA_TC_CACHE_SECONDS:
+            return cache
+
+    try:
+        response = requests.get(
+            BNA_PERSONAS_URL,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Cotizador Cuenco Tech)",
+                "Accept-Language": "es-AR,es;q=0.9",
+            },
+            timeout=15,
+        )
+        response.raise_for_status()
+        html = response.text
+        payload = extraer_tipo_cambio_bna(html)
+        payload["fetched_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        payload["stale"] = False
+        with _bna_exchange_rate_lock:
+            _bna_exchange_rate_cache["payload"] = payload
+            _bna_exchange_rate_cache["fetched_at"] = ahora
+        return payload
+    except (requests.RequestException, TimeoutError, ValueError) as exc:
+        with _bna_exchange_rate_lock:
+            cache = _bna_exchange_rate_cache.get("payload")
+        if cache:
+            payload = dict(cache)
+            payload["stale"] = True
+            payload["error"] = str(exc)
+            return payload
+        config = obtener_configuracion_fuente_bna()
+        return {
+            "ok": False,
+            "rate": None,
+            "buy_rate": None,
+            "date": "",
+            "time": "",
+            "label": config["label"],
+            "source_code": config["source_code"],
+            "item": config["item"],
+            "source_url": BNA_PERSONAS_URL,
+            "error": str(exc),
+            "stale": False,
+        }
+
+
+def normalizar_tipo_cambio_valor(valor):
+    try:
+        tasa = float(valor)
+    except (TypeError, ValueError):
+        return None
+    if tasa <= 0:
+        return None
+    return round(tasa, 4)
+
+
+def construir_contexto_tipo_cambio_cotizador(cotizacion=None):
+    payload = obtener_tipo_cambio_oficial_bna()
+    guardado = normalizar_tipo_cambio_valor(cotizacion.tipo_cambio_usado if cotizacion else None)
+    actual = normalizar_tipo_cambio_valor(payload.get("rate") if isinstance(payload, dict) else None)
+    inicial = guardado or actual or ""
+
+    if guardado:
+        estado_texto = f"Tipo guardado en esta cotizacion: {guardado:.4f}."
+        estado_error = False
+        if payload and payload.get("ok") and actual:
+            estado_texto += f" BNA actual: {actual:.4f}"
+            if payload.get("date"):
+                estado_texto += f" - {payload['date']}"
+            if payload.get("time"):
+                estado_texto += f" {payload['time']}"
+            if payload.get("stale"):
+                estado_texto += " - ultimo dato en cache"
+            if abs(actual - guardado) > 0.00005:
+                estado_texto += ". Usa actualizar para reemplazarlo."
+        else:
+            estado_texto += " Usa actualizar para consultar el BNA actual."
+        return {
+            "payload": payload,
+            "guardado": guardado,
+            "actual": actual,
+            "inicial": inicial,
+            "estado_texto": estado_texto,
+            "estado_error": estado_error,
+        }
+
+    if payload and payload.get("ok") and actual:
+        estado_texto = payload.get("label") or "BNA oficial"
+        if payload.get("date"):
+            estado_texto += f" - {payload['date']}"
+        if payload.get("time"):
+            estado_texto += f" {payload['time']}"
+        if payload.get("stale"):
+            estado_texto += " - ultimo dato en cache"
+        return {
+            "payload": payload,
+            "guardado": None,
+            "actual": actual,
+            "inicial": inicial,
+            "estado_texto": estado_texto,
+            "estado_error": False,
+        }
+
+    return {
+        "payload": payload,
+        "guardado": None,
+        "actual": None,
+        "inicial": inicial,
+        "estado_texto": "No se pudo consultar el BNA en este momento.",
+        "estado_error": True,
+    }
 
 def formatear_numero_cotizacion(anio, secuencia):
     return f"{NUMERO_COTIZACION_PREFIX}-{int(anio):04d}-{int(secuencia):04d}"
@@ -300,7 +501,7 @@ def admin_required(f):
         if not current_user:
             return redirect(url_for("login", next=request.path))
         if not current_user.is_admin:
-            if request.endpoint in {"agregar_familia_api", "eliminar_cotizacion"}:
+            if request.endpoint == "eliminar_cotizacion":
                 return jsonify({"error": "admin_required"}), 403
             return redirect(url_for("index"))
         return f(*args, **kwargs)
@@ -335,12 +536,21 @@ with app.app_context():
     if "costo_extra" not in columnas_item:
         db.session.execute(db.text("ALTER TABLE item_cotizacion ADD COLUMN costo_extra FLOAT DEFAULT 5.0"))
         db.session.commit()
+    if "iva_compra_pct" not in columnas_item:
+        db.session.execute(db.text("ALTER TABLE item_cotizacion ADD COLUMN iva_compra_pct FLOAT DEFAULT 0.0"))
+        db.session.commit()
     if "descuento_pct" not in columnas_item:
         db.session.execute(db.text("ALTER TABLE item_cotizacion ADD COLUMN descuento_pct FLOAT DEFAULT 0.0"))
+        db.session.commit()
+    if "carga_fiscal" not in columnas_item:
+        db.session.execute(db.text("ALTER TABLE item_cotizacion ADD COLUMN carga_fiscal FLOAT DEFAULT 0.0"))
         db.session.commit()
     columnas_cot = [col[1] for col in db.session.execute(db.text("PRAGMA table_info(cotizacion)")).fetchall()]
     if "moneda" not in columnas_cot:
         db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN moneda VARCHAR(10) DEFAULT 'ARS'"))
+        db.session.commit()
+    if "tipo_cambio_usado" not in columnas_cot:
+        db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN tipo_cambio_usado FLOAT"))
         db.session.commit()
     if "condicion_iva" not in columnas_cot:
         db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN condicion_iva VARCHAR(50)"))
@@ -377,6 +587,15 @@ with app.app_context():
         db.session.commit()
     if "familia" not in columnas_cot:
         db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN familia VARCHAR(50)"))
+        db.session.commit()
+    if "carga_fiscal_pct" not in columnas_cot:
+        db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN carga_fiscal_pct FLOAT DEFAULT 0.0"))
+        db.session.commit()
+    if "carga_fiscal_monto" not in columnas_cot:
+        db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN carga_fiscal_monto FLOAT DEFAULT 0.0"))
+        db.session.commit()
+    if "total_carga_fiscal" not in columnas_cot:
+        db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN total_carga_fiscal FLOAT DEFAULT 0.0"))
         db.session.commit()
     db.session.execute(
         db.text("UPDATE cotizacion SET estado = 'En progreso' WHERE estado IS NULL OR TRIM(estado) = ''")
@@ -1013,9 +1232,11 @@ def construir_items_precargados(cotizacion):
                 "detalle": item.detalle or "",
                 "cantidad": normalizar_cantidad_entera(item.cantidad, default=1),
                 "costo_unitario": item.costo_unitario or 0,
+                "iva_compra_pct": item.iva_compra_pct or 0,
                 "costo_extra": item.costo_extra or 0,
                 "margen": round((item.margen or 0) * 100, 2),
                 "descuento_pct": item.descuento_pct or 0,
+                "carga_fiscal": item.carga_fiscal or 0,
                 "iva_item": item.iva_item or 0,
                 "imagen_url": item.imagen_url or "",
                 "preview_url": preview_url,
@@ -1026,6 +1247,7 @@ def construir_items_precargados(cotizacion):
 
 def renderizar_cotizador(cotizacion=None):
     clientes = Cliente.query.order_by(Cliente.nombre).all()
+    tipo_cambio_ctx = construir_contexto_tipo_cambio_cotizador(cotizacion)
     return render_template(
         "cotizador.html",
         clientes=clientes,
@@ -1035,6 +1257,12 @@ def renderizar_cotizador(cotizacion=None):
         familias_cotizacion=obtener_familias_para_selector(cotizacion.familia if cotizacion else None),
         smtp_configurado=smtp_esta_configurado(),
         followup_default_email=obtener_config_smtp()["default_to"],
+        tipo_cambio_oficial=tipo_cambio_ctx["payload"],
+        tipo_cambio_inicial=tipo_cambio_ctx["inicial"],
+        tipo_cambio_guardado=tipo_cambio_ctx["guardado"],
+        tipo_cambio_actual=tipo_cambio_ctx["actual"],
+        tipo_cambio_estado_texto=tipo_cambio_ctx["estado_texto"],
+        tipo_cambio_estado_error=tipo_cambio_ctx["estado_error"],
     )
 
 
@@ -1070,7 +1298,7 @@ def generar_excel_cotizacion(cotizacion):
         ws.cell(row=row_idx, column=1).border = border
         ws.cell(row=row_idx, column=2).border = border
 
-    ws.merge_cells("A1:J1")
+    ws.merge_cells("A1:N1")
     ws["A1"] = f"Cotizacion {cotizacion.numero_cotizacion or cotizacion.id}"
     ws["A1"].font = title_font
     ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
@@ -1092,6 +1320,7 @@ def generar_excel_cotizacion(cotizacion):
         ("Razon social cliente", cotizacion.cliente_razon_social or ""),
         ("CUIT cliente", cotizacion.cliente_cuit or ""),
         ("Moneda", cotizacion.moneda or "ARS"),
+        ("Tipo de cambio usado", cotizacion.tipo_cambio_usado if cotizacion.tipo_cambio_usado is not None else ""),
         ("Condicion IVA", cotizacion.condicion_iva or ""),
     ]
     for label, value in datos_generales:
@@ -1103,11 +1332,14 @@ def generar_excel_cotizacion(cotizacion):
         "Producto / Servicio",
         "Descripcion",
         "Cantidad",
-        "Costo unitario",
-        "Costo extra %",
+        "Costo neto unitario",
+        "IVA compra %",
+        "Otros %",
         "Margen %",
         "Descuento %",
+        "Carga fiscal %",
         "IVA %",
+        "Ganancia neta U.",
         "Precio venta unitario",
         "Precio venta total",
         "Subtotal final",
@@ -1116,19 +1348,35 @@ def generar_excel_cotizacion(cotizacion):
         ws.cell(row=row, column=col_idx, value=header)
     style_row(row, fill=dark_fill, font=white_font, alignment=Alignment(horizontal="center"))
 
-    money_columns = {4, 9, 10, 11}
-    percentage_columns = {5, 6, 7, 8}
+    money_columns = {4, 11, 12, 13, 14}
+    percentage_columns = {5, 6, 7, 8, 9, 10}
+    costo_neto_real = 0.0
+    iva_compra_total = 0.0
+    otros_costos_total = 0.0
     for item in cotizacion.items:
         row += 1
+        cantidad = normalizar_cantidad_entera(item.cantidad, default=1)
+        costo_unitario = item.costo_unitario or 0.0
+        iva_compra_pct = item.iva_compra_pct or 0.0
+        extra_pct = item.costo_extra or 0.0
+        costo_real_unitario = costo_unitario * (1 + (extra_pct / 100.0))
+        ganancia_neta_unitaria = (item.precio_venta or 0.0) - costo_real_unitario - ((item.precio_venta or 0.0) * ((item.carga_fiscal or 0.0) / 100.0))
+        costo_base_total = cantidad * costo_unitario
+        iva_compra_total += costo_base_total * (iva_compra_pct / 100.0)
+        otros_costos_total += costo_base_total * (extra_pct / 100.0)
+        costo_neto_real += costo_base_total + (costo_base_total * (extra_pct / 100.0))
         values = [
             item.descripcion or "",
             item.detalle or "",
-            normalizar_cantidad_entera(item.cantidad, default=1),
-            item.costo_unitario or 0,
-            item.costo_extra or 0,
+            cantidad,
+            costo_unitario,
+            iva_compra_pct,
+            extra_pct,
             (item.margen or 0) * 100,
             item.descuento_pct or 0,
+            item.carga_fiscal or 0,
             item.iva_item or 0,
+            ganancia_neta_unitaria,
             item.precio_venta or 0,
             item.precio_venta_total or 0,
             item.subtotal or 0,
@@ -1143,24 +1391,34 @@ def generar_excel_cotizacion(cotizacion):
 
     row += 2
     resumen_inicio = row
+    subtotal_neto = cotizacion.total_neto or 0.0
+    descuento_total = round(sum((item.descuento_total or 0.0) for item in cotizacion.items), 2)
+    total_carga_fiscal = cotizacion.total_carga_fiscal or 0.0
+    ganancia_neta_bolsillo = subtotal_neto - costo_neto_real - total_carga_fiscal
+    iva_a_pagar = (cotizacion.total_iva or 0.0) - iva_compra_total
     resumen = [
-        ("Subtotal neto", cotizacion.total_neto or 0),
-        ("Descuento total", round(sum((item.descuento_total or 0.0) for item in cotizacion.items), 2)),
+        ("Costo neto real (Base + Otros)", round(costo_neto_real, 2)),
+        ("IVA compra credito", round(iva_compra_total, 2)),
+        ("IVA a pagar estimado", round(iva_a_pagar, 2)),
+        ("Descuento total", descuento_total),
+        ("Subtotal venta neto", subtotal_neto),
+        ("Carga fiscal retenida", round(total_carga_fiscal, 2)),
+        ("Ganancia neta (Bolsillo)", round(ganancia_neta_bolsillo, 2)),
         ("IVA total", cotizacion.total_iva or 0),
-        ("Total final", cotizacion.total_final or 0),
+        ("Total a cobrar", cotizacion.total_final or 0),
     ]
     for idx, (label, value) in enumerate(resumen):
         r = resumen_inicio + idx
-        ws.cell(row=r, column=8, value=label)
-        ws.cell(row=r, column=9, value=value)
-        ws.cell(row=r, column=8).font = bold_font
-        ws.cell(row=r, column=8).fill = total_fill
-        ws.cell(row=r, column=8).border = border
-        ws.cell(row=r, column=9).border = border
-        ws.cell(row=r, column=9).number_format = '#,##0.00'
-        if label == "Total final":
-            ws.cell(row=r, column=8).font = Font(bold=True, color="0F172A")
-            ws.cell(row=r, column=9).font = Font(bold=True, color="0F172A")
+        ws.cell(row=r, column=11, value=label)
+        ws.cell(row=r, column=12, value=value)
+        ws.cell(row=r, column=11).font = bold_font
+        ws.cell(row=r, column=11).fill = total_fill
+        ws.cell(row=r, column=11).border = border
+        ws.cell(row=r, column=12).border = border
+        ws.cell(row=r, column=12).number_format = '#,##0.00'
+        if label == "Total a cobrar":
+            ws.cell(row=r, column=11).font = Font(bold=True, color="0F172A")
+            ws.cell(row=r, column=12).font = Font(bold=True, color="0F172A")
 
     for column, width in {
         "A": 28,
@@ -1170,9 +1428,13 @@ def generar_excel_cotizacion(cotizacion):
         "E": 12,
         "F": 12,
         "G": 12,
-        "H": 18,
-        "I": 18,
-        "J": 16,
+        "H": 12,
+        "I": 10,
+        "J": 18,
+        "K": 18,
+        "L": 18,
+        "M": 16,
+        "N": 16,
     }.items():
         ws.column_dimensions[column].width = width
 
@@ -1414,6 +1676,7 @@ def resolver_estado_dashboard(valor):
 def resolver_filtros_dashboard_request():
     estado = resolver_estado_dashboard(request.args.get("estado"))
     familia = normalizar_familia_cotizacion(request.args.get("familia"))
+    op_familia = normalizar_familia_cotizacion(request.args.get("op_familia"))
     sector = normalizar_sector_cliente(request.args.get("sector"))
     subsector = (
         normalizar_subsector_cliente(sector, request.args.get("subsector"))
@@ -1434,6 +1697,7 @@ def resolver_filtros_dashboard_request():
     return {
         "estado": estado,
         "familia": familia,
+        "op_familia": op_familia,
         "sector": sector,
         "subsector": subsector,
         "moneda": moneda,
@@ -1462,7 +1726,10 @@ def construir_query_dashboard_periodo(filtros):
 
 
 def construir_contexto_dashboard_operativo(query_periodo, filtros):
-    query_tabla = aplicar_filtro_estado_dashboard(query_periodo, filtros["estado"])
+    query_tabla = query_periodo
+    if filtros.get("op_familia"):
+        query_tabla = query_tabla.filter(Cotizacion.familia == filtros["op_familia"])
+    query_tabla = aplicar_filtro_estado_dashboard(query_tabla, filtros["estado"])
     paginacion = paginar_query(
         query_tabla.order_by(Cotizacion.fecha.desc(), Cotizacion.id.desc()),
         page=filtros.get("op_page", 1),
@@ -1479,6 +1746,7 @@ def construir_contexto_dashboard_operativo(query_periodo, filtros):
         "filtro_desde": filtros["desde"],
         "filtro_hasta": filtros["hasta"],
         "filtro_familia": filtros["familia"] or "",
+        "filtro_op_familia": filtros["op_familia"] or "",
         "filtro_sector": filtros["sector"] or "",
         "filtro_subsector": filtros["subsector"] or "",
         "filtro_moneda": filtros["moneda"] or "",
@@ -1493,9 +1761,14 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     if cliente_id_raw.isdigit():
         cliente_sel = db.session.get(Cliente, int(cliente_id_raw))
 
-    moneda = (request.form.get("moneda") or "ARS").upper()
+    moneda = (request.form.get("moneda") or "USD").upper()
     if moneda not in ("ARS", "USD"):
-        moneda = "ARS"
+        moneda = "USD"
+    tipo_cambio_usado = normalizar_tipo_cambio_valor(request.form.get("tipo_cambio"))
+    if tipo_cambio_usado is None:
+        tipo_cambio_usado = normalizar_tipo_cambio_valor(cotizacion.tipo_cambio_usado if cotizacion else None)
+    if tipo_cambio_usado is None:
+        tipo_cambio_usado = normalizar_tipo_cambio_valor(obtener_tipo_cambio_oficial_bna().get("rate"))
 
     condicion_iva = request.form.get("condicion_iva") or "Consumidor Final"
     if condicion_iva not in ("Exento", "Consumidor Final", "Responsable Inscrito"):
@@ -1515,6 +1788,10 @@ def persistir_cotizacion_desde_form(cotizacion=None):
             nombre_fantasia=NOMBRE_FANTASIA,
             razon_social=RAZON_SOCIAL,
             cuit=CUIT,
+            tipo_cambio_usado=tipo_cambio_usado,
+            carga_fiscal_pct=0.0,
+            carga_fiscal_monto=0.0,
+            total_carga_fiscal=0.0,
             total_neto=0.0,
             total_iva=0.0,
             total_final=0.0,
@@ -1539,7 +1816,10 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     familia_form = normalizar_familia_cotizacion(request.form.get("familia"))
     cotizacion.familia = familia_form or familia_anterior
     cotizacion.moneda = moneda
+    cotizacion.tipo_cambio_usado = tipo_cambio_usado
     cotizacion.condicion_iva = condicion_iva
+    cotizacion.carga_fiscal_pct = 0.0
+    cotizacion.carga_fiscal_monto = 0.0
     preparar_seguimiento_cotizacion(cotizacion, cliente_sel=cliente_sel)
 
     descs = request.form.getlist("desc[]")
@@ -1549,14 +1829,17 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     imagenes_actuales = request.form.getlist("imagen_actual[]")
     cants = request.form.getlist("cant[]")
     costs = request.form.getlist("costo[]")
+    iva_compras = request.form.getlist("iva_compra[]")
     extras = request.form.getlist("extra[]")
     margs = request.form.getlist("margen[]")
     descuentos = request.form.getlist("descuento[]")
+    cargas_fiscales = request.form.getlist("carga_fiscal[]")
     iva_items = request.form.getlist("iva_item[]")
 
     items_existentes = {str(item.id): item for item in cotizacion.items if item.id}
     neto_total = 0.0
     iva_total = 0.0
+    carga_fiscal_total_acum = 0.0
     imagenes_preparadas = {}
 
     try:
@@ -1579,17 +1862,21 @@ def persistir_cotizacion_desde_form(cotizacion=None):
 
         try:
             costo = float(costs[i] if i < len(costs) else 0)
+            iva_compra_pct = float(iva_compras[i] if i < len(iva_compras) else 0)
             extra_pct = float(extras[i] if i < len(extras) else 5.0)
             margen_pct = float(margs[i] if i < len(margs) else 0)
             descuento_pct = float(descuentos[i] if i < len(descuentos) else 0)
+            carga_pct = float(cargas_fiscales[i] if i < len(cargas_fiscales) else 0)
         except ValueError:
             continue
 
         cantidad = normalizar_cantidad_entera(cants[i] if i < len(cants) else 1, default=1)
         costo = max(0.0, costo)
+        iva_compra_pct = max(0.0, iva_compra_pct)
         extra_pct = max(0.0, extra_pct)
         margen_pct = max(0.0, margen_pct)
         descuento_pct = min(100.0, max(0.0, descuento_pct))
+        carga_pct = max(0.0, carga_pct)
         margen_ratio = margen_pct / 100.0
         descuento_ratio = descuento_pct / 100.0
 
@@ -1600,11 +1887,12 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         if iva_pct not in (21.0, 10.5, 0.0):
             iva_pct = 21.0
 
-        costo_con_extra = costo * (1 + (extra_pct / 100.0))
+        costo_con_extra = costo * (1 + (iva_compra_pct / 100.0) + (extra_pct / 100.0))
         p_venta_lista = costo_con_extra * (1 + margen_ratio)
         p_venta_neto = p_venta_lista * (1 - descuento_ratio)
         sub_neto = cantidad * p_venta_neto
-        iva_pct_aplicado = iva_pct if cotizacion.condicion_iva != "Exento" else 0.0
+        monto_carga_item = sub_neto * (carga_pct / 100.0)
+        iva_pct_aplicado = iva_pct
         monto_iva_item = sub_neto * (iva_pct_aplicado / 100.0)
 
         row_id = row_ids[i] if i < len(row_ids) else str(i)
@@ -1630,15 +1918,18 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         item.detalle = detalle
         item.cantidad = cantidad
         item.costo_unitario = costo
+        item.iva_compra_pct = iva_compra_pct
         item.costo_extra = extra_pct
         item.margen = margen_ratio
         item.descuento_pct = descuento_pct
+        item.carga_fiscal = carga_pct
         item.iva_item = iva_pct_aplicado
         item.precio_venta = round(p_venta_neto, 2)
         item.subtotal = round(sub_neto + monto_iva_item, 2)
         item.imagen_url = imagen_final
 
         neto_total += sub_neto
+        carga_fiscal_total_acum += monto_carga_item
         iva_total += monto_iva_item
 
     for item_sobrante in items_existentes.values():
@@ -1659,6 +1950,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     cotizacion.total_neto = round(neto_total, 2)
     cotizacion.total_iva = round(iva_total, 2)
     cotizacion.total_final = round(sum(item.subtotal for item in cotizacion.items), 2)
+    cotizacion.total_carga_fiscal = round(carga_fiscal_total_acum, 2)
 
     db.session.add(cotizacion)
     db.session.commit()
@@ -1682,6 +1974,15 @@ def persistir_cotizacion_desde_form(cotizacion=None):
             detalle=f"Estado anterior: {estado_anterior}. Estado nuevo: {cotizacion.estado}.",
         )
     return cotizacion, None
+
+
+@app.route("/api/tipo-cambio/oficial")
+@token_required
+def api_tipo_cambio_oficial():
+    force = str(request.args.get("refresh") or "").strip().lower() in ("1", "true", "yes")
+    payload = obtener_tipo_cambio_oficial_bna(force=force)
+    status = 200 if payload.get("ok") else 502
+    return jsonify(payload), status
 
 
 @app.route("/setup-admin", methods=["GET", "POST"])
@@ -1813,7 +2114,6 @@ def usuarios_page():
 
 @app.route("/familias", methods=["GET", "POST"])
 @token_required
-@admin_required
 def familias_page():
     if request.method == "POST":
         nombre = normalizar_nombre_familia(request.form.get("nombre"))
@@ -1851,7 +2151,6 @@ def familias_page():
 
 @app.route("/familias/<int:id>/editar", methods=["POST"])
 @token_required
-@admin_required
 def editar_familia(id):
     familia = FamiliaCotizacion.query.get_or_404(id)
     nombre_anterior = familia.nombre
@@ -1888,7 +2187,6 @@ def editar_familia(id):
 
 @app.route("/familias/<int:id>/eliminar", methods=["POST"])
 @token_required
-@admin_required
 def eliminar_familia(id):
     familia = FamiliaCotizacion.query.get_or_404(id)
     uso = Cotizacion.query.filter(Cotizacion.familia == familia.nombre).count()
@@ -1914,7 +2212,6 @@ def eliminar_familia(id):
 
 @app.route("/api/familias", methods=["POST"])
 @token_required
-@admin_required
 def agregar_familia_api():
     data = request.get_json(silent=True) or {}
     nombre = normalizar_nombre_familia(data.get("nombre"))
@@ -2060,6 +2357,7 @@ def historial_page():
 
 @app.route("/dashboard")
 @token_required
+@admin_required
 def dashboard_page():
     filtros = resolver_filtros_dashboard_request()
     estado = filtros["estado"]
@@ -2259,15 +2557,21 @@ def dashboard_page():
 
 @app.route("/dashboard/detalle-operativo")
 @token_required
+@admin_required
 def dashboard_detalle_operativo():
     filtros = resolver_filtros_dashboard_request()
     query_periodo = construir_query_dashboard_periodo(filtros)
     contexto_operativo = construir_contexto_dashboard_operativo(query_periodo, filtros)
-    return render_template("_dashboard_operativo.html", **contexto_operativo)
+    return render_template(
+        "_dashboard_operativo.html",
+        familias_disponibles=obtener_familias_para_filtros(),
+        **contexto_operativo,
+    )
 
 
 @app.route("/auditoria")
 @token_required
+@admin_required
 def auditoria_page():
     usuario_filtro = (request.args.get("usuario") or "").strip()
     page = parsear_entero_positivo(request.args.get("page"), default=1) or 1

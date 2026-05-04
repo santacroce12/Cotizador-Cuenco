@@ -458,6 +458,7 @@
                         <i class="bi bi-clock-history"></i> Historial
                     </a>
                 </li>
+                {% if current_user.is_admin %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.path == '/auditoria' %}active{% endif %}" href="/auditoria">
                         <i class="bi bi-journal-text"></i> Auditoría
@@ -468,16 +469,20 @@
                         <i class="bi bi-speedometer2"></i> Dashboard
                     </a>
                 </li>
+                {% endif %}
             </ul>
             <div class="d-flex align-items-center gap-2 ms-auto mt-3 mt-lg-0">
-                {% if current_user.is_admin %}
                 <a class="btn btn-sm {% if request.path.startswith('/familias') %}btn-light text-dark{% else %}btn-outline-light{% endif %}" href="/familias">
                     <i class="bi bi-diagram-3"></i> Familias
                 </a>
+                {% if current_user.is_admin %}
                 <a class="btn btn-sm {% if request.path == '/usuarios' %}btn-light text-dark{% else %}btn-outline-light{% endif %}" href="/usuarios">
                     <i class="bi bi-people"></i> Usuarios
                 </a>
                 {% endif %}
+                <span class="badge {% if current_user.is_admin %}bg-light text-dark{% else %}bg-secondary{% endif %}">
+                    {{ "Admin" if current_user.is_admin else "Operador" }}
+                </span>
                 <span class="navbar-text text-light opacity-75">{{ current_user.username }}</span>
                 <a class="btn btn-sm btn-outline-light" href="{{ url_for('logout') }}">
                     <i class="bi bi-box-arrow-right"></i> Salir
@@ -494,5 +499,19 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
+<script>
+    (function limpiarBorradorCotizadorGuardado() {
+        try {
+            const pendingKeyName = "cuencotech:cotizacion:pending-draft-key";
+            const draftKey = window.sessionStorage.getItem(pendingKeyName);
+            if (draftKey && window.location.pathname.startsWith("/historial")) {
+                window.localStorage.removeItem(draftKey);
+                window.sessionStorage.removeItem(pendingKeyName);
+            }
+        } catch (_error) {
+            // El borrador es una ayuda local; si el navegador lo bloquea, no afecta al sistema.
+        }
+    })();
+</script>
 </body>
 </html>

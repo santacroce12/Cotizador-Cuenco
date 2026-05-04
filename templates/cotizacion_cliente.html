@@ -103,6 +103,9 @@
         <div class="col-6 text-end">
             <h2 class="h4 quote-doc-number">PRESUPUESTO #{{ cot.numero_cotizacion or ("%04d" | format(cot.id)) }}</h2>
             <p class="fw-bold mb-1">Moneda: {{ "Pesos Argentinos" if cot.moneda == "ARS" else "Dolares Estadounidenses" }}</p>
+            {% if cot.tipo_cambio_usado %}
+            <p class="text-muted small mb-1">Tipo de cambio usado: 1 USD = $ {{ "{:,.4f}".format(cot.tipo_cambio_usado) }} ARS</p>
+            {% endif %}
             <p class="mb-0">Fecha: {{ cot.fecha.strftime('%d/%m/%Y') }}</p>
         </div>
     </div>
@@ -180,9 +183,6 @@
                 {% if cot.condicion_iva == 'Responsable Inscrito' %}
                 <td class="text-end col-price-unit">$ {{ "{:,.2f}".format(item.precio_venta) }}</td>
                 <td class="col-sale-total">$ {{ "{:,.2f}".format(item.precio_venta * item.cantidad) }}</td>
-                {% elif cot.condicion_iva == 'Exento' %}
-                <td class="text-end col-price-unit">$ {{ "{:,.2f}".format(item.precio_venta) }}</td>
-                <td class="col-sale-total">$ {{ "{:,.2f}".format(item.precio_venta * item.cantidad) }}</td>
                 {% else %}
                 <td class="text-end col-price-unit">$ {{ "{:,.2f}".format(item.precio_venta * (1 + item.iva_porcentaje / 100)) }}</td>
                 <td class="col-sale-total">$ {{ "{:,.2f}".format(item.subtotal) }}</td>
@@ -202,11 +202,6 @@
             <div class="d-flex justify-content-between mb-2">
                 <span class="fw-bold">IVA Total:</span>
                 <span>$ {{ "{:,.2f}".format(cot.total_iva) }}</span>
-            </div>
-            {% elif cot.condicion_iva == 'Exento' %}
-            <div class="d-flex justify-content-between mb-2">
-                <span class="fw-bold">Subtotal:</span>
-                <span>$ {{ "{:,.2f}".format(cot.total_neto) }}</span>
             </div>
             {% else %}
             <div class="mb-2 text-muted small">

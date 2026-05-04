@@ -1,0 +1,422 @@
+import os
+import tempfile
+import unittest
+from io import BytesIO
+from pathlib import Path
+from unittest.mock import patch
+
+os.environ["APP_SECRET_KEY"] = "test-secret"
+_tmp_root = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+_tmp_path = Path(_tmp_root.name)
+os.environ["DATA_DIR"] = str(_tmp_path / "data")
+os.environ["DATABASE_PATH"] = str(_tmp_path / "data" / "test.db")
+os.environ["UPLOADS_PRODUCTOS_DIR"] = str(_tmp_path / "uploads")
+
+import app as cotizador_app
+from app import Cliente, Cotizacion, FamiliaCotizacion, Usuario, app, construir_link_cotizacion, db, generar_excel_cotizacion
+from openpyxl import load_workbook
+
+
+class CotizadorCalculosTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        app.config["TESTING"] = True
+        cls.tmp_root = _tmp_root
+
+    @classmethod
+    def tearDownClass(cls):
+        with app.app_context():
+            db.session.remove()
+            db.engine.dispose()
+        cls.tmp_root.cleanup()
+
+    def setUp(self):
+        with app.app_context():
+            db.session.remove()
+            db.drop_all()
+            db.create_all()
+
+            usuario = Usuario(username="admin", is_admin=True)
+            usuario.set_password("admin123")
+            operador = Usuario(username="operador", is_admin=False)
+            operador.set_password("operador123")
+            cliente_exento = Cliente(
+                nombre="Municipalidad de Lujan",
+                razon_social="Municipalidad de Lujan",
+                cuit="30-12345678-9",
+                condicion_iva="Exento",
+            )
+            cliente_ri = Cliente(
+                nombre="Cliente Responsable",
+                razon_social="Cliente Responsable SA",
+                cuit="30-87654321-0",
+                condicion_iva="Responsable Inscrito",
+            )
+            familia = FamiliaCotizacion(nombre="SEGURIDAD URBANA", activa=True)
+            db.session.add_all([usuario, operador, cliente_exento, cliente_ri, familia])
+            db.session.commit()
+
+            self.cliente_exento_id = cliente_exento.id
+            self.cliente_ri_id = cliente_ri.id
+
+        self.client = app.test_client()
+        response = self.client.post(
+            "/login",
+            data={"username": "admin", "password": "admin123"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def _login(self, username, password):
+        self.client.get("/logout")
+        response = self.client.post(
+            "/login",
+            data={"username": username, "password": password},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def _form_cotizacion(self, **overrides):
+        data = {
+            "cliente_id": str(self.cliente_exento_id),
+            "cliente": "Municipalidad de Lujan",
+            "cliente_razon_social": "Municipalidad de Lujan",
+            "cliente_cuit": "30-12345678-9",
+            "familia": "SEGURIDAD URBANA",
+            "moneda": "USD",
+            "tipo_cambio": "1450",
+            "condicion_iva": "Exento",
+            "estado": "En progreso",
+            "seguimiento_email": "",
+            "seguimiento_cada_dias": "7",
+            "row_id[]": ["row-1"],
+            "item_id[]": [""],
+            "imagen_actual[]": [""],
+            "desc[]": ["Lector DS-K1T321MFWX"],
+            "detalle[]": ["Control de acceso Hikvision con reconocimiento facial"],
+            "cant[]": ["1"],
+            "costo[]": ["95"],
+            "iva_compra[]": ["21"],
+            "extra[]": ["5"],
+            "margen[]": ["60"],
+            "descuento[]": ["0"],
+            "carga_fiscal[]": ["5"],
+            "iva_item[]": ["21"],
+        }
+        data.update(overrides)
+        return data
+
+    def _crear_cotizacion(self, **overrides):
+        response = self.client.post("/", data=self._form_cotizacion(**overrides), follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        with app.app_context():
+            cotizacion = Cotizacion.query.order_by(Cotizacion.id.desc()).first()
+            self.assertIsNotNone(cotizacion)
+            return cotizacion.id
+
+    def _cotizacion(self, cotizacion_id):
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            if cotizacion:
+                list(cotizacion.items)
+            return cotizacion
+
+    def _valor_por_etiqueta(self, ws, etiqueta):
+        for row in ws.iter_rows():
+            for indice, cell in enumerate(row[:-1]):
+                if cell.value == etiqueta:
+                    return row[indice + 1].value
+        self.fail(f"No se encontro la etiqueta {etiqueta!r} en el Excel")
+
+    def test_calculo_completo_y_excel_quedan_alineados(self):
+        cotizacion_id = self._crear_cotizacion()
+
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            item = cotizacion.items[0]
+
+            self.assertEqual(cotizacion.moneda, "USD")
+            self.assertAlmostEqual(cotizacion.tipo_cambio_usado, 1450.0, places=4)
+            self.assertAlmostEqual(item.precio_venta, 191.52, places=2)
+            self.assertAlmostEqual(cotizacion.total_neto, 191.52, places=2)
+            self.assertAlmostEqual(cotizacion.total_iva, 40.22, places=2)
+            self.assertAlmostEqual(cotizacion.total_final, 231.74, places=2)
+            self.assertAlmostEqual(cotizacion.total_carga_fiscal, 9.58, places=2)
+
+            wb = load_workbook(BytesIO(generar_excel_cotizacion(cotizacion)), data_only=True)
+
+        ws = wb.active
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Tipo de cambio usado"), 1450.0, places=4)
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "IVA compra credito"), 19.95, places=2)
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "IVA a pagar estimado"), 20.27, places=2)
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Carga fiscal retenida"), 9.58, places=2)
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Ganancia neta (Bolsillo)"), 82.19, places=2)
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Total a cobrar"), 231.74, places=2)
+
+    def test_formulario_muestra_ayudas_de_calculo(self):
+        payload_bna = {
+            "ok": True,
+            "rate": 1450.0,
+            "date": "24/04/2026",
+            "time": "12:00",
+            "label": "BNA billete vendedor",
+        }
+        with patch.object(cotizador_app, "obtener_tipo_cambio_oficial_bna", return_value=payload_bna):
+            response = self.client.get("/")
+
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Criterio interno de calculo", html)
+        self.assertIn('data-bs-toggle="tooltip"', html)
+        self.assertIn("Costo Neto U.", html)
+        self.assertIn("IVA Compra %", html)
+        self.assertIn("Ganancia Neta (Bolsillo)", html)
+        self.assertIn("inicializarAyudasCalculo", html)
+
+    def test_formulario_cliente_tiene_guardado_con_manejo_de_errores(self):
+        payload_bna = {
+            "ok": True,
+            "rate": 1450.0,
+            "date": "24/04/2026",
+            "time": "12:00",
+            "label": "BNA billete vendedor",
+        }
+        with patch.object(cotizador_app, "obtener_tipo_cambio_oficial_bna", return_value=payload_bna):
+            response = self.client.get("/")
+
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("async function guardarCliente()", html)
+        self.assertIn("Guardando cambios...", html)
+        self.assertIn(".catch(() => ({}))", html)
+        self.assertIn("No se pudo guardar el cliente", html)
+        self.assertIn("function actualizarSubsectores(valorSeleccionado = \"\")", html)
+
+    def test_formulario_tiene_borrador_automatico_para_no_perder_carga(self):
+        payload_bna = {
+            "ok": True,
+            "rate": 1450.0,
+            "date": "24/04/2026",
+            "time": "12:00",
+            "label": "BNA billete vendedor",
+        }
+        with patch.object(cotizador_app, "obtener_tipo_cambio_oficial_bna", return_value=payload_bna):
+            response = self.client.get("/")
+
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Borrador recuperado", html)
+        self.assertIn("cuencotech:cotizacion:draft:new", html)
+        self.assertIn("function inicializarBorradorCotizacion()", html)
+        self.assertIn("function aplicarBorradorCotizacion(draft)", html)
+        self.assertIn("function marcarBorradorComoPendienteDeEnvio()", html)
+        self.assertIn("localStorage.setItem(cotizadorDraftKey", html)
+        self.assertIn("validarImagenesAntesDeEnviar", html)
+        self.assertIn("limpiarBorradorCotizadorGuardado", html)
+
+    def test_api_actualizar_cliente_responde_json_y_actualiza_datos(self):
+        response = self.client.put(
+            f"/api/clientes/{self.cliente_exento_id}",
+            json={
+                "nombre": "Municipalidad de Lujan Editada",
+                "razon_social": "Municipalidad de Lujan",
+                "cuit": "30-12345678-9",
+                "domicilio": "San Martin 100",
+                "sector": "Publico",
+                "subsector": "Municipal",
+                "email": "test@lujan.gob.ar",
+                "telefono": "123",
+                "condicion_iva": "Exento",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["nombre"], "Municipalidad de Lujan Editada")
+        self.assertEqual(data["sector"], "Publico")
+        self.assertEqual(data["subsector"], "Municipal")
+        with app.app_context():
+            cliente = db.session.get(Cliente, self.cliente_exento_id)
+            self.assertEqual(cliente.nombre, "Municipalidad de Lujan Editada")
+
+    def test_usuario_operador_no_ve_ni_accede_dashboard_o_auditoria(self):
+        self._login("operador", "operador123")
+
+        payload_bna = {
+            "ok": True,
+            "rate": 1450.0,
+            "date": "24/04/2026",
+            "time": "12:00",
+            "label": "BNA billete vendedor",
+        }
+        with patch.object(cotizador_app, "obtener_tipo_cambio_oficial_bna", return_value=payload_bna):
+            response = self.client.get("/")
+
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Operador", html)
+        self.assertIn('href="/familias"', html)
+        self.assertNotIn('href="/dashboard"', html)
+        self.assertNotIn('href="/auditoria"', html)
+        self.assertNotIn('href="/usuarios"', html)
+
+        for path in ("/dashboard", "/dashboard/detalle-operativo", "/auditoria"):
+            response = self.client.get(path, follow_redirects=False)
+            self.assertEqual(response.status_code, 302)
+            self.assertTrue(response.headers["Location"].endswith("/"))
+
+    def test_usuario_operador_puede_gestionar_familias_y_editar_cotizaciones(self):
+        cotizacion_id = self._crear_cotizacion()
+        self._login("operador", "operador123")
+
+        response = self.client.get("/familias")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("SEGURIDAD URBANA", response.get_data(as_text=True))
+
+        response = self.client.post("/familias", data={"nombre": "DATA CENTER"}, follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        with app.app_context():
+            familia = FamiliaCotizacion.query.filter_by(nombre="DATA CENTER").first()
+            self.assertIsNotNone(familia)
+            familia_id = familia.id
+
+        response = self.client.post(
+            f"/familias/{familia_id}/editar",
+            data={"nombre": "DATA CENTER PLUS", "activa": "1"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        with app.app_context():
+            self.assertIsNotNone(FamiliaCotizacion.query.filter_by(nombre="DATA CENTER PLUS", activa=True).first())
+
+        response = self.client.post("/api/familias", json={"nombre": "INTEGRACIONES"})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["nombre"], "INTEGRACIONES")
+
+        response = self.client.get(f"/cotizacion/{cotizacion_id}/editar")
+        self.assertEqual(response.status_code, 200)
+
+    def test_detalle_operativo_dashboard_filtra_por_familia_propia(self):
+        self._crear_cotizacion(
+            cliente_id="",
+            cliente="Cliente Seguridad",
+            cliente_razon_social="Cliente Seguridad SA",
+            cliente_cuit="30-11111111-1",
+            familia="SEGURIDAD URBANA",
+        )
+        with app.app_context():
+            db.session.add(FamiliaCotizacion(nombre="DATA CENTER", activa=True))
+            db.session.commit()
+        self._crear_cotizacion(
+            cliente_id="",
+            cliente="Cliente Data Center",
+            cliente_razon_social="Cliente Data Center SA",
+            cliente_cuit="30-22222222-2",
+            familia="DATA CENTER",
+        )
+
+        response = self.client.get("/dashboard/detalle-operativo?periodo=365&op_familia=DATA%20CENTER")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('name="op_familia"', html)
+        self.assertIn("Familia del detalle", html)
+        self.assertIn("Cliente Data Center", html)
+        self.assertNotIn("Cliente Seguridad", html)
+
+    def test_links_de_recordatorio_usan_app_base_url_configurada(self):
+        cotizacion_id = self._crear_cotizacion()
+        cotizacion = self._cotizacion(cotizacion_id)
+
+        with patch.dict(os.environ, {"APP_BASE_URL": "http://192.168.0.200:9000"}):
+            self.assertEqual(
+                construir_link_cotizacion(cotizacion, editar=False),
+                f"http://192.168.0.200:9000/cotizacion/{cotizacion_id}",
+            )
+            self.assertEqual(
+                construir_link_cotizacion(cotizacion, editar=True),
+                f"http://192.168.0.200:9000/cotizacion/{cotizacion_id}/editar",
+            )
+
+    def test_cliente_exento_no_ve_iva_detallado_pero_el_sistema_lo_calcula(self):
+        cotizacion_id = self._crear_cotizacion()
+
+        response = self.client.get(f"/cotizacion/{cotizacion_id}")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Tipo de cambio usado", html)
+        self.assertIn("Los precios unitarios incluyen IVA", html)
+        self.assertNotIn("IVA Total:", html)
+
+        cotizacion = self._cotizacion(cotizacion_id)
+        self.assertAlmostEqual(cotizacion.total_iva, 40.22, places=2)
+        self.assertEqual(cotizacion.condicion_iva, "Exento")
+
+    def test_responsable_inscrito_ve_subtotal_neto_e_iva(self):
+        cotizacion_id = self._crear_cotizacion(
+            cliente_id=str(self.cliente_ri_id),
+            cliente="Cliente Responsable",
+            cliente_razon_social="Cliente Responsable SA",
+            cliente_cuit="30-87654321-0",
+            condicion_iva="Responsable Inscrito",
+        )
+
+        response = self.client.get(f"/cotizacion/{cotizacion_id}")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Subtotal Neto:", html)
+        self.assertIn("IVA Total:", html)
+        self.assertNotIn("Los precios unitarios incluyen IVA", html)
+
+    def test_descuento_solo_aparece_en_pdf_si_alguna_fila_lo_usa(self):
+        sin_descuento_id = self._crear_cotizacion()
+        html_sin_descuento = self.client.get(f"/cotizacion/{sin_descuento_id}").get_data(as_text=True)
+        self.assertNotIn("Desc. %", html_sin_descuento)
+
+        con_descuento_id = self._crear_cotizacion(**{"descuento[]": ["10"]})
+        html_con_descuento = self.client.get(f"/cotizacion/{con_descuento_id}").get_data(as_text=True)
+        cotizacion_con_descuento = self._cotizacion(con_descuento_id)
+
+        self.assertIn("Desc. %", html_con_descuento)
+        self.assertAlmostEqual(cotizacion_con_descuento.total_neto, 172.37, places=2)
+        self.assertAlmostEqual(cotizacion_con_descuento.total_iva, 36.20, places=2)
+        self.assertAlmostEqual(cotizacion_con_descuento.total_final, 208.57, places=2)
+
+    def test_caso_2_tipo_cambio_guardado_no_se_pisa_con_bna_actual(self):
+        cotizacion_id = self._crear_cotizacion()
+
+        payload_bna_nuevo = {
+            "ok": True,
+            "rate": 1500.0,
+            "date": "24/04/2026",
+            "time": "12:00",
+            "label": "BNA billete vendedor",
+        }
+        with patch.object(cotizador_app, "obtener_tipo_cambio_oficial_bna", return_value=payload_bna_nuevo):
+            response_get = self.client.get(f"/cotizacion/{cotizacion_id}/editar")
+            html = response_get.get_data(as_text=True)
+            self.assertEqual(response_get.status_code, 200)
+            self.assertIn("Tipo guardado en esta cotizacion: 1450.0000", html)
+            self.assertIn("BNA actual: 1500.0000", html)
+
+            data = self._form_cotizacion()
+            data.pop("tipo_cambio")
+            response_post = self.client.post(f"/cotizacion/{cotizacion_id}/editar", data=data, follow_redirects=False)
+
+        self.assertEqual(response_post.status_code, 302)
+        cotizacion = self._cotizacion(cotizacion_id)
+        self.assertAlmostEqual(cotizacion.tipo_cambio_usado, 1450.0, places=4)
+
+    def test_cantidades_se_guardan_enteras_y_no_permiten_fracciones(self):
+        cotizacion_id = self._crear_cotizacion(**{"cant[]": ["2.9"]})
+        cotizacion = self._cotizacion(cotizacion_id)
+
+        self.assertEqual(cotizacion.items[0].cantidad, 2)
+        self.assertAlmostEqual(cotizacion.total_neto, 383.04, places=2)
+        self.assertAlmostEqual(cotizacion.total_final, 463.48, places=2)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -13,3 +13,6 @@ storage/uploads/productos/*
 !storage/uploads/productos/.gitkeep
 .aidesigner/*
 !.aidesigner/.gitkeep
+.codex/
+tmp_*
+*.log

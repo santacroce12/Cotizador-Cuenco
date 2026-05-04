@@ -7,37 +7,122 @@
         table-layout: fixed;
     }
 
+    .cotizador-workspace {
+        width: 100%;
+    }
+
+    @media (min-width: 1400px) {
+        .cotizador-workspace {
+            width: min(calc(100vw - 48px), 1760px);
+            margin-left: 50%;
+            transform: translateX(-50%);
+        }
+    }
+
     .cotizador-items-table thead th {
-        font-size: 0.76rem;
-        letter-spacing: 0.03em;
+        font-size: 0.78rem;
+        letter-spacing: 0.025em;
         vertical-align: middle;
         white-space: normal;
-        padding: 0.9rem 0.45rem;
+        padding: 1rem 0.55rem;
+        line-height: 1.25;
+    }
+
+    .th-help-label {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.28rem;
+    }
+
+    .summary-help-label {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+    }
+
+    .field-help-button {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 1px solid rgba(148, 163, 184, 0.65);
+        background: rgba(255, 255, 255, 0.12);
+        color: inherit;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        font-size: 0.72rem;
+        font-weight: 800;
+        line-height: 1;
+        cursor: help;
+        flex: 0 0 auto;
+    }
+
+    .field-help-button.dark {
+        background: rgba(15, 23, 42, 0.08);
+        color: #334155;
+    }
+
+    .calc-help-panel {
+        border: 1px solid #c8d3df;
+        border-radius: 14px;
+        background: #f8fafc;
+        padding: 0.9rem 1rem;
+        color: #334155;
+    }
+
+    .calc-help-title {
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #475569;
+        margin-bottom: 0.55rem;
+    }
+
+    .calc-help-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.55rem 0.85rem;
+        font-size: 0.82rem;
+        line-height: 1.35;
+    }
+
+    .calc-help-grid strong {
+        color: #0f172a;
     }
 
     .cotizador-items-table td {
-        padding: 0.7rem 0.35rem;
+        padding: 0.85rem 0.45rem;
     }
 
     .cotizador-items-table .form-control,
     .cotizador-items-table .form-select {
         width: 100%;
-        padding: 0.55rem 0.6rem;
-        font-size: 0.95rem;
+        padding: 0.68rem 0.72rem;
+        font-size: 0.98rem;
     }
 
     .cotizador-items-table textarea.form-control {
-        min-height: 66px;
+        min-height: 76px;
         resize: vertical;
     }
 
     .cotizador-items-table .ganancia-badge,
     .cotizador-items-table .venta-total-badge {
-        min-width: 84px;
+        min-width: 100%;
         display: inline-flex;
         justify-content: center;
-        font-size: 0.84rem;
-        padding: 0.65rem 0.45rem !important;
+        font-size: 0.9rem;
+        padding: 0.72rem 0.48rem !important;
+    }
+
+    .cotizador-items-table .venta-total-badge {
+        margin-right: 0;
+        white-space: nowrap;
     }
 
     .cotizador-items-table .select-iva {
@@ -49,8 +134,40 @@
         font-size: 0.84rem;
     }
 
+    .cotizador-items-table .item-delete-btn {
+        width: 34px;
+        height: 34px;
+        margin-left: 0.75rem;
+        border-radius: 10px;
+        border: 1px solid #ef4444;
+        background: #fff1f2;
+        color: #dc2626;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+    }
+
+    .cotizador-items-table .item-delete-btn:hover,
+    .cotizador-items-table .item-delete-btn:focus {
+        background: #fee2e2;
+        border-color: #dc2626;
+        color: #b91c1c;
+        transform: translateY(-1px);
+    }
+
+    .cotizador-items-table .item-delete-btn i {
+        font-size: 0.95rem;
+        line-height: 1;
+    }
+
     .table-grid-outline.table-responsive {
         overflow: visible;
+    }
+
+    .cotizador-table-shell {
+        padding: 14px;
     }
 
     .image-upload-cell {
@@ -118,18 +235,24 @@
         min-height: 20px;
     }
 
-    @media (max-width: 1399.98px) {
+    @media (max-width: 1499.98px) {
         .table-grid-outline.table-responsive {
             overflow-x: auto;
             overflow-y: hidden;
         }
 
         .cotizador-items-table {
-            min-width: 1180px;
+            min-width: 1560px;
+        }
+    }
+
+    @media (max-width: 991.98px) {
+        .calc-help-grid {
+            grid-template-columns: 1fr;
         }
     }
 </style>
-<div class="card p-4 page-surface">
+<div class="card p-4 page-surface cotizador-workspace">
     <div class="d-flex align-items-center gap-3 mb-4">
         <h2 class="text-primary mb-0">
             <i class="bi bi-currency-exchange"></i>
@@ -147,6 +270,17 @@
     </div>
     {% endif %}
     {% endwith %}
+
+    <div id="draft-restored-alert" class="alert alert-warning border-0 shadow-sm d-none" role="alert">
+        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+            <div>
+                <strong>Borrador recuperado.</strong>
+                <span id="draft-restored-text">Se restauraron los datos cargados localmente.</span>
+                <div class="small">Por seguridad del navegador, las imagenes nuevas seleccionadas no se pueden recuperar automaticamente.</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-dark" onclick="descartarBorradorCotizacion()">Descartar borrador</button>
+        </div>
+    </div>
 
     <form method="POST" id="form-cotizador" enctype="multipart/form-data" action="{{ url_for('editar_cotizacion', id=cotizacion.id) if modo_edicion else url_for('index') }}">
         <input type="hidden" name="nombre_fantasia" value="Cuenco Tech">
@@ -193,18 +327,34 @@
         <input type="hidden" name="familia" id="input_familia_hidden" value="{{ cotizacion.familia if cotizacion and cotizacion.familia else '' }}">
 
         <div class="row g-3 mb-4 p-3 surface-strip">
-            <div class="col-md-3">
-                <label class="form-label fw-bold small text-muted text-uppercase">Moneda del PDF</label>
+            <div class="col-xl-2 col-md-6">
+                <label class="form-label fw-bold small text-muted text-uppercase">Moneda de la cotizacion</label>
                 <select name="moneda" id="moneda" class="form-select" onchange="calcularTodo()">
+                    <option value="USD" {% if not cotizacion or not cotizacion.moneda or cotizacion.moneda == 'USD' %}selected{% endif %}>Dolares (USD)</option>
                     <option value="ARS" {% if cotizacion and cotizacion.moneda == 'ARS' %}selected{% endif %}>Pesos (ARS)</option>
-                    <option value="USD" {% if cotizacion and cotizacion.moneda == 'USD' %}selected{% endif %}>Dolares (USD)</option>
                 </select>
             </div>
-            <div class="col-md-3">
-                <label class="form-label fw-bold small text-muted text-uppercase">Tipo de Cambio ($)</label>
-                <input type="number" id="tipo_cambio" class="form-control" value="1000" oninput="calcularTodo()">
+            <div class="col-xl-4 col-md-6">
+                <label class="form-label fw-bold small text-muted text-uppercase">Tipo de Cambio Oficial USD/ARS ($)</label>
+                <div class="input-group">
+                    <input
+                        type="number"
+                        name="tipo_cambio"
+                        id="tipo_cambio"
+                        class="form-control"
+                        value="{{ tipo_cambio_inicial }}"
+                        step="0.0001"
+                        readonly
+                    >
+                    <button type="button" class="btn btn-outline-secondary" id="btn-tipo-cambio-refresh" onclick="actualizarTipoCambioOficial(true)" title="Actualizar desde BNA">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+                <div id="tipo_cambio_estado" class="form-text {% if tipo_cambio_estado_error %}text-danger{% endif %}">
+                    {{ tipo_cambio_estado_texto }}
+                </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-xl-3 col-md-6">
                 <label class="form-label fw-bold small text-muted text-uppercase">Condicion IVA</label>
                 <select name="condicion_iva" id="condicion_iva" class="form-select" onchange="calcularTodo()">
                     <option value="Responsable Inscrito" {% if cotizacion and cotizacion.condicion_iva == 'Responsable Inscrito' %}selected{% endif %}>Responsable Inscrito</option>
@@ -212,7 +362,7 @@
                     <option value="Exento" {% if cotizacion and cotizacion.condicion_iva == 'Exento' %}selected{% endif %}>Exento</option>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-xl-3 col-md-6">
                 <label class="form-label fw-bold small text-muted text-uppercase">Estado</label>
                 {% if modo_edicion %}
                 <select name="estado" id="estado_cotizacion" class="form-select estado-select {% if cotizacion and cotizacion.estado == 'Aceptada' %}estado-aceptada{% elif cotizacion and cotizacion.estado == 'Rechazada' %}estado-rechazada{% else %}estado-en-progreso{% endif %}" onchange="actualizarEstiloEstadoForm(this)">
@@ -335,36 +485,73 @@
             </div>
         </div>
 
-        <div class="table-container mt-4">
+        <div class="calc-help-panel mt-4">
+            <div class="calc-help-title">
+                Criterio interno de calculo
+                <button type="button" class="field-help-button dark" data-bs-toggle="tooltip" data-bs-placement="top" title="Estos calculos son internos. El cliente solo ve precios finales, salvo que sea Responsable Inscrito y corresponda detallar IVA.">?</button>
+            </div>
+            <div class="calc-help-grid">
+                <div><strong>Base venta:</strong> Costo neto + IVA compra + Otros.</div>
+                <div><strong>Venta neta:</strong> Base venta x (1 + Margen %) x (1 - Desc. %).</div>
+                <div><strong>Total cliente:</strong> Venta neta + IVA venta.</div>
+                <div><strong>Ganancia neta:</strong> Venta neta - Costo neto real - Carga fiscal.</div>
+            </div>
+        </div>
+
+        <div class="table-container mt-4 cotizador-table-shell">
         <div class="table-responsive table-grid-outline">
             <table class="table table-hover align-middle mb-0 table-custom cotizador-items-table">
                 <colgroup>
-                    <col style="width: 88px;">
-                    <col style="width: 16%;">
-                    <col style="width: 19%;">
-                    <col style="width: 6%;">
-                    <col style="width: 7%;">
-                    <col style="width: 6.5%;">
-                    <col style="width: 6.5%;">
-                    <col style="width: 6.5%;">
-                    <col style="width: 8%;">
-                    <col style="width: 8%;">
-                    <col style="width: 6%;">
-                    <col style="width: 38px;">
+                    <col style="width: 92px;">
+                    <col style="width: 14%;">
+                    <col style="width: 18%;">
+                    <col style="width: 5.2%;">
+                    <col style="width: 7.4%;">
+                    <col style="width: 6.4%;">
+                    <col style="width: 6.2%;">
+                    <col style="width: 6.2%;">
+                    <col style="width: 5.8%;">
+                    <col style="width: 6.4%;">
+                    <col style="width: 6.8%;">
+                    <col style="width: 9.4%;">
+                    <col style="width: 9%;">
+                    <col style="width: 66px;">
                 </colgroup>
                 <thead class="thead-dark-custom">
                     <tr>
                         <th class="text-center">Foto</th>
                         <th>Producto / Servicio</th>
                         <th>Descripcion</th>
-                        <th class="text-center">Cant.</th>
-                        <th class="text-center">Costo U.</th>
-                        <th class="text-center">+% Extra</th>
-                        <th class="text-center">Margen %</th>
-                        <th class="text-center">Desc. %</th>
-                        <th class="text-center">Ganancia U.</th>
-                        <th class="text-center">Venta total</th>
-                        <th class="text-center">IVA</th>
+                        <th class="text-center">
+                            <span class="th-help-label">Cant.<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Cantidad entera. El sistema redondea hacia abajo si se ingresa decimal.">?</button></span>
+                        </th>
+                        <th class="text-center">
+                            <span class="th-help-label">Costo Neto U.<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Costo unitario neto del proveedor, sin IVA de compra.">?</button></span>
+                        </th>
+                        <th class="text-center">
+                            <span class="th-help-label">IVA Compra %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA facturado por el proveedor. Entra en la base para formar precio y se muestra como credito fiscal interno.">?</button></span>
+                        </th>
+                        <th class="text-center">
+                            <span class="th-help-label">Otros %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Costo operativo adicional sobre el costo neto: flete, comision, financiacion simple u otros.">?</button></span>
+                        </th>
+                        <th class="text-center">
+                            <span class="th-help-label">Margen %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Margen comercial aplicado sobre Costo Neto + IVA Compra + Otros. Se ingresa como porcentaje.">?</button></span>
+                        </th>
+                        <th class="text-center">
+                            <span class="th-help-label">Desc. %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Descuento al cliente aplicado despues del margen. Solo aparece en el PDF si algun item tiene descuento.">?</button></span>
+                        </th>
+                        <th class="text-center text-danger">
+                            <span class="th-help-label">Carga F. %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Carga fiscal interna: IIBB, Ganancias, sellos, impuesto al cheque, retenciones u otras. No incluye IVA.">?</button></span>
+                        </th>
+                        <th class="text-center">
+                            <span class="th-help-label">IVA<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA de venta. Se calcula internamente siempre; en el PDF se detalla solo para Responsable Inscrito.">?</button></span>
+                        </th>
+                        <th class="text-center">
+                            <span class="th-help-label">Ganancia Neta U.<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Por unidad: Venta neta - Costo neto real - Carga fiscal. El IVA compra se separa como credito fiscal.">?</button></span>
+                        </th>
+                        <th class="text-center">
+                            <span class="th-help-label">Venta total<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Cantidad x precio unitario final con IVA de venta incluido.">?</button></span>
+                        </th>
                         <th></th>
                     </tr>
                 </thead>
@@ -377,30 +564,48 @@
         <div class="row mt-5 justify-content-end">
             <div class="col-md-5">
                 <div class="card summary-panel text-white p-4 shadow-lg border-0">
-                    <h5 class="border-bottom border-secondary pb-2 mb-3">Resumen de Operacion</h5>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span class="text-secondary">Subtotal Neto:</span>
-                        <span id="subtotal-interno">$ 0.00</span>
+                    <h5 class="border-bottom border-secondary pb-2 mb-3">
+                        <i class="bi bi-graph-up-arrow me-2"></i>Analisis Financiero
+                        <button type="button" class="field-help-button ms-1" data-bs-toggle="tooltip" title="Panel interno. No se muestra al cliente en el PDF.">?</button>
+                    </h5>
+                    <div class="d-flex justify-content-between mb-1 small text-secondary">
+                        <span class="summary-help-label">Costo neto real (Base + Otros):<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Suma de costo neto + Otros %. No incluye IVA compra porque se trata como credito fiscal interno.">?</button></span>
+                        <span id="costo-total-interno">$ 0.00</span>
                     </div>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span class="text-warning">Total Gastos Extras (+%):</span>
-                        <span id="total-extras-interno" class="text-warning">$ 0.00</span>
+                    <div class="d-flex justify-content-between mb-1 small text-info">
+                        <span class="summary-help-label">IVA compra credito:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA del proveedor acumulado. Sirve para estimar el credito fiscal.">?</button></span>
+                        <span id="iva-compra-credito">$ 0.00</span>
                     </div>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span class="text-danger">Total descuentos (-%):</span>
-                        <span id="total-descuentos-interno" class="text-danger">$ 0.00</span>
+                    <div class="d-flex justify-content-between mb-1 small text-info">
+                        <span class="summary-help-label">IVA a pagar estimado:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA venta - IVA compra credito. Puede ser negativo si el credito supera al debito.">?</button></span>
+                        <span id="iva-a-pagar">$ 0.00</span>
                     </div>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span class="text-info">IVA Acumulado:</span>
+                    <div class="d-flex justify-content-between mb-1 small text-warning">
+                        <span class="summary-help-label">Descuento total:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Suma del descuento aplicado despues del margen en todos los items.">?</button></span>
+                        <span id="total-descuentos-interno">-$ 0.00</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2 pb-2 border-bottom border-secondary">
+                        <span class="summary-help-label text-light">Subtotal Venta Neto:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Suma de ventas netas antes del IVA de venta.">?</button></span>
+                        <span id="venta-neta-interna" class="fw-bold">$ 0.00</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1 text-danger">
+                        <span class="summary-help-label"><i class="bi bi-bank me-1"></i>Carga Fiscal Retenida:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Venta neta x Carga F. %. Es una carga interna, no modifica el total que ve el cliente.">?</button></span>
+                        <span id="monto-carga-fiscal">-$ 0.00</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2 pt-2 border-top border-secondary text-success h5">
+                        <span class="summary-help-label">Ganancia Neta (Bolsillo):<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Subtotal venta neto - costo neto real - carga fiscal retenida.">?</button></span>
+                        <span id="ganancia-neta-real" class="text-success">$ 0.00</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2 mt-3 p-2 bg-secondary bg-opacity-25 rounded border border-secondary">
+                        <span class="summary-help-label text-info fw-bold">IVA TOTAL:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA de venta acumulado sobre todos los items.">?</button></span>
                         <span id="total-iva-interno" class="text-info">$ 0.00</span>
                     </div>
-                    <hr class="bg-secondary">
-                    <div class="d-flex justify-content-between h4 mb-0">
-                        <span>TOTAL (<span id="label-moneda-actual">ARS</span>):</span>
+                    <div class="d-flex justify-content-between h4 mb-0 mt-3">
+                        <span>TOTAL A COBRAR (<span id="label-moneda-actual">USD</span>):</span>
                         <span id="total-vista" class="text-success">$ 0.00</span>
                     </div>
                     <div class="d-flex justify-content-between pt-2 border-top border-secondary text-warning mt-2">
-                        <span class="small text-uppercase">Equivalente en <span id="label-moneda-conv">USD</span>:</span>
+                        <span class="small text-uppercase">Equivalente en <span id="label-moneda-conv">ARS</span>:</span>
                         <span id="total-convertido" class="fw-bold">$ 0.00</span>
                     </div>
                 </div>
@@ -427,7 +632,7 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <label class="form-label fw-bold">¿A que familia pertenece este proyecto?</label>
+                <label class="form-label fw-bold">¿A qué familia pertenece este proyecto?</label>
                 <select id="select_familia" class="form-select form-select-lg mb-3">
                     <option value="" disabled>Seleccionar Familia...</option>
                     {% for familia in familias_cotizacion %}
@@ -463,6 +668,12 @@ let clienteTomSelect = null;
 let itemRowCounter = 0;
 const placeholderProductUrl = "{{ url_for('static', filename='placeholder_product.png') }}";
 const itemsPrecargados = {{ items_precargados|default([], true)|tojson }};
+const tipoCambioUrl = "{{ url_for('api_tipo_cambio_oficial') }}";
+const tipoCambioGuardado = {{ tipo_cambio_guardado|tojson }};
+const cotizadorDraftKey = "cuencotech:cotizacion:draft:{{ 'edit:' ~ cotizacion.id if modo_edicion else 'new' }}";
+const cotizadorPendingDraftKey = "cuencotech:cotizacion:pending-draft-key";
+let draftSaveTimer = null;
+let draftSuppressSave = false;
 
 function normalizarTextoCliente(texto) {
     return (texto || "")
@@ -487,6 +698,206 @@ function actualizarEstiloEstadoForm(select) {
         return;
     }
     select.classList.add("estado-en-progreso");
+}
+
+function inicializarAyudasCalculo() {
+    if (!window.bootstrap || !bootstrap.Tooltip) {
+        return;
+    }
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((element) => {
+        bootstrap.Tooltip.getOrCreateInstance(element, { container: "body" });
+    });
+}
+
+function leerBorradorCotizacion() {
+    try {
+        const raw = window.localStorage.getItem(cotizadorDraftKey);
+        if (!raw) {
+            return null;
+        }
+        const draft = JSON.parse(raw);
+        if (!draft || draft.version !== 1 || !Array.isArray(draft.items)) {
+            return null;
+        }
+        if (!borradorTieneContenido(draft)) {
+            return null;
+        }
+        return draft;
+    } catch (_error) {
+        return null;
+    }
+}
+
+function borradorTieneContenido(draft) {
+    if (!draft) {
+        return false;
+    }
+    if (draft.cliente_id || draft.familia || draft.seguimiento_activo) {
+        return true;
+    }
+    return (draft.items || []).some((item) => (
+        (item.descripcion || "").trim()
+        || (item.detalle || "").trim()
+        || Number(item.costo_unitario || 0) > 0
+        || Number(item.descuento_pct || 0) > 0
+        || Number(item.carga_fiscal || 0) > 0
+    ));
+}
+
+function obtenerValor(selector) {
+    return document.querySelector(selector)?.value || "";
+}
+
+function obtenerBorradorCotizacion() {
+    const select = document.getElementById("cliente_select");
+    const estadoSelect = document.getElementById("estado_cotizacion");
+    const seguimientoActivo = document.getElementById("seguimiento_activo");
+    const items = Array.from(document.querySelectorAll("#cuerpo-tabla tr")).map((row) => ({
+        item_id: row.querySelector('[name="item_id[]"]')?.value || "",
+        imagen_url: row.querySelector('[name="imagen_actual[]"]')?.value || "",
+        descripcion: row.querySelector('[name="desc[]"]')?.value || "",
+        detalle: row.querySelector('[name="detalle[]"]')?.value || "",
+        cantidad: row.querySelector('[name="cant[]"]')?.value || "1",
+        costo_unitario: row.querySelector('[name="costo[]"]')?.value || "0",
+        iva_compra_pct: row.querySelector('[name="iva_compra[]"]')?.value || "0",
+        costo_extra: row.querySelector('[name="extra[]"]')?.value || "0",
+        margen: row.querySelector('[name="margen[]"]')?.value || "0",
+        descuento_pct: row.querySelector('[name="descuento[]"]')?.value || "0",
+        carga_fiscal: row.querySelector('[name="carga_fiscal[]"]')?.value || "0",
+        iva_item: row.querySelector('[name="iva_item[]"]')?.value || "21",
+    }));
+
+    return {
+        version: 1,
+        savedAt: new Date().toISOString(),
+        cliente_id: select?.value || "",
+        moneda: obtenerValor("#moneda"),
+        tipo_cambio: obtenerValor("#tipo_cambio"),
+        condicion_iva: obtenerValor("#condicion_iva"),
+        estado: estadoSelect?.value || "En progreso",
+        seguimiento_activo: Boolean(seguimientoActivo?.checked),
+        seguimiento_cada_dias: obtenerValor("#seguimiento_cada_dias"),
+        familia: obtenerValor("#input_familia_hidden"),
+        items,
+    };
+}
+
+function guardarBorradorCotizacion() {
+    if (draftSuppressSave || !document.getElementById("form-cotizador")) {
+        return;
+    }
+    try {
+        window.localStorage.setItem(cotizadorDraftKey, JSON.stringify(obtenerBorradorCotizacion()));
+    } catch (_error) {
+        // Si el navegador no permite localStorage, el sistema sigue funcionando sin borrador.
+    }
+}
+
+function programarGuardarBorradorCotizacion() {
+    if (draftSuppressSave) {
+        return;
+    }
+    window.clearTimeout(draftSaveTimer);
+    draftSaveTimer = window.setTimeout(guardarBorradorCotizacion, 250);
+}
+
+function mostrarAvisoBorradorRestaurado(draft) {
+    const alerta = document.getElementById("draft-restored-alert");
+    const texto = document.getElementById("draft-restored-text");
+    if (!alerta) {
+        return;
+    }
+    if (texto && draft?.savedAt) {
+        const fecha = new Date(draft.savedAt);
+        if (!Number.isNaN(fecha.getTime())) {
+            texto.textContent = `Se restauraron datos guardados el ${fecha.toLocaleString("es-AR")}.`;
+        }
+    }
+    alerta.classList.remove("d-none");
+}
+
+function descartarBorradorCotizacion() {
+    try {
+        window.localStorage.removeItem(cotizadorDraftKey);
+        window.sessionStorage.removeItem(cotizadorPendingDraftKey);
+    } catch (_error) {
+        // Nada que hacer.
+    }
+    window.location.reload();
+}
+
+function aplicarBorradorCotizacion(draft) {
+    if (!draft) {
+        return false;
+    }
+
+    draftSuppressSave = true;
+    const setValue = (selector, value) => {
+        const element = document.querySelector(selector);
+        if (element && value !== undefined && value !== null) {
+            element.value = value;
+        }
+    };
+
+    setValue("#moneda", draft.moneda);
+    setValue("#tipo_cambio", draft.tipo_cambio);
+    setValue("#condicion_iva", draft.condicion_iva);
+    setValue("#estado_cotizacion", draft.estado);
+    setValue("#seguimiento_cada_dias", draft.seguimiento_cada_dias);
+    const seguimientoActivo = document.getElementById("seguimiento_activo");
+    if (seguimientoActivo) {
+        seguimientoActivo.checked = Boolean(draft.seguimiento_activo);
+    }
+    const inputFamilia = document.getElementById("input_familia_hidden");
+    if (inputFamilia) {
+        inputFamilia.value = draft.familia || "";
+    }
+
+    const select = document.getElementById("cliente_select");
+    if (select && draft.cliente_id) {
+        if (select.tomselect && select.tomselect.options[draft.cliente_id]) {
+            select.tomselect.setValue(draft.cliente_id, true);
+        } else {
+            select.value = draft.cliente_id;
+        }
+    }
+
+    const cuerpo = document.getElementById("cuerpo-tabla");
+    if (cuerpo) {
+        cuerpo.innerHTML = "";
+    }
+    itemRowCounter = 0;
+    const items = draft.items.length ? draft.items : [{}];
+    items.forEach((item) => agregarFila(item));
+
+    sincronizarClienteSeleccionado();
+    actualizarEstiloEstadoForm(document.getElementById("estado_cotizacion"));
+    toggleSeguimientoFields();
+    actualizarIndicadorFamilia();
+    calcularTodo();
+    draftSuppressSave = false;
+    mostrarAvisoBorradorRestaurado(draft);
+    return true;
+}
+
+function inicializarBorradorCotizacion() {
+    const form = document.getElementById("form-cotizador");
+    if (!form) {
+        return false;
+    }
+    form.addEventListener("input", programarGuardarBorradorCotizacion, true);
+    form.addEventListener("change", programarGuardarBorradorCotizacion, true);
+    window.addEventListener("beforeunload", guardarBorradorCotizacion);
+    return aplicarBorradorCotizacion(leerBorradorCotizacion());
+}
+
+function marcarBorradorComoPendienteDeEnvio() {
+    guardarBorradorCotizacion();
+    try {
+        window.sessionStorage.setItem(cotizadorPendingDraftKey, cotizadorDraftKey);
+    } catch (_error) {
+        // Nada que hacer.
+    }
 }
 
 function toggleSeguimientoFields() {
@@ -622,7 +1033,7 @@ function sincronizarClienteSeleccionado() {
     calcularTodo();
 }
 
-function actualizarSubsectores() {
+function actualizarSubsectores(valorSeleccionado = "") {
     const sector = document.getElementById("nuevo_cli_sector")?.value || "";
     const divSub = document.getElementById("div_subsector");
     const selectSub = document.getElementById("nuevo_cli_subsector");
@@ -635,6 +1046,7 @@ function actualizarSubsectores() {
         return;
     }
 
+    const valorActual = valorSeleccionado || selectSub.value || "";
     selectSub.innerHTML = '<option value="">Seleccionar subdivision...</option>';
     if (sector && opciones[sector]) {
         divSub.classList.remove("d-none");
@@ -644,10 +1056,11 @@ function actualizarSubsectores() {
             option.textContent = opt;
             selectSub.appendChild(option);
         });
+        selectSub.value = opciones[sector].includes(valorActual) ? valorActual : "";
     } else {
         divSub.classList.add("d-none");
+        selectSub.value = "";
     }
-    selectSub.value = "";
 }
 
 function obtenerDatosClienteSeleccionado() {
@@ -709,8 +1122,7 @@ function abrirModalEditarCliente() {
     document.getElementById("nuevo_cli_cuit").value = cliente.cuit;
     document.getElementById("nuevo_cli_domicilio").value = cliente.domicilio;
     document.getElementById("nuevo_cli_sector").value = cliente.sector;
-    actualizarSubsectores();
-    document.getElementById("nuevo_cli_subsector").value = cliente.subsector || "";
+    actualizarSubsectores(cliente.subsector || "");
     document.getElementById("nuevo_cli_email").value = cliente.email;
     document.getElementById("nuevo_cli_telefono").value = cliente.telefono;
     document.getElementById("nuevo_cli_iva").value = cliente.condicion_iva;
@@ -767,11 +1179,13 @@ function actualizarOptionClienteEnSelect(data) {
     }
 
     sincronizarClienteSeleccionado();
+    programarGuardarBorradorCotizacion();
 }
 
-function guardarCliente() {
+async function guardarCliente() {
     const clienteId = document.getElementById("cliente_modal_id").value.trim();
     const esEdicion = Boolean(clienteId);
+    const botonGuardar = document.getElementById("modalClienteGuardarBtn");
     const nombre = document.getElementById("nuevo_cli_nombre").value.trim();
     const razon = document.getElementById("nuevo_cli_razon").value.trim();
     const cuit = document.getElementById("nuevo_cli_cuit").value.trim();
@@ -795,39 +1209,56 @@ function guardarCliente() {
         return;
     }
 
-    fetch(esEdicion ? `/api/clientes/${clienteId}` : "/api/clientes", {
-        method: esEdicion ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            nombre: nombre,
-            razon_social: razon,
-            cuit: cuit,
-            domicilio: domicilio,
-            sector: sector,
-            subsector: subsector,
-            email: email,
-            telefono: telefono,
-            condicion_iva: condicionIva,
-        }),
-    })
-        .then((res) => res.json())
-        .then((data) => {
-            if (data.error === "auth_required") {
-                window.location.href = "{{ url_for('login') }}";
-                return;
-            }
-            if (data.error) {
-                alert(data.error);
-                return;
-            }
+    let guardadoOk = false;
+    if (botonGuardar) {
+        botonGuardar.disabled = true;
+        botonGuardar.textContent = esEdicion ? "Guardando cambios..." : "Guardando cliente...";
+    }
 
-            actualizarOptionClienteEnSelect(data);
-
-            const modalEl = document.getElementById("modalNuevoCliente");
-            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-            modal.hide();
-            limpiarModalCliente();
+    try {
+        const response = await fetch(esEdicion ? `/api/clientes/${clienteId}` : "/api/clientes", {
+            method: esEdicion ? "PUT" : "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                nombre: nombre,
+                razon_social: razon,
+                cuit: cuit,
+                domicilio: domicilio,
+                sector: sector,
+                subsector: subsector,
+                email: email,
+                telefono: telefono,
+                condicion_iva: condicionIva,
+            }),
         });
+        const data = await response.json().catch(() => ({}));
+        if (data.error === "auth_required") {
+            window.location.href = "{{ url_for('login') }}";
+            return;
+        }
+        if (!response.ok || data.error) {
+            alert(data.error || `No se pudo guardar el cliente. Error HTTP ${response.status}.`);
+            return;
+        }
+
+        actualizarOptionClienteEnSelect(data);
+
+        const modalEl = document.getElementById("modalNuevoCliente");
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        guardadoOk = true;
+        modal.hide();
+        limpiarModalCliente();
+    } catch (error) {
+        console.error("Error al guardar cliente", error);
+        alert("No se pudo guardar el cliente. Revisá que el servidor esté levantado e intentá nuevamente.");
+    } finally {
+        if (botonGuardar) {
+            botonGuardar.disabled = false;
+            if (!guardadoOk) {
+                botonGuardar.textContent = esEdicion ? "Guardar Cambios" : "Guardar Cliente";
+            }
+        }
+    }
 }
 
 function actualizarIndicadorFamilia() {
@@ -896,6 +1327,7 @@ function confirmarEnvio() {
     }
     inputFamilia.value = familia;
     actualizarIndicadorFamilia();
+    guardarBorradorCotizacion();
     bootstrap.Modal.getOrCreateInstance(document.getElementById("modalFamilia")).hide();
     if (typeof form.requestSubmit === "function") {
         form.requestSubmit();
@@ -959,9 +1391,11 @@ function agregarFila(data = {}) {
     const detalle = data.detalle || "";
     const cantidad = Math.max(1, parseInt(data.cantidad ?? 1, 10) || 1);
     const costoUnitario = data.costo_unitario ?? 0;
+    const ivaCompra = data.iva_compra_pct ?? 21;
     const costoExtra = data.costo_extra ?? 5;
     const margen = data.margen ?? 75;
     const descuento = data.descuento_pct ?? 0;
+    const cargaFiscal = data.carga_fiscal ?? 0;
     const ivaItem = data.iva_item ?? 21;
     const imagenActual = data.imagen_url || "";
     const previewUrl = data.preview_url || placeholderProductUrl;
@@ -989,11 +1423,11 @@ function agregarFila(data = {}) {
         <td><textarea name="detalle[]" class="form-control" rows="2" placeholder="Descripcion adicional del item...">${detalleHtml}</textarea></td>
         <td><input type="number" name="cant[]" class="form-control text-center" value="${cantidad}" min="1" step="1" inputmode="numeric" oninput="validarCantidadEntera(this); calcularTodo()"></td>
         <td><input type="number" name="costo[]" class="form-control text-end" value="${costoUnitario}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()"></td>
+        <td><input type="number" name="iva_compra[]" class="form-control text-end" value="${ivaCompra}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()" title="IVA del proveedor. Se usa como credito fiscal interno."></td>
         <td><input type="number" name="extra[]" class="form-control text-end" value="${costoExtra}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()"></td>
         <td><input type="number" name="margen[]" class="form-control text-end" value="${margen}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()"></td>
         <td><input type="number" name="descuento[]" class="form-control text-end" value="${descuento}" min="0" max="100" step="0.01" oninput="validarPorcentaje(this); calcularTodo()"></td>
-        <td class="text-center"><span class="badge py-2 px-3 ganancia-badge">$ 0.00</span></td>
-        <td class="text-center"><span class="badge py-2 px-3 text-bg-dark venta-total-badge">$ 0.00</span></td>
+        <td><input type="number" name="carga_fiscal[]" class="form-control text-end text-danger fw-bold" value="${cargaFiscal}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()"></td>
         <td>
             <select name="iva_item[]" class="form-select form-select-sm select-iva" onchange="calcularTodo()">
                 <option value="21" ${Number(ivaItem) === 21 ? "selected" : ""}>21%</option>
@@ -1001,8 +1435,10 @@ function agregarFila(data = {}) {
                 <option value="0" ${Number(ivaItem) === 0 ? "selected" : ""}>0%</option>
             </select>
         </td>
+        <td class="text-center"><span class="badge py-2 px-3 ganancia-badge">$ 0.00</span></td>
+        <td class="text-center px-2"><span class="badge py-2 px-3 text-bg-dark venta-total-badge">$ 0.00</span></td>
         <td class="text-center">
-            <button type="button" class="btn btn-outline-danger btn-sm border-0" onclick="quitarFila(this);">
+            <button type="button" class="btn item-delete-btn" onclick="quitarFila(this);" title="Eliminar item">
                 <i class="bi bi-trash"></i>
             </button>
         </td>
@@ -1012,6 +1448,7 @@ function agregarFila(data = {}) {
     }
     cuerpo.appendChild(fila);
     calcularTodo();
+    programarGuardarBorradorCotizacion();
 }
 
 const MAX_IMAGE_UPLOAD_MB = 6;
@@ -1145,6 +1582,7 @@ function quitarFila(button) {
     }
     fila.remove();
     calcularTodo();
+    programarGuardarBorradorCotizacion();
 }
 
 function validarPositivo(input) {
@@ -1173,47 +1611,109 @@ function validarCantidadEntera(input) {
     input.value = Math.max(1, Math.trunc(valor));
 }
 
+function renderTipoCambioEstado(data, errorMessage = "") {
+    const statusNode = document.getElementById("tipo_cambio_estado");
+    if (!statusNode) {
+        return;
+    }
+    if (data && data.ok && Number.isFinite(Number(data.rate))) {
+        statusNode.classList.remove("text-danger");
+        let mensaje = `${data.label || "BNA oficial"}`;
+        if (data.date) {
+            mensaje += ` - ${data.date}`;
+        }
+        if (data.time) {
+            mensaje += ` ${data.time}`;
+        }
+        if (data.stale) {
+            mensaje += " - ultimo dato en cache";
+        }
+        statusNode.textContent = mensaje;
+        return;
+    }
+    statusNode.classList.add("text-danger");
+    statusNode.textContent = errorMessage || "No se pudo consultar el BNA en este momento.";
+}
+
+async function actualizarTipoCambioOficial(force = false) {
+    const input = document.getElementById("tipo_cambio");
+    const refreshBtn = document.getElementById("btn-tipo-cambio-refresh");
+    if (!input) {
+        return;
+    }
+    if (refreshBtn) {
+        refreshBtn.disabled = true;
+    }
+    try {
+        const response = await fetch(`${tipoCambioUrl}${force ? "?refresh=1" : ""}`, {
+            headers: { "X-Requested-With": "fetch" },
+            credentials: "same-origin",
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok || !Number.isFinite(Number(data.rate))) {
+            throw new Error(data.error || "No se pudo obtener el tipo de cambio oficial.");
+        }
+        input.value = Number(data.rate);
+        renderTipoCambioEstado(data);
+        calcularTodo();
+    } catch (error) {
+        renderTipoCambioEstado(null, error.message || "No se pudo consultar el BNA en este momento.");
+        calcularTodo();
+    } finally {
+        if (refreshBtn) {
+            refreshBtn.disabled = false;
+        }
+    }
+}
+
 function calcularTodo() {
-    const tc = parseFloat(document.getElementById("tipo_cambio")?.value) || 1;
+    const tcRaw = parseFloat(document.getElementById("tipo_cambio")?.value);
+    const tc = Number.isFinite(tcRaw) && tcRaw > 0 ? tcRaw : null;
     const condicionIva = document.getElementById("condicion_iva")?.value || "Exento";
 
     let subtotalBaseAcumulado = 0;
     let totalExtrasAcumulado = 0;
+    let totalIvaCompraAcumulado = 0;
     let totalDescuentosAcumulado = 0;
     let subtotalVentaNeto = 0;
     let ivaTotalAcumulado = 0;
+    let totalCargaFiscalAcumulado = 0;
 
     const rows = document.querySelectorAll("#cuerpo-tabla tr");
     rows.forEach((row) => {
         const cant = Math.max(1, parseInt(row.querySelector('[name="cant[]"]')?.value, 10) || 0);
         const costoUnitario = Math.max(0, parseFloat(row.querySelector('[name="costo[]"]')?.value) || 0);
+        const ivaCompraPerc = Math.max(0, parseFloat(row.querySelector('[name="iva_compra[]"]')?.value) || 0);
         const extraPerc = Math.max(0, parseFloat(row.querySelector('[name="extra[]"]')?.value) || 0);
         const margenPct = Math.max(0, parseFloat(row.querySelector('[name="margen[]"]')?.value) || 0);
         const descuentoPct = Math.min(100, Math.max(0, parseFloat(row.querySelector('[name="descuento[]"]')?.value) || 0));
+        const cargaFiscPerc = Math.max(0, parseFloat(row.querySelector('[name="carga_fiscal[]"]')?.value) || 0);
         const margen = margenPct / 100;
         const descuento = descuentoPct / 100;
         const ivaPerc = Math.max(0, parseFloat(row.querySelector('[name="iva_item[]"]')?.value) || 0);
 
         const costoBaseTotalFila = cant * costoUnitario;
+        const montoIvaCompraFila = costoBaseTotalFila * (ivaCompraPerc / 100);
         const montoExtraFila = costoBaseTotalFila * (extraPerc / 100);
-        const costoConExtra = costoUnitario * (1 + (extraPerc / 100));
-        const pVentaLista = costoConExtra * (1 + margen);
-        const descuentoFila = (cant * pVentaLista) * descuento;
+        const costoParaVenta = costoUnitario * (1 + (ivaCompraPerc / 100) + (extraPerc / 100));
+        const costoRealUnitario = costoUnitario * (1 + (extraPerc / 100));
+        const pVentaLista = costoParaVenta * (1 + margen);
         const pVentaNeto = pVentaLista * (1 - descuento);
+        const descuentoFila = (cant * pVentaLista) - (cant * pVentaNeto);
         const subNetoFila = cant * pVentaNeto;
+        const montoCargaFiscalFila = subNetoFila * (cargaFiscPerc / 100);
 
-        let ivaFila = 0;
-        if (condicionIva !== "Exento") {
-            ivaFila = subNetoFila * (ivaPerc / 100);
-        }
+        const ivaFila = subNetoFila * (ivaPerc / 100);
 
         subtotalBaseAcumulado += costoBaseTotalFila;
+        totalIvaCompraAcumulado += montoIvaCompraFila;
         totalExtrasAcumulado += montoExtraFila;
         totalDescuentosAcumulado += descuentoFila;
         subtotalVentaNeto += subNetoFila;
+        totalCargaFiscalAcumulado += montoCargaFiscalFila;
         ivaTotalAcumulado += ivaFila;
 
-        const gananciaU = pVentaNeto - costoConExtra;
+        const gananciaU = pVentaNeto - costoRealUnitario - (pVentaNeto * (cargaFiscPerc / 100));
         const gananciaNode = row.querySelector(".ganancia-badge");
         if (gananciaNode) {
             gananciaNode.innerText = `$ ${gananciaU.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
@@ -1225,21 +1725,33 @@ function calcularTodo() {
         }
     });
 
+    const costoNetoReal = subtotalBaseAcumulado + totalExtrasAcumulado;
+    const ivaAPagar = ivaTotalAcumulado - totalIvaCompraAcumulado;
+    const gananciaNetaReal = subtotalVentaNeto - costoNetoReal - totalCargaFiscalAcumulado;
     const totalFinal = subtotalVentaNeto + ivaTotalAcumulado;
 
-    document.getElementById("subtotal-interno").innerText = `$ ${subtotalBaseAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
-    document.getElementById("total-extras-interno").innerText = `$ ${totalExtrasAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
-    document.getElementById("total-descuentos-interno").innerText = `$ ${totalDescuentosAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+    document.getElementById("costo-total-interno").innerText = `$ ${costoNetoReal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+    document.getElementById("iva-compra-credito").innerText = `$ ${totalIvaCompraAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+    document.getElementById("iva-a-pagar").innerText = `$ ${ivaAPagar.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+    document.getElementById("total-descuentos-interno").innerText = `-$ ${totalDescuentosAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+    document.getElementById("venta-neta-interna").innerText = `$ ${subtotalVentaNeto.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+    document.getElementById("monto-carga-fiscal").innerText = `-$ ${totalCargaFiscalAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
     document.getElementById("total-iva-interno").innerText = `$ ${ivaTotalAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
     document.getElementById("total-vista").innerText = `$ ${totalFinal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+    const gananciaNetaNode = document.getElementById("ganancia-neta-real");
+    gananciaNetaNode.innerText = `$ ${gananciaNetaReal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+    gananciaNetaNode.classList.remove("text-success", "text-danger");
+    gananciaNetaNode.classList.add(gananciaNetaReal >= 0 ? "text-success" : "text-danger");
 
     const moneda = document.getElementById("moneda")?.value || "ARS";
-    const totalConv = moneda === "ARS" ? (totalFinal / tc) : (totalFinal * tc);
+    const totalConv = tc ? (moneda === "ARS" ? (totalFinal / tc) : (totalFinal * tc)) : null;
     const labelConv = moneda === "ARS" ? "USD" : "ARS";
 
     document.getElementById("label-moneda-actual").innerText = moneda;
     document.getElementById("label-moneda-conv").innerText = labelConv;
-    document.getElementById("total-convertido").innerText = `$ ${totalConv.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+    document.getElementById("total-convertido").innerText = tc
+        ? `$ ${totalConv.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`
+        : "N/D";
 }
 
 document.getElementById("cliente_select")?.addEventListener("change", sincronizarClienteSeleccionado);
@@ -1269,19 +1781,31 @@ document.getElementById("form-cotizador")?.addEventListener("submit", function (
         return;
     }
     sincronizarClienteSeleccionado();
+    marcarBorradorComoPendienteDeEnvio();
 });
 
 window.onload = function () {
+    inicializarAyudasCalculo();
     initClienteSelect();
     actualizarEstiloEstadoForm(document.getElementById("estado_cotizacion"));
     toggleSeguimientoFields();
     actualizarIndicadorFamilia();
-    if (itemsPrecargados.length) {
-        itemsPrecargados.forEach((item) => agregarFila(item));
-    } else {
-        agregarFila();
+    const borradorRestaurado = inicializarBorradorCotizacion();
+    if (!borradorRestaurado) {
+        draftSuppressSave = true;
+        if (itemsPrecargados.length) {
+            itemsPrecargados.forEach((item) => agregarFila(item));
+        } else {
+            agregarFila();
+        }
+        draftSuppressSave = false;
+        sincronizarClienteSeleccionado();
+        if (tipoCambioGuardado) {
+            calcularTodo();
+        } else {
+            actualizarTipoCambioOficial();
+        }
     }
-    sincronizarClienteSeleccionado();
 };
 </script>
 {% endblock %}
