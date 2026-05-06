@@ -1632,7 +1632,25 @@ function renderTipoCambioEstado(data, errorMessage = "") {
         return;
     }
     statusNode.classList.add("text-danger");
-    statusNode.textContent = errorMessage || "No se pudo consultar el BNA en este momento.";
+    statusNode.textContent = normalizarMensajeErrorTipoCambio(errorMessage);
+}
+
+function normalizarMensajeErrorTipoCambio(errorMessage = "") {
+    const message = typeof errorMessage === "string" ? errorMessage.trim() : "";
+    if (!message) {
+        return "No se pudo consultar el BNA en este momento.";
+    }
+    const lowered = message.toLowerCase();
+    if (
+        lowered.includes("httpsconnectionpool")
+        || lowered.includes("certificate_verify_failed")
+        || lowered.includes("self-signed certificate")
+        || lowered.includes("ssl")
+        || lowered.includes("max retries exceeded")
+    ) {
+        return "No se pudo validar la conexion segura con el BNA.";
+    }
+    return message;
 }
 
 async function actualizarTipoCambioOficial(force = false) {
@@ -1651,13 +1669,13 @@ async function actualizarTipoCambioOficial(force = false) {
         });
         const data = await response.json();
         if (!response.ok || !data.ok || !Number.isFinite(Number(data.rate))) {
-            throw new Error(data.error || "No se pudo obtener el tipo de cambio oficial.");
+            throw new Error(normalizarMensajeErrorTipoCambio(data.error || "No se pudo obtener el tipo de cambio oficial."));
         }
         input.value = Number(data.rate);
         renderTipoCambioEstado(data);
         calcularTodo();
     } catch (error) {
-        renderTipoCambioEstado(null, error.message || "No se pudo consultar el BNA en este momento.");
+        renderTipoCambioEstado(null, normalizarMensajeErrorTipoCambio(error.message));
         calcularTodo();
     } finally {
         if (refreshBtn) {

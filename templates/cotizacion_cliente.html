@@ -63,6 +63,62 @@
         border: 1px solid #c3cfdb;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
     }
+    .quote-closing-row {
+        margin-top: 28px;
+        page-break-inside: avoid;
+    }
+    .quote-note-card {
+        min-height: 100%;
+        border-radius: 10px;
+        border: 1px solid #d8e1ea;
+        background: #f5f8fb;
+        padding: 18px 20px;
+    }
+    .quote-note-card h6,
+    .quote-signature-card h6 {
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #546579;
+        margin-bottom: 0.75rem;
+    }
+    .quote-note-card ul {
+        margin: 0;
+        padding-left: 1.1rem;
+        color: #32465a;
+        font-size: 0.94rem;
+    }
+    .quote-signature-card {
+        min-height: 100%;
+        border-radius: 10px;
+        border: 1px solid #d8e1ea;
+        background: #ffffff;
+        padding: 18px 20px;
+        text-align: center;
+    }
+    .quote-signature-line {
+        width: 72%;
+        margin: 18px auto 12px;
+        border-top: 1.5px solid #8da0b4;
+    }
+    .quote-signature-name {
+        font-weight: 700;
+        color: #1e2d3d;
+        margin-bottom: 0.2rem;
+    }
+    .quote-signature-role,
+    .quote-signature-contact {
+        color: #5b6f82;
+        font-size: 0.92rem;
+        margin-bottom: 0.2rem;
+    }
+    .quote-signature-image {
+        max-width: 150px;
+        max-height: 58px;
+        object-fit: contain;
+        margin: 0 auto 10px;
+        display: block;
+    }
     .quote-doc-number {
         display: inline-block;
         white-space: nowrap;
@@ -213,6 +269,39 @@
                 <span>TOTAL:</span>
                 <span>$ {{ "{:,.2f}".format(cot.total_final) }}</span>
             </div>
+            </div>
+        </div>
+    </div>
+    <div class="row quote-closing-row g-3">
+        <div class="col-7">
+            <div class="quote-note-card">
+                <h6>Condiciones comerciales</h6>
+                <ul>
+                    {% if quote_signature.validity_days %}
+                    <li>Validez de la oferta: {{ quote_signature.validity_days }} dias.</li>
+                    {% endif %}
+                    <li>{{ quote_signature.footer_note }}</li>
+                    <li>La aceptacion de esta cotizacion confirma cantidades, moneda y condiciones indicadas.</li>
+                </ul>
+            </div>
+        </div>
+        <div class="col-5">
+            <div class="quote-signature-card">
+                <h6>Emitido por</h6>
+                {% if quote_signature.image %}
+                <img
+                    src="{{ url_for('static', filename=quote_signature.image) }}"
+                    alt="Firma {{ quote_signature.name }}"
+                    class="quote-signature-image"
+                >
+                {% endif %}
+                <div class="quote-signature-line"></div>
+                <div class="quote-signature-name">{{ quote_signature.name }}</div>
+                <div class="quote-signature-role">{{ quote_signature.role }}</div>
+                {% if quote_signature.phone %}
+                <div class="quote-signature-contact">{{ quote_signature.phone }}</div>
+                {% endif %}
+                <div class="quote-signature-contact">{{ cot.razon_social or "Cuenco Tech S.A." }}</div>
             </div>
         </div>
     </div>

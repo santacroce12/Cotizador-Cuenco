@@ -14,6 +14,7 @@ from pathlib import Path
 
 import jwt
 import requests
+import urllib3
 from flask import Flask, Response, flash, g, jsonify, redirect, render_template, request, url_for
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -29,6 +30,7 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def resolver_ruta_configurada(valor, default_path):
@@ -83,6 +85,32 @@ app.config["SECRET_KEY"] = (
 AUTH_COOKIE_SECURE = str(
     os.getenv("AUTH_COOKIE_SECURE") or LOCAL_SETTINGS.get("AUTH_COOKIE_SECURE") or ""
 ).strip().lower() in ("1", "true", "yes")
+QUOTE_SIGNER_NAME = str(
+    os.getenv("QUOTE_SIGNER_NAME") or LOCAL_SETTINGS.get("QUOTE_SIGNER_NAME") or "Equipo Comercial Cuenco Tech"
+).strip()
+QUOTE_SIGNER_ROLE = str(
+    os.getenv("QUOTE_SIGNER_ROLE") or LOCAL_SETTINGS.get("QUOTE_SIGNER_ROLE") or "Area Comercial"
+).strip()
+QUOTE_CONTACT_EMAIL = str(
+    os.getenv("QUOTE_CONTACT_EMAIL") or LOCAL_SETTINGS.get("QUOTE_CONTACT_EMAIL") or DEFAULT_SMTP_FROM
+).strip()
+QUOTE_CONTACT_PHONE = str(
+    os.getenv("QUOTE_CONTACT_PHONE") or LOCAL_SETTINGS.get("QUOTE_CONTACT_PHONE") or ""
+).strip()
+QUOTE_SIGNATURE_IMAGE = str(
+    os.getenv("QUOTE_SIGNATURE_IMAGE") or LOCAL_SETTINGS.get("QUOTE_SIGNATURE_IMAGE") or ""
+).strip()
+QUOTE_FOOTER_NOTE = str(
+    os.getenv("QUOTE_FOOTER_NOTE")
+    or LOCAL_SETTINGS.get("QUOTE_FOOTER_NOTE")
+    or "Precios sujetos a disponibilidad y confirmacion comercial al momento de la aceptacion."
+).strip()
+try:
+    QUOTE_VALIDITY_DAYS = int(
+        os.getenv("QUOTE_VALIDITY_DAYS") or LOCAL_SETTINGS.get("QUOTE_VALIDITY_DAYS") or 7
+    )
+except (TypeError, ValueError):
+    QUOTE_VALIDITY_DAYS = 7
 
 PLACEHOLDER_PRODUCTO = "placeholder_product.png"
 UPLOADS_PRODUCTOS_DIR = resolver_ruta_configurada(
@@ -216,6 +244,7 @@ class Cliente(db.Model):
 class Usuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
+    nombre_completo = db.Column(db.String(120))
     password_hash = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
 
@@ -224,6 +253,10 @@ class Usuario(db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    @property
+    def nombre_para_documentos(self):
+        return (self.nombre_completo or "").strip() or self.username
 
 
 class FamiliaCotizacion(db.Model):
@@ -277,6 +310,50 @@ def obtener_configuracion_fuente_bna():
     }
 
 
+def obtener_modo_ssl_bna():
+    modo = str(os.getenv("BNA_SSL_MODE") or LOCAL_SETTINGS.get("BNA_SSL_MODE") or "auto").strip().lower()
+    return modo if modo in ("strict", "auto", "insecure") else "auto"
+
+
+def describir_error_tipo_cambio_bna(exc):
+    if isinstance(exc, requests.exceptions.SSLError):
+        return "No se pudo validar el certificado SSL del BNA."
+    if isinstance(exc, requests.exceptions.Timeout):
+        return "La consulta al BNA demoro demasiado."
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        return "No se pudo conectar con el BNA."
+    if isinstance(exc, ValueError):
+        return "El formato de respuesta del BNA no se pudo interpretar."
+    return "No se pudo consultar el tipo de cambio oficial del BNA."
+
+
+def descargar_html_bna():
+    request_kwargs = {
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Cotizador Cuenco Tech)",
+            "Accept-Language": "es-AR,es;q=0.9",
+        },
+        "timeout": 15,
+    }
+    modo_ssl = obtener_modo_ssl_bna()
+
+    if modo_ssl == "insecure":
+        response = requests.get(BNA_PERSONAS_URL, verify=False, **request_kwargs)
+        response.raise_for_status()
+        return response.text, True
+
+    try:
+        response = requests.get(BNA_PERSONAS_URL, verify=True, **request_kwargs)
+        response.raise_for_status()
+        return response.text, False
+    except requests.exceptions.SSLError:
+        if modo_ssl != "auto":
+            raise
+        response = requests.get(BNA_PERSONAS_URL, verify=False, **request_kwargs)
+        response.raise_for_status()
+        return response.text, True
+
+
 def extraer_tipo_cambio_bna(html):
     config = obtener_configuracion_fuente_bna()
     contenido = unescape(html or "")
@@ -327,30 +404,23 @@ def obtener_tipo_cambio_oficial_bna(force=False):
             return cache
 
     try:
-        response = requests.get(
-            BNA_PERSONAS_URL,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Cotizador Cuenco Tech)",
-                "Accept-Language": "es-AR,es;q=0.9",
-            },
-            timeout=15,
-        )
-        response.raise_for_status()
-        html = response.text
+        html, ssl_insecure = descargar_html_bna()
         payload = extraer_tipo_cambio_bna(html)
         payload["fetched_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
         payload["stale"] = False
+        payload["ssl_insecure"] = ssl_insecure
         with _bna_exchange_rate_lock:
             _bna_exchange_rate_cache["payload"] = payload
             _bna_exchange_rate_cache["fetched_at"] = ahora
         return payload
     except (requests.RequestException, TimeoutError, ValueError) as exc:
+        mensaje_error = describir_error_tipo_cambio_bna(exc)
         with _bna_exchange_rate_lock:
             cache = _bna_exchange_rate_cache.get("payload")
         if cache:
             payload = dict(cache)
             payload["stale"] = True
-            payload["error"] = str(exc)
+            payload["error"] = mensaje_error
             return payload
         config = obtener_configuracion_fuente_bna()
         return {
@@ -363,8 +433,9 @@ def obtener_tipo_cambio_oficial_bna(force=False):
             "source_code": config["source_code"],
             "item": config["item"],
             "source_url": BNA_PERSONAS_URL,
-            "error": str(exc),
+            "error": mensaje_error,
             "stale": False,
+            "ssl_insecure": False,
         }
 
 
@@ -623,6 +694,9 @@ with app.app_context():
         )
         db.session.commit()
     columnas_usuario = [col[1] for col in db.session.execute(db.text("PRAGMA table_info(usuario)")).fetchall()]
+    if "nombre_completo" not in columnas_usuario:
+        db.session.execute(db.text("ALTER TABLE usuario ADD COLUMN nombre_completo VARCHAR(120)"))
+        db.session.commit()
     if "is_admin" not in columnas_usuario:
         db.session.execute(db.text("ALTER TABLE usuario ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
         db.session.commit()
@@ -1995,6 +2069,7 @@ def setup_admin():
     if request.method == "POST":
         setup_token = (request.form.get("setup_token") or "").strip()
         username = (request.form.get("username") or "").strip()
+        nombre_completo = (request.form.get("nombre_completo") or "").strip()
         password = request.form.get("password") or ""
         password_confirm = request.form.get("password_confirm") or ""
         admin_setup_token = obtener_admin_setup_token()
@@ -2012,7 +2087,7 @@ def setup_admin():
         elif len(password) < 8:
             error = "La contraseña debe tener al menos 8 caracteres."
         else:
-            nuevo = Usuario(username=username, is_admin=True)
+            nuevo = Usuario(username=username, nombre_completo=nombre_completo or None, is_admin=True)
             nuevo.set_password(password)
             db.session.add(nuevo)
             db.session.commit()
@@ -2071,6 +2146,7 @@ def usuarios_page():
     error = None
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
+        nombre_completo = (request.form.get("nombre_completo") or "").strip()
         password = request.form.get("password") or ""
         password_confirm = request.form.get("password_confirm") or ""
         is_admin = request.form.get("is_admin") == "1"
@@ -2086,7 +2162,7 @@ def usuarios_page():
         elif len(password) < 8:
             error = "La contraseña debe tener al menos 8 caracteres."
         else:
-            nuevo = Usuario(username=username, is_admin=is_admin)
+            nuevo = Usuario(username=username, nombre_completo=nombre_completo or None, is_admin=is_admin)
             nuevo.set_password(password)
             db.session.add(nuevo)
             db.session.commit()
@@ -2110,6 +2186,25 @@ def usuarios_page():
         total_usuarios=total_usuarios,
         total_admins=total_admins,
     )
+
+
+@app.route("/usuarios/<int:id>/nombre", methods=["POST"])
+@token_required
+@admin_required
+def actualizar_nombre_usuario(id):
+    usuario = Usuario.query.get_or_404(id)
+    nombre_completo = (request.form.get("nombre_completo") or "").strip()
+    usuario.nombre_completo = nombre_completo or None
+    db.session.commit()
+    registrar_auditoria(
+        "Actualizo nombre de usuario",
+        "Usuario",
+        entidad_id=usuario.id,
+        entidad_ref=usuario.username,
+        detalle=f"Nombre visible para documentos: {usuario.nombre_para_documentos}.",
+    )
+    flash(f"Nombre visible de {usuario.username} actualizado.", "success")
+    return redirect(url_for("usuarios_page"))
 
 
 @app.route("/familias", methods=["GET", "POST"])
@@ -2671,11 +2766,21 @@ def filtrar_historial():
 def ver_cotizacion(id):
     cot = Cotizacion.query.get_or_404(id)
     mostrar_descuento = any((item.descuento_pct or 0.0) > 0 for item in cot.items)
+    current_user = getattr(g, "current_user", None)
     return render_template(
         "cotizacion_cliente.html",
         cot=cot,
         domicilio_empresa=DOMICILIO,
         mostrar_descuento=mostrar_descuento,
+        quote_signature={
+            "name": current_user.nombre_para_documentos if current_user else QUOTE_SIGNER_NAME,
+            "role": QUOTE_SIGNER_ROLE,
+            "email": QUOTE_CONTACT_EMAIL,
+            "phone": QUOTE_CONTACT_PHONE,
+            "image": QUOTE_SIGNATURE_IMAGE,
+            "validity_days": QUOTE_VALIDITY_DAYS,
+            "footer_note": QUOTE_FOOTER_NOTE,
+        },
     )
 
 

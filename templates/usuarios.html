@@ -48,12 +48,17 @@
                                     <input type="text" name="username" class="form-control" autocomplete="off" required>
                                 </div>
                                 <div class="col-12">
-                                    <label class="form-label fw-semibold">Contraseña</label>
-                                    <input type="password" name="password" class="form-control" autocomplete="new-password" required>
-                                    <div class="form-text">Mínimo 8 caracteres.</div>
+                                    <label class="form-label fw-semibold">Nombre completo</label>
+                                    <input type="text" name="nombre_completo" class="form-control" autocomplete="name">
+                                    <div class="form-text">Es el nombre que vera el cliente en "Emitido por".</div>
                                 </div>
                                 <div class="col-12">
-                                    <label class="form-label fw-semibold">Repetir contraseña</label>
+                                    <label class="form-label fw-semibold">Contrasena</label>
+                                    <input type="password" name="password" class="form-control" autocomplete="new-password" required>
+                                    <div class="form-text">Minimo 8 caracteres.</div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label fw-semibold">Repetir contrasena</label>
                                     <input type="password" name="password_confirm" class="form-control" autocomplete="new-password" required>
                                 </div>
                                 <div class="col-12">
@@ -61,7 +66,7 @@
                                         <input class="form-check-input" type="checkbox" id="is_admin" name="is_admin" value="1">
                                         <label class="form-check-label fw-semibold" for="is_admin">Crear como administrador</label>
                                     </div>
-                                    <div class="form-text">El administrador también podrá crear otros usuarios.</div>
+                                    <div class="form-text">El administrador tambien podra crear otros usuarios.</div>
                                 </div>
                                 <div class="col-12">
                                     <button type="submit" class="btn btn-dark-custom w-100">
@@ -86,8 +91,9 @@
                                         <thead>
                                             <tr>
                                                 <th>Usuario</th>
+                                                <th>Nombre visible</th>
                                                 <th class="text-center">Rol</th>
-                                                <th class="text-center">Auditoría</th>
+                                                <th class="text-center">Auditoria</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -96,8 +102,22 @@
                                                 <td>
                                                     <div class="fw-bold">{{ usuario.username }}</div>
                                                     {% if current_user and current_user.id == usuario.id %}
-                                                    <small class="text-muted">Sesión actual</small>
+                                                    <small class="text-muted">Sesion actual</small>
                                                     {% endif %}
+                                                </td>
+                                                <td>
+                                                    <form method="POST" action="{{ url_for('actualizar_nombre_usuario', id=usuario.id) }}" class="d-flex gap-2 align-items-start">
+                                                        <input
+                                                            type="text"
+                                                            name="nombre_completo"
+                                                            class="form-control form-control-sm"
+                                                            value="{{ usuario.nombre_completo or '' }}"
+                                                            placeholder="{{ usuario.username }}"
+                                                            autocomplete="name"
+                                                        >
+                                                        <button type="submit" class="btn btn-sm btn-outline-dark">Guardar</button>
+                                                    </form>
+                                                    <div class="small text-muted mt-1">PDF: {{ usuario.nombre_para_documentos }}</div>
                                                 </td>
                                                 <td class="text-center">
                                                     {% if usuario.is_admin %}
@@ -107,12 +127,12 @@
                                                     {% endif %}
                                                 </td>
                                                 <td class="text-center text-muted small">
-                                                    Alta y acciones visibles en Auditoría
+                                                    Alta y acciones visibles en Auditoria
                                                 </td>
                                             </tr>
                                             {% else %}
                                             <tr>
-                                                <td colspan="3" class="text-center text-muted py-4">No hay usuarios cargados.</td>
+                                                <td colspan="4" class="text-center text-muted py-4">No hay usuarios cargados.</td>
                                             </tr>
                                             {% endfor %}
                                         </tbody>

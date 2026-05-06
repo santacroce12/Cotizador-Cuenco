@@ -1,4 +1,5 @@
 import os
+import requests
 import tempfile
 import unittest
 from io import BytesIO
@@ -31,14 +32,17 @@ class CotizadorCalculosTest(unittest.TestCase):
         cls.tmp_root.cleanup()
 
     def setUp(self):
+        with cotizador_app._bna_exchange_rate_lock:
+            cotizador_app._bna_exchange_rate_cache["payload"] = None
+            cotizador_app._bna_exchange_rate_cache["fetched_at"] = None
         with app.app_context():
             db.session.remove()
             db.drop_all()
             db.create_all()
 
-            usuario = Usuario(username="admin", is_admin=True)
+            usuario = Usuario(username="admin", nombre_completo="Administrador Principal", is_admin=True)
             usuario.set_password("admin123")
-            operador = Usuario(username="operador", is_admin=False)
+            operador = Usuario(username="operador", nombre_completo="Lucas Santacruz", is_admin=False)
             operador.set_password("operador123")
             cliente_exento = Cliente(
                 nombre="Municipalidad de Lujan",
@@ -214,6 +218,57 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertIn("validarImagenesAntesDeEnviar", html)
         self.assertIn("limpiarBorradorCotizadorGuardado", html)
 
+    def test_frontend_normaliza_error_ssl_del_bna(self):
+        payload_bna = {
+            "ok": False,
+            "rate": None,
+            "date": "",
+            "time": "",
+            "label": "BNA billete vendedor",
+            "error": "HTTPSConnectionPool(host='www.bna.com.ar', port=443): Max retries exceeded with url: /Personas (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1016)')))",
+        }
+        with patch.object(cotizador_app, "obtener_tipo_cambio_oficial_bna", return_value=payload_bna):
+            response = self.client.get("/")
+
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("function normalizarMensajeErrorTipoCambio", html)
+        self.assertIn("No se pudo validar la conexion segura con el BNA.", html)
+
+    def test_tipo_cambio_bna_reintenta_sin_validacion_ssl_en_modo_auto(self):
+        payload_bna = {
+            "ok": True,
+            "rate": 1385.0,
+            "buy_rate": 1335.0,
+            "date": "04/05/2026",
+            "time": "13:00",
+            "label": "BNA billete vendedor",
+            "source_code": "billetes_venta",
+            "item": "Dolar U.S.A",
+            "source_url": cotizador_app.BNA_PERSONAS_URL,
+        }
+
+        class FakeResponse:
+            text = "<html></html>"
+
+            def raise_for_status(self):
+                return None
+
+        with patch.dict(os.environ, {"BNA_SSL_MODE": "auto"}):
+            with patch.object(
+                cotizador_app.requests,
+                "get",
+                side_effect=[requests.exceptions.SSLError("cert"), FakeResponse()],
+            ) as mock_get:
+                with patch.object(cotizador_app, "extraer_tipo_cambio_bna", return_value=payload_bna):
+                    resultado = cotizador_app.obtener_tipo_cambio_oficial_bna(force=True)
+
+        self.assertTrue(resultado["ok"])
+        self.assertTrue(resultado["ssl_insecure"])
+        self.assertEqual(mock_get.call_count, 2)
+        self.assertTrue(mock_get.call_args_list[0].kwargs["verify"])
+        self.assertFalse(mock_get.call_args_list[1].kwargs["verify"])
+
     def test_api_actualizar_cliente_responde_json_y_actualiza_datos(self):
         response = self.client.put(
             f"/api/clientes/{self.cliente_exento_id}",
@@ -238,6 +293,22 @@ class CotizadorCalculosTest(unittest.TestCase):
         with app.app_context():
             cliente = db.session.get(Cliente, self.cliente_exento_id)
             self.assertEqual(cliente.nombre, "Municipalidad de Lujan Editada")
+
+    def test_admin_puede_actualizar_nombre_visible_de_usuario(self):
+        with app.app_context():
+            operador = Usuario.query.filter_by(username="operador").first()
+            operador_id = operador.id
+
+        response = self.client.post(
+            f"/usuarios/{operador_id}/nombre",
+            data={"nombre_completo": "Lucas A. Santacruz"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with app.app_context():
+            operador = db.session.get(Usuario, operador_id)
+            self.assertEqual(operador.nombre_completo, "Lucas A. Santacruz")
 
     def test_usuario_operador_no_ve_ni_accede_dashboard_o_auditoria(self):
         self._login("operador", "operador123")
@@ -347,11 +418,25 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Tipo de cambio usado", html)
         self.assertIn("Los precios unitarios incluyen IVA", html)
+        self.assertIn("Condiciones comerciales", html)
+        self.assertIn("Emitido por", html)
+        self.assertIn("Administrador Principal", html)
         self.assertNotIn("IVA Total:", html)
 
         cotizacion = self._cotizacion(cotizacion_id)
         self.assertAlmostEqual(cotizacion.total_iva, 40.22, places=2)
         self.assertEqual(cotizacion.condicion_iva, "Exento")
+
+    def test_pdf_toma_nombre_visible_del_usuario_logueado(self):
+        cotizacion_id = self._crear_cotizacion()
+        self._login("operador", "operador123")
+
+        response = self.client.get(f"/cotizacion/{cotizacion_id}")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Lucas Santacruz", html)
+        self.assertNotIn("Administrador Principal", html)
 
     def test_responsable_inscrito_ve_subtotal_neto_e_iva(self):
         cotizacion_id = self._crear_cotizacion(

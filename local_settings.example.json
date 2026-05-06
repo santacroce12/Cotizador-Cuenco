@@ -9,5 +9,12 @@
   "SMTP_PASSWORD": "tu_password",
   "SMTP_FROM": "tu_usuario@example.com",
   "APP_BASE_URL": "http://192.168.0.200:9000",
-  "FOLLOWUP_DEFAULT_TO_EMAIL": "cotizador@cuencotech.com"
+  "FOLLOWUP_DEFAULT_TO_EMAIL": "cotizador@cuencotech.com",
+  "QUOTE_SIGNER_NAME": "Jose Bosdari",
+  "QUOTE_SIGNER_ROLE": "Asesor Comercial",
+  "QUOTE_CONTACT_EMAIL": "cotizador@cuencotech.com",
+  "QUOTE_CONTACT_PHONE": "+54 9 261 XXX XXXX",
+  "QUOTE_SIGNATURE_IMAGE": "firma-jose-bosdari.png",
+  "QUOTE_VALIDITY_DAYS": 7,
+  "QUOTE_FOOTER_NOTE": "Precios sujetos a disponibilidad y confirmacion comercial al momento de la aceptacion."
 }
