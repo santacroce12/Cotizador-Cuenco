@@ -126,6 +126,13 @@ HISTORIAL_PER_PAGE = 20
 DASHBOARD_OPERATIVO_PER_PAGE = 15
 AUDITORIA_PER_PAGE = 25
 ESTADOS_COTIZACION = ("En progreso", "Aceptada", "Rechazada")
+FORMAS_PAGO_COTIZACION = (
+    "Contado",
+    "15 dias fecha fact.",
+    "30 dias",
+    "60 dias",
+    "A convenir",
+)
 FAMILIAS_COTIZACION = (
     "SEGURIDAD URBANA",
     "PARKING",
@@ -170,6 +177,9 @@ class Cotizacion(db.Model):
     moneda = db.Column(db.String(10), default="USD")
     tipo_cambio_usado = db.Column(db.Float)
     condicion_iva = db.Column(db.String(50))
+    condicion_cotizacion = db.Column(db.Text)
+    forma_pago = db.Column(db.String(50))
+    observacion_cliente = db.Column(db.Text)
     carga_fiscal_pct = db.Column(db.Float, default=0.0)
     carga_fiscal_monto = db.Column(db.Float, default=0.0)
     total_carga_fiscal = db.Column(db.Float, default=0.0)
@@ -449,6 +459,30 @@ def normalizar_tipo_cambio_valor(valor):
     return round(tasa, 4)
 
 
+def obtener_condicion_cotizacion_default():
+    return "Las imagenes son ilustrativas."
+
+
+def normalizar_forma_pago(valor):
+    valor = (valor or "").strip()
+    return valor if valor in FORMAS_PAGO_COTIZACION else "A convenir"
+
+
+def construir_desglose_iva_cotizacion(cotizacion):
+    desglose = {21.0: 0.0, 10.5: 0.0, 0.0: 0.0}
+    for item in cotizacion.items:
+        tasa = float(item.iva_item or 0.0)
+        if tasa not in desglose:
+            desglose[tasa] = 0.0
+        base_neta = (item.precio_venta or 0.0) * (item.cantidad or 0.0)
+        desglose[tasa] += base_neta * (tasa / 100.0)
+    return [
+        {"rate": tasa, "label": f"IVA {str(tasa).replace('.0', '')}%", "amount": round(monto, 2)}
+        for tasa, monto in desglose.items()
+        if tasa > 0 and round(monto, 2) > 0
+    ]
+
+
 def construir_contexto_tipo_cambio_cotizador(cotizacion=None):
     payload = obtener_tipo_cambio_oficial_bna()
     guardado = normalizar_tipo_cambio_valor(cotizacion.tipo_cambio_usado if cotizacion else None)
@@ -625,6 +659,15 @@ with app.app_context():
         db.session.commit()
     if "condicion_iva" not in columnas_cot:
         db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN condicion_iva VARCHAR(50)"))
+        db.session.commit()
+    if "condicion_cotizacion" not in columnas_cot:
+        db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN condicion_cotizacion TEXT"))
+        db.session.commit()
+    if "forma_pago" not in columnas_cot:
+        db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN forma_pago VARCHAR(50)"))
+        db.session.commit()
+    if "observacion_cliente" not in columnas_cot:
+        db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN observacion_cliente TEXT"))
         db.session.commit()
     if "numero_cotizacion" not in columnas_cot:
         db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN numero_cotizacion VARCHAR(20)"))
@@ -1337,6 +1380,8 @@ def renderizar_cotizador(cotizacion=None):
         tipo_cambio_actual=tipo_cambio_ctx["actual"],
         tipo_cambio_estado_texto=tipo_cambio_ctx["estado_texto"],
         tipo_cambio_estado_error=tipo_cambio_ctx["estado_error"],
+        formas_pago_cotizacion=FORMAS_PAGO_COTIZACION,
+        condicion_cotizacion_default=obtener_condicion_cotizacion_default(),
     )
 
 
@@ -1396,6 +1441,9 @@ def generar_excel_cotizacion(cotizacion):
         ("Moneda", cotizacion.moneda or "ARS"),
         ("Tipo de cambio usado", cotizacion.tipo_cambio_usado if cotizacion.tipo_cambio_usado is not None else ""),
         ("Condicion IVA", cotizacion.condicion_iva or ""),
+        ("Forma de pago", cotizacion.forma_pago or ""),
+        ("Condicion de la cotizacion", cotizacion.condicion_cotizacion or ""),
+        ("Observacion al cliente", cotizacion.observacion_cliente or ""),
     ]
     for label, value in datos_generales:
         write_label_value(row, label, value)
@@ -1481,6 +1529,8 @@ def generar_excel_cotizacion(cotizacion):
         ("IVA total", cotizacion.total_iva or 0),
         ("Total a cobrar", cotizacion.total_final or 0),
     ]
+    for iva_linea in construir_desglose_iva_cotizacion(cotizacion):
+        resumen.insert(-1, (iva_linea["label"], iva_linea["amount"]))
     for idx, (label, value) in enumerate(resumen):
         r = resumen_inicio + idx
         ws.cell(row=r, column=11, value=label)
@@ -1849,6 +1899,9 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         condicion_iva = "Consumidor Final"
     if cliente_sel and cliente_sel.condicion_iva in ("Exento", "Consumidor Final", "Responsable Inscrito"):
         condicion_iva = cliente_sel.condicion_iva
+    forma_pago = normalizar_forma_pago(request.form.get("forma_pago"))
+    condicion_cotizacion = (request.form.get("condicion_cotizacion") or "").strip() or obtener_condicion_cotizacion_default()
+    observacion_cliente = (request.form.get("observacion_cliente") or "").strip()
 
     es_edicion = cotizacion is not None
     estado_anterior = None
@@ -1863,6 +1916,9 @@ def persistir_cotizacion_desde_form(cotizacion=None):
             razon_social=RAZON_SOCIAL,
             cuit=CUIT,
             tipo_cambio_usado=tipo_cambio_usado,
+            forma_pago=forma_pago,
+            condicion_cotizacion=condicion_cotizacion,
+            observacion_cliente=observacion_cliente,
             carga_fiscal_pct=0.0,
             carga_fiscal_monto=0.0,
             total_carga_fiscal=0.0,
@@ -1892,6 +1948,9 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     cotizacion.moneda = moneda
     cotizacion.tipo_cambio_usado = tipo_cambio_usado
     cotizacion.condicion_iva = condicion_iva
+    cotizacion.forma_pago = forma_pago
+    cotizacion.condicion_cotizacion = condicion_cotizacion
+    cotizacion.observacion_cliente = observacion_cliente
     cotizacion.carga_fiscal_pct = 0.0
     cotizacion.carga_fiscal_monto = 0.0
     preparar_seguimiento_cotizacion(cotizacion, cliente_sel=cliente_sel)
@@ -2767,11 +2826,13 @@ def ver_cotizacion(id):
     cot = Cotizacion.query.get_or_404(id)
     mostrar_descuento = any((item.descuento_pct or 0.0) > 0 for item in cot.items)
     current_user = getattr(g, "current_user", None)
+    desglose_iva = construir_desglose_iva_cotizacion(cot)
     return render_template(
         "cotizacion_cliente.html",
         cot=cot,
         domicilio_empresa=DOMICILIO,
         mostrar_descuento=mostrar_descuento,
+        desglose_iva=desglose_iva,
         quote_signature={
             "name": current_user.nombre_para_documentos if current_user else QUOTE_SIGNER_NAME,
             "role": QUOTE_SIGNER_ROLE,

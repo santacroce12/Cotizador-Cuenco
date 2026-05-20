@@ -427,6 +427,39 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertAlmostEqual(cotizacion.total_iva, 40.22, places=2)
         self.assertEqual(cotizacion.condicion_iva, "Exento")
 
+    def test_cotizacion_guarda_y_muestra_forma_pago_condicion_y_observacion(self):
+        cotizacion_id = self._crear_cotizacion(
+            forma_pago="30 dias",
+            condicion_cotizacion="Las imagenes son ilustrativas. Oferta sujeta a stock.",
+            observacion_cliente="Solicitud de presupuesto n 4587 - Lic municipal 221304",
+        )
+
+        cotizacion = self._cotizacion(cotizacion_id)
+        self.assertEqual(cotizacion.forma_pago, "30 dias")
+        self.assertEqual(cotizacion.condicion_cotizacion, "Las imagenes son ilustrativas. Oferta sujeta a stock.")
+        self.assertEqual(cotizacion.observacion_cliente, "Solicitud de presupuesto n 4587 - Lic municipal 221304")
+
+        html = self.client.get(f"/cotizacion/{cotizacion_id}").get_data(as_text=True)
+        self.assertIn("Forma de pago", html)
+        self.assertIn("30 dias", html)
+        self.assertIn("Solicitud de presupuesto n 4587 - Lic municipal 221304", html)
+        self.assertIn("Las imagenes son ilustrativas. Oferta sujeta a stock.", html)
+
+        with app.app_context():
+            cotizacion_db = db.session.get(Cotizacion, cotizacion_id)
+            wb = load_workbook(BytesIO(generar_excel_cotizacion(cotizacion_db)), data_only=True)
+
+        ws = wb.active
+        self.assertEqual(self._valor_por_etiqueta(ws, "Forma de pago"), "30 dias")
+        self.assertEqual(
+            self._valor_por_etiqueta(ws, "Condicion de la cotizacion"),
+            "Las imagenes son ilustrativas. Oferta sujeta a stock.",
+        )
+        self.assertEqual(
+            self._valor_por_etiqueta(ws, "Observacion al cliente"),
+            "Solicitud de presupuesto n 4587 - Lic municipal 221304",
+        )
+
     def test_pdf_toma_nombre_visible_del_usuario_logueado(self):
         cotizacion_id = self._crear_cotizacion()
         self._login("operador", "operador123")
@@ -452,8 +485,49 @@ class CotizadorCalculosTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("Subtotal Neto:", html)
+        self.assertIn("IVA 21%:", html)
         self.assertIn("IVA Total:", html)
         self.assertNotIn("Los precios unitarios incluyen IVA", html)
+
+    def test_responsable_inscrito_detalla_iva_por_alicuota_al_final(self):
+        cotizacion_id = self._crear_cotizacion(
+            cliente_id=str(self.cliente_ri_id),
+            cliente="Cliente Responsable",
+            cliente_razon_social="Cliente Responsable SA",
+            cliente_cuit="30-87654321-0",
+            condicion_iva="Responsable Inscrito",
+            **{
+                "row_id[]": ["row-1", "row-2"],
+                "item_id[]": ["", ""],
+                "imagen_actual[]": ["", ""],
+                "desc[]": ["Equipo principal", "Accesorio"],
+                "detalle[]": ["Con IVA 21", "Con IVA 10.5"],
+                "cant[]": ["1", "2"],
+                "costo[]": ["100", "50"],
+                "iva_compra[]": ["21", "10.5"],
+                "extra[]": ["0", "0"],
+                "margen[]": ["50", "20"],
+                "descuento[]": ["0", "0"],
+                "carga_fiscal[]": ["0", "0"],
+                "iva_item[]": ["21", "10.5"],
+            },
+        )
+
+        response = self.client.get(f"/cotizacion/{cotizacion_id}")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("IVA 21%:", html)
+        self.assertIn("IVA 10.5%:", html)
+        self.assertIn("IVA Total:", html)
+
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            wb = load_workbook(BytesIO(generar_excel_cotizacion(cotizacion)), data_only=True)
+
+        ws = wb.active
+        self.assertIsNotNone(self._valor_por_etiqueta(ws, "IVA 21%"))
+        self.assertIsNotNone(self._valor_por_etiqueta(ws, "IVA 10.5%"))
 
     def test_descuento_solo_aparece_en_pdf_si_alguna_fila_lo_usa(self):
         sin_descuento_id = self._crear_cotizacion()

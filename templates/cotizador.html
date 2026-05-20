@@ -421,6 +421,45 @@
             </div>
         </div>
 
+        <div class="card soft-card mb-4">
+            <div class="card-header bg-dark text-white">
+                <h6 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>Condiciones de la Cotizacion</h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Forma de pago</label>
+                        <select name="forma_pago" id="forma_pago" class="form-select">
+                            {% set forma_pago_actual = cotizacion.forma_pago if cotizacion and cotizacion.forma_pago else 'A convenir' %}
+                            {% for forma in formas_pago_cotizacion %}
+                            <option value="{{ forma }}" {% if forma_pago_actual == forma %}selected{% endif %}>{{ forma }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Condicion de la cotizacion</label>
+                        <input
+                            type="text"
+                            name="condicion_cotizacion"
+                            id="condicion_cotizacion"
+                            class="form-control"
+                            value="{{ cotizacion.condicion_cotizacion if cotizacion and cotizacion.condicion_cotizacion else condicion_cotizacion_default }}"
+                        >
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Observacion al cliente</label>
+                        <textarea
+                            name="observacion_cliente"
+                            id="observacion_cliente"
+                            class="form-control"
+                            rows="2"
+                            placeholder="Ej: Solicitud de presupuesto n 4587 - Lic municipal 221304."
+                        >{{ cotizacion.observacion_cliente if cotizacion and cotizacion.observacion_cliente else '' }}</textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="modal fade" id="modalNuevoCliente" tabindex="-1">
             <div class="modal-dialog">
                 <div class="modal-content">
@@ -732,7 +771,7 @@ function borradorTieneContenido(draft) {
     if (!draft) {
         return false;
     }
-    if (draft.cliente_id || draft.familia || draft.seguimiento_activo) {
+    if (draft.cliente_id || draft.familia || draft.seguimiento_activo || draft.forma_pago || draft.condicion_cotizacion || draft.observacion_cliente) {
         return true;
     }
     return (draft.items || []).some((item) => (
@@ -774,6 +813,9 @@ function obtenerBorradorCotizacion() {
         moneda: obtenerValor("#moneda"),
         tipo_cambio: obtenerValor("#tipo_cambio"),
         condicion_iva: obtenerValor("#condicion_iva"),
+        forma_pago: obtenerValor("#forma_pago"),
+        condicion_cotizacion: obtenerValor("#condicion_cotizacion"),
+        observacion_cliente: obtenerValor("#observacion_cliente"),
         estado: estadoSelect?.value || "En progreso",
         seguimiento_activo: Boolean(seguimientoActivo?.checked),
         seguimiento_cada_dias: obtenerValor("#seguimiento_cada_dias"),
@@ -842,6 +884,9 @@ function aplicarBorradorCotizacion(draft) {
     setValue("#moneda", draft.moneda);
     setValue("#tipo_cambio", draft.tipo_cambio);
     setValue("#condicion_iva", draft.condicion_iva);
+    setValue("#forma_pago", draft.forma_pago);
+    setValue("#condicion_cotizacion", draft.condicion_cotizacion);
+    setValue("#observacion_cliente", draft.observacion_cliente);
     setValue("#estado_cotizacion", draft.estado);
     setValue("#seguimiento_cada_dias", draft.seguimiento_cada_dias);
     const seguimientoActivo = document.getElementById("seguimiento_activo");

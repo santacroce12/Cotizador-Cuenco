@@ -173,6 +173,26 @@
         {% if cot.cliente_cuit %}<strong>CUIT:</strong> {{ cot.cliente_cuit }}{% endif %}
     </p>
     {% endif %}
+    {% if cot.forma_pago or cot.observacion_cliente %}
+    <div class="row g-3 mb-3">
+        {% if cot.forma_pago %}
+        <div class="col-md-4">
+            <div class="quote-note-card py-3">
+                <h6>Forma de pago</h6>
+                <div>{{ cot.forma_pago }}</div>
+            </div>
+        </div>
+        {% endif %}
+        {% if cot.observacion_cliente %}
+        <div class="col">
+            <div class="quote-note-card py-3">
+                <h6>Observacion</h6>
+                <div>{{ cot.observacion_cliente }}</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
     <table class="table mt-4 quote-items-table">
         <colgroup>
             <col style="width: 12%;">
@@ -255,6 +275,12 @@
                 <span class="fw-bold">Subtotal Neto:</span>
                 <span>$ {{ "{:,.2f}".format(cot.total_neto) }}</span>
             </div>
+            {% for iva_linea in desglose_iva %}
+            <div class="d-flex justify-content-between mb-2">
+                <span class="fw-bold">{{ iva_linea.label }}:</span>
+                <span>$ {{ "{:,.2f}".format(iva_linea.amount) }}</span>
+            </div>
+            {% endfor %}
             <div class="d-flex justify-content-between mb-2">
                 <span class="fw-bold">IVA Total:</span>
                 <span>$ {{ "{:,.2f}".format(cot.total_iva) }}</span>
@@ -279,6 +305,9 @@
                 <ul>
                     {% if quote_signature.validity_days %}
                     <li>Validez de la oferta: {{ quote_signature.validity_days }} dias.</li>
+                    {% endif %}
+                    {% if cot.condicion_cotizacion %}
+                    <li>{{ cot.condicion_cotizacion }}</li>
                     {% endif %}
                     <li>{{ quote_signature.footer_note }}</li>
                     <li>La aceptacion de esta cotizacion confirma cantidades, moneda y condiciones indicadas.</li>
