@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import re
 import smtplib
 import threading
@@ -133,6 +134,12 @@ FORMAS_PAGO_COTIZACION = (
     "60 dias",
     "A convenir",
 )
+CONDICIONES_COTIZACION = (
+    "Las imagenes son ilustrativas.",
+    "Oferta sujeta a stock.",
+    "Precios sujetos a variacion sin previo aviso.",
+    "Entrega y validez a confirmar.",
+)
 FAMILIAS_COTIZACION = (
     "SEGURIDAD URBANA",
     "PARKING",
@@ -227,10 +234,9 @@ class ItemCotizacion(db.Model):
     @property
     def precio_lista_unitario(self):
         costo = self.costo_unitario or 0.0
-        iva_compra = (self.iva_compra_pct or 0.0) / 100.0
         extra = (self.costo_extra or 0.0) / 100.0
         margen = self.margen or 0.0
-        return costo * (1 + iva_compra + extra) * (1 + margen)
+        return costo * (1 + extra) * (1 + margen)
 
     @property
     def descuento_total(self):
@@ -460,7 +466,28 @@ def normalizar_tipo_cambio_valor(valor):
 
 
 def obtener_condicion_cotizacion_default():
-    return "Las imagenes son ilustrativas."
+    return CONDICIONES_COTIZACION[0]
+
+
+def parsear_decimal(valor, default=0.0):
+    if valor is None:
+        return default
+    texto = str(valor).strip().replace(",", ".")
+    if not texto:
+        return default
+    try:
+        numero = float(texto)
+    except (TypeError, ValueError):
+        return default
+    return numero if math.isfinite(numero) else default
+
+
+def normalizar_iva_venta(valor, default=21.0):
+    numero = parsear_decimal(valor, default=default)
+    for tasa in (21.0, 10.5, 0.0):
+        if abs(numero - tasa) < 0.0001:
+            return tasa
+    return default
 
 
 def normalizar_forma_pago(valor):
@@ -581,6 +608,7 @@ def token_required(f):
         if not current_user:
             if request.endpoint in {
                 "agregar_cliente",
+                "actualizar_cliente",
                 "agregar_familia_api",
                 "actualizar_estado_cotizacion",
                 "filtrar_historial",
@@ -1381,6 +1409,7 @@ def renderizar_cotizador(cotizacion=None):
         tipo_cambio_estado_texto=tipo_cambio_ctx["estado_texto"],
         tipo_cambio_estado_error=tipo_cambio_ctx["estado_error"],
         formas_pago_cotizacion=FORMAS_PAGO_COTIZACION,
+        condiciones_cotizacion=CONDICIONES_COTIZACION,
         condicion_cotizacion_default=obtener_condicion_cotizacion_default(),
     )
 
@@ -1993,15 +2022,12 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         if not desc:
             continue
 
-        try:
-            costo = float(costs[i] if i < len(costs) else 0)
-            iva_compra_pct = float(iva_compras[i] if i < len(iva_compras) else 0)
-            extra_pct = float(extras[i] if i < len(extras) else 5.0)
-            margen_pct = float(margs[i] if i < len(margs) else 0)
-            descuento_pct = float(descuentos[i] if i < len(descuentos) else 0)
-            carga_pct = float(cargas_fiscales[i] if i < len(cargas_fiscales) else 0)
-        except ValueError:
-            continue
+        costo = parsear_decimal(costs[i] if i < len(costs) else 0)
+        iva_compra_pct = parsear_decimal(iva_compras[i] if i < len(iva_compras) else 0)
+        extra_pct = parsear_decimal(extras[i] if i < len(extras) else 5.0, default=5.0)
+        margen_pct = parsear_decimal(margs[i] if i < len(margs) else 0)
+        descuento_pct = parsear_decimal(descuentos[i] if i < len(descuentos) else 0)
+        carga_pct = parsear_decimal(cargas_fiscales[i] if i < len(cargas_fiscales) else 0)
 
         cantidad = normalizar_cantidad_entera(cants[i] if i < len(cants) else 1, default=1)
         costo = max(0.0, costo)
@@ -2013,14 +2039,9 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         margen_ratio = margen_pct / 100.0
         descuento_ratio = descuento_pct / 100.0
 
-        try:
-            iva_pct = float(iva_items[i] if i < len(iva_items) else 21.0)
-        except (TypeError, ValueError):
-            iva_pct = 21.0
-        if iva_pct not in (21.0, 10.5, 0.0):
-            iva_pct = 21.0
+        iva_pct = normalizar_iva_venta(iva_items[i] if i < len(iva_items) else 21.0)
 
-        costo_con_extra = costo * (1 + (iva_compra_pct / 100.0) + (extra_pct / 100.0))
+        costo_con_extra = costo * (1 + (extra_pct / 100.0))
         p_venta_lista = costo_con_extra * (1 + margen_ratio)
         p_venta_neto = p_venta_lista * (1 - descuento_ratio)
         sub_neto = cantidad * p_venta_neto

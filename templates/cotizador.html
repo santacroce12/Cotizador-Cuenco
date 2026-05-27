@@ -14,8 +14,8 @@
     @media (min-width: 1400px) {
         .cotizador-workspace {
             width: min(calc(100vw - 48px), 1760px);
-            margin-left: 50%;
-            transform: translateX(-50%);
+            margin-left: auto;
+            margin-right: auto;
         }
     }
 
@@ -251,6 +251,21 @@
             grid-template-columns: 1fr;
         }
     }
+
+    .client-modal-dialog {
+        height: calc(100vh - 2rem);
+        max-height: calc(100vh - 2rem);
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .client-modal-dialog .modal-content {
+        max-height: 100%;
+    }
+
+    .client-modal-dialog .modal-body {
+        overflow-y: auto;
+    }
 </style>
 <div class="card p-4 page-surface cotizador-workspace">
     <div class="d-flex align-items-center gap-3 mb-4">
@@ -436,15 +451,25 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-8">
-                        <label class="form-label fw-bold small text-muted text-uppercase">Condicion de la cotizacion</label>
-                        <input
-                            type="text"
+                    {% set condicion_actual = cotizacion.condicion_cotizacion if cotizacion and cotizacion.condicion_cotizacion else condicion_cotizacion_default %}
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Condicion frecuente</label>
+                        <select id="condicion_cotizacion_preset" class="form-select" onchange="aplicarCondicionCotizacionPreset(this.value)">
+                            {% for condicion in condiciones_cotizacion %}
+                            <option value="{{ condicion }}" {% if condicion_actual == condicion %}selected{% endif %}>{{ condicion }}</option>
+                            {% endfor %}
+                            <option value="__custom__" {% if condicion_actual not in condiciones_cotizacion %}selected{% endif %}>Personalizada</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Detalle de condicion</label>
+                        <textarea
                             name="condicion_cotizacion"
                             id="condicion_cotizacion"
                             class="form-control"
-                            value="{{ cotizacion.condicion_cotizacion if cotizacion and cotizacion.condicion_cotizacion else condicion_cotizacion_default }}"
-                        >
+                            rows="2"
+                            oninput="sincronizarCondicionCotizacionPreset()"
+                        >{{ condicion_actual }}</textarea>
                     </div>
                     <div class="col-12">
                         <label class="form-label fw-bold small text-muted text-uppercase">Observacion al cliente</label>
@@ -461,7 +486,7 @@
         </div>
 
         <div class="modal fade" id="modalNuevoCliente" tabindex="-1">
-            <div class="modal-dialog">
+            <div class="modal-dialog modal-dialog-scrollable modal-lg client-modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title" id="modalClienteTitulo">Agregar Nuevo Cliente</h5>
@@ -530,7 +555,7 @@
                 <button type="button" class="field-help-button dark" data-bs-toggle="tooltip" data-bs-placement="top" title="Estos calculos son internos. El cliente solo ve precios finales, salvo que sea Responsable Inscrito y corresponda detallar IVA.">?</button>
             </div>
             <div class="calc-help-grid">
-                <div><strong>Base venta:</strong> Costo neto + IVA compra + Otros.</div>
+                <div><strong>Base venta:</strong> Costo neto + Otros. El IVA compra queda como credito.</div>
                 <div><strong>Venta neta:</strong> Base venta x (1 + Margen %) x (1 - Desc. %).</div>
                 <div><strong>Total cliente:</strong> Venta neta + IVA venta.</div>
                 <div><strong>Ganancia neta:</strong> Venta neta - Costo neto real - Carga fiscal.</div>
@@ -709,6 +734,7 @@ const placeholderProductUrl = "{{ url_for('static', filename='placeholder_produc
 const itemsPrecargados = {{ items_precargados|default([], true)|tojson }};
 const tipoCambioUrl = "{{ url_for('api_tipo_cambio_oficial') }}";
 const tipoCambioGuardado = {{ tipo_cambio_guardado|tojson }};
+const condicionesCotizacion = {{ condiciones_cotizacion|default([], true)|tojson }};
 const cotizadorDraftKey = "cuencotech:cotizacion:draft:{{ 'edit:' ~ cotizacion.id if modo_edicion else 'new' }}";
 const cotizadorPendingDraftKey = "cuencotech:cotizacion:pending-draft-key";
 let draftSaveTimer = null;
@@ -748,6 +774,13 @@ function inicializarAyudasCalculo() {
     });
 }
 
+function moverModalClienteAlBody() {
+    const modal = document.getElementById("modalNuevoCliente");
+    if (modal && modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    }
+}
+
 function leerBorradorCotizacion() {
     try {
         const raw = window.localStorage.getItem(cotizadorDraftKey);
@@ -785,6 +818,24 @@ function borradorTieneContenido(draft) {
 
 function obtenerValor(selector) {
     return document.querySelector(selector)?.value || "";
+}
+
+function aplicarCondicionCotizacionPreset(valor) {
+    const textarea = document.getElementById("condicion_cotizacion");
+    if (!textarea || !valor || valor === "__custom__") {
+        return;
+    }
+    textarea.value = valor;
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function sincronizarCondicionCotizacionPreset() {
+    const select = document.getElementById("condicion_cotizacion_preset");
+    const textarea = document.getElementById("condicion_cotizacion");
+    if (!select || !textarea) {
+        return;
+    }
+    select.value = condicionesCotizacion.includes(textarea.value) ? textarea.value : "__custom__";
 }
 
 function obtenerBorradorCotizacion() {
@@ -886,6 +937,7 @@ function aplicarBorradorCotizacion(draft) {
     setValue("#condicion_iva", draft.condicion_iva);
     setValue("#forma_pago", draft.forma_pago);
     setValue("#condicion_cotizacion", draft.condicion_cotizacion);
+    sincronizarCondicionCotizacionPreset();
     setValue("#observacion_cliente", draft.observacion_cliente);
     setValue("#estado_cotizacion", draft.estado);
     setValue("#seguimiento_cada_dias", draft.seguimiento_cada_dias);
@@ -1285,6 +1337,10 @@ async function guardarCliente() {
             alert(data.error || `No se pudo guardar el cliente. Error HTTP ${response.status}.`);
             return;
         }
+        if (!data.id) {
+            alert("El servidor no devolvio los datos del cliente guardado. Volve a iniciar sesion e intenta nuevamente.");
+            return;
+        }
 
         actualizarOptionClienteEnSelect(data);
 
@@ -1427,6 +1483,21 @@ function escapeHtml(value) {
         .replace(/'/g, "&#39;");
 }
 
+function parseNumero(valor, defaultValue = 0) {
+    const numero = Number.parseFloat(String(valor ?? "").replace(",", "."));
+    return Number.isFinite(numero) ? numero : defaultValue;
+}
+
+function normalizarIvaVenta(valor) {
+    const numero = parseNumero(valor, 21);
+    return [21, 10.5, 0].includes(numero) ? numero : 21;
+}
+
+function formatoMoneda(valor) {
+    const numero = Number.isFinite(valor) ? valor : 0;
+    return `$ ${numero.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function agregarFila(data = {}) {
     const cuerpo = document.getElementById("cuerpo-tabla");
     const fila = document.createElement("tr");
@@ -1441,7 +1512,7 @@ function agregarFila(data = {}) {
     const margen = data.margen ?? 75;
     const descuento = data.descuento_pct ?? 0;
     const cargaFiscal = data.carga_fiscal ?? 0;
-    const ivaItem = data.iva_item ?? 21;
+    const ivaItem = normalizarIvaVenta(data.iva_item ?? 21);
     const imagenActual = data.imagen_url || "";
     const previewUrl = data.preview_url || placeholderProductUrl;
     const hasImageClass = imagenActual ? "has-image" : "";
@@ -1631,9 +1702,9 @@ function quitarFila(button) {
 }
 
 function validarPositivo(input) {
-    const minAttr = parseFloat(input.min);
+    const minAttr = parseNumero(input.min, NaN);
     const min = Number.isFinite(minAttr) ? minAttr : 0;
-    const valor = parseFloat(input.value);
+    const valor = parseNumero(input.value, NaN);
     if (Number.isFinite(valor) && valor < min) {
         input.value = min;
     }
@@ -1641,7 +1712,7 @@ function validarPositivo(input) {
 
 function validarPorcentaje(input) {
     validarPositivo(input);
-    const valor = parseFloat(input.value);
+    const valor = parseNumero(input.value, NaN);
     if (Number.isFinite(valor) && valor > 100) {
         input.value = "100";
     }
@@ -1730,7 +1801,7 @@ async function actualizarTipoCambioOficial(force = false) {
 }
 
 function calcularTodo() {
-    const tcRaw = parseFloat(document.getElementById("tipo_cambio")?.value);
+    const tcRaw = parseNumero(document.getElementById("tipo_cambio")?.value, 0);
     const tc = Number.isFinite(tcRaw) && tcRaw > 0 ? tcRaw : null;
     const condicionIva = document.getElementById("condicion_iva")?.value || "Exento";
 
@@ -1745,20 +1816,20 @@ function calcularTodo() {
     const rows = document.querySelectorAll("#cuerpo-tabla tr");
     rows.forEach((row) => {
         const cant = Math.max(1, parseInt(row.querySelector('[name="cant[]"]')?.value, 10) || 0);
-        const costoUnitario = Math.max(0, parseFloat(row.querySelector('[name="costo[]"]')?.value) || 0);
-        const ivaCompraPerc = Math.max(0, parseFloat(row.querySelector('[name="iva_compra[]"]')?.value) || 0);
-        const extraPerc = Math.max(0, parseFloat(row.querySelector('[name="extra[]"]')?.value) || 0);
-        const margenPct = Math.max(0, parseFloat(row.querySelector('[name="margen[]"]')?.value) || 0);
-        const descuentoPct = Math.min(100, Math.max(0, parseFloat(row.querySelector('[name="descuento[]"]')?.value) || 0));
-        const cargaFiscPerc = Math.max(0, parseFloat(row.querySelector('[name="carga_fiscal[]"]')?.value) || 0);
+        const costoUnitario = Math.max(0, parseNumero(row.querySelector('[name="costo[]"]')?.value));
+        const ivaCompraPerc = Math.max(0, parseNumero(row.querySelector('[name="iva_compra[]"]')?.value));
+        const extraPerc = Math.max(0, parseNumero(row.querySelector('[name="extra[]"]')?.value));
+        const margenPct = Math.max(0, parseNumero(row.querySelector('[name="margen[]"]')?.value));
+        const descuentoPct = Math.min(100, Math.max(0, parseNumero(row.querySelector('[name="descuento[]"]')?.value)));
+        const cargaFiscPerc = Math.max(0, parseNumero(row.querySelector('[name="carga_fiscal[]"]')?.value));
         const margen = margenPct / 100;
         const descuento = descuentoPct / 100;
-        const ivaPerc = Math.max(0, parseFloat(row.querySelector('[name="iva_item[]"]')?.value) || 0);
+        const ivaPerc = normalizarIvaVenta(row.querySelector('[name="iva_item[]"]')?.value);
 
         const costoBaseTotalFila = cant * costoUnitario;
         const montoIvaCompraFila = costoBaseTotalFila * (ivaCompraPerc / 100);
         const montoExtraFila = costoBaseTotalFila * (extraPerc / 100);
-        const costoParaVenta = costoUnitario * (1 + (ivaCompraPerc / 100) + (extraPerc / 100));
+        const costoParaVenta = costoUnitario * (1 + (extraPerc / 100));
         const costoRealUnitario = costoUnitario * (1 + (extraPerc / 100));
         const pVentaLista = costoParaVenta * (1 + margen);
         const pVentaNeto = pVentaLista * (1 - descuento);
@@ -1779,12 +1850,12 @@ function calcularTodo() {
         const gananciaU = pVentaNeto - costoRealUnitario - (pVentaNeto * (cargaFiscPerc / 100));
         const gananciaNode = row.querySelector(".ganancia-badge");
         if (gananciaNode) {
-            gananciaNode.innerText = `$ ${gananciaU.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+            gananciaNode.innerText = formatoMoneda(gananciaU);
         }
         const ventaTotalNode = row.querySelector(".venta-total-badge");
         if (ventaTotalNode) {
             const ventaTotalFila = subNetoFila + ivaFila;
-            ventaTotalNode.innerText = `$ ${ventaTotalFila.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+            ventaTotalNode.innerText = formatoMoneda(ventaTotalFila);
         }
     });
 
@@ -1793,16 +1864,16 @@ function calcularTodo() {
     const gananciaNetaReal = subtotalVentaNeto - costoNetoReal - totalCargaFiscalAcumulado;
     const totalFinal = subtotalVentaNeto + ivaTotalAcumulado;
 
-    document.getElementById("costo-total-interno").innerText = `$ ${costoNetoReal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
-    document.getElementById("iva-compra-credito").innerText = `$ ${totalIvaCompraAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
-    document.getElementById("iva-a-pagar").innerText = `$ ${ivaAPagar.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
-    document.getElementById("total-descuentos-interno").innerText = `-$ ${totalDescuentosAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
-    document.getElementById("venta-neta-interna").innerText = `$ ${subtotalVentaNeto.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
-    document.getElementById("monto-carga-fiscal").innerText = `-$ ${totalCargaFiscalAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
-    document.getElementById("total-iva-interno").innerText = `$ ${ivaTotalAcumulado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
-    document.getElementById("total-vista").innerText = `$ ${totalFinal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+    document.getElementById("costo-total-interno").innerText = formatoMoneda(costoNetoReal);
+    document.getElementById("iva-compra-credito").innerText = formatoMoneda(totalIvaCompraAcumulado);
+    document.getElementById("iva-a-pagar").innerText = formatoMoneda(ivaAPagar);
+    document.getElementById("total-descuentos-interno").innerText = `-${formatoMoneda(totalDescuentosAcumulado)}`;
+    document.getElementById("venta-neta-interna").innerText = formatoMoneda(subtotalVentaNeto);
+    document.getElementById("monto-carga-fiscal").innerText = `-${formatoMoneda(totalCargaFiscalAcumulado)}`;
+    document.getElementById("total-iva-interno").innerText = formatoMoneda(ivaTotalAcumulado);
+    document.getElementById("total-vista").innerText = formatoMoneda(totalFinal);
     const gananciaNetaNode = document.getElementById("ganancia-neta-real");
-    gananciaNetaNode.innerText = `$ ${gananciaNetaReal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+    gananciaNetaNode.innerText = formatoMoneda(gananciaNetaReal);
     gananciaNetaNode.classList.remove("text-success", "text-danger");
     gananciaNetaNode.classList.add(gananciaNetaReal >= 0 ? "text-success" : "text-danger");
 
@@ -1813,7 +1884,7 @@ function calcularTodo() {
     document.getElementById("label-moneda-actual").innerText = moneda;
     document.getElementById("label-moneda-conv").innerText = labelConv;
     document.getElementById("total-convertido").innerText = tc
-        ? `$ ${totalConv.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`
+        ? formatoMoneda(totalConv)
         : "N/D";
 }
 
@@ -1848,11 +1919,13 @@ document.getElementById("form-cotizador")?.addEventListener("submit", function (
 });
 
 window.onload = function () {
+    moverModalClienteAlBody();
     inicializarAyudasCalculo();
     initClienteSelect();
     actualizarEstiloEstadoForm(document.getElementById("estado_cotizacion"));
     toggleSeguimientoFields();
     actualizarIndicadorFamilia();
+    sincronizarCondicionCotizacionPreset();
     const borradorRestaurado = inicializarBorradorCotizacion();
     if (!borradorRestaurado) {
         draftSuppressSave = true;

@@ -141,21 +141,21 @@ class CotizadorCalculosTest(unittest.TestCase):
 
             self.assertEqual(cotizacion.moneda, "USD")
             self.assertAlmostEqual(cotizacion.tipo_cambio_usado, 1450.0, places=4)
-            self.assertAlmostEqual(item.precio_venta, 191.52, places=2)
-            self.assertAlmostEqual(cotizacion.total_neto, 191.52, places=2)
-            self.assertAlmostEqual(cotizacion.total_iva, 40.22, places=2)
-            self.assertAlmostEqual(cotizacion.total_final, 231.74, places=2)
-            self.assertAlmostEqual(cotizacion.total_carga_fiscal, 9.58, places=2)
+            self.assertAlmostEqual(item.precio_venta, 159.60, places=2)
+            self.assertAlmostEqual(cotizacion.total_neto, 159.60, places=2)
+            self.assertAlmostEqual(cotizacion.total_iva, 33.52, places=2)
+            self.assertAlmostEqual(cotizacion.total_final, 193.12, places=2)
+            self.assertAlmostEqual(cotizacion.total_carga_fiscal, 7.98, places=2)
 
             wb = load_workbook(BytesIO(generar_excel_cotizacion(cotizacion)), data_only=True)
 
         ws = wb.active
         self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Tipo de cambio usado"), 1450.0, places=4)
         self.assertAlmostEqual(self._valor_por_etiqueta(ws, "IVA compra credito"), 19.95, places=2)
-        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "IVA a pagar estimado"), 20.27, places=2)
-        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Carga fiscal retenida"), 9.58, places=2)
-        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Ganancia neta (Bolsillo)"), 82.19, places=2)
-        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Total a cobrar"), 231.74, places=2)
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "IVA a pagar estimado"), 13.57, places=2)
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Carga fiscal retenida"), 7.98, places=2)
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Ganancia neta (Bolsillo)"), 51.87, places=2)
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Total a cobrar"), 193.12, places=2)
 
     def test_formulario_muestra_ayudas_de_calculo(self):
         payload_bna = {
@@ -194,6 +194,9 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertIn("Guardando cambios...", html)
         self.assertIn(".catch(() => ({}))", html)
         self.assertIn("No se pudo guardar el cliente", html)
+        self.assertIn("modal-dialog-scrollable", html)
+        self.assertIn("function moverModalClienteAlBody()", html)
+        self.assertIn("El servidor no devolvio los datos del cliente guardado", html)
         self.assertIn("function actualizarSubsectores(valorSeleccionado = \"\")", html)
 
     def test_formulario_tiene_borrador_automatico_para_no_perder_carga(self):
@@ -293,6 +296,16 @@ class CotizadorCalculosTest(unittest.TestCase):
         with app.app_context():
             cliente = db.session.get(Cliente, self.cliente_exento_id)
             self.assertEqual(cliente.nombre, "Municipalidad de Lujan Editada")
+
+    def test_api_actualizar_cliente_sin_sesion_responde_json_auth_required(self):
+        self.client.get("/logout")
+        response = self.client.put(
+            f"/api/clientes/{self.cliente_exento_id}",
+            json={"nombre": "Sin sesion", "sector": "Publico", "subsector": "Municipal"},
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.get_json()["error"], "auth_required")
 
     def test_admin_puede_actualizar_nombre_visible_de_usuario(self):
         with app.app_context():
@@ -424,7 +437,7 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertNotIn("IVA Total:", html)
 
         cotizacion = self._cotizacion(cotizacion_id)
-        self.assertAlmostEqual(cotizacion.total_iva, 40.22, places=2)
+        self.assertAlmostEqual(cotizacion.total_iva, 33.52, places=2)
         self.assertEqual(cotizacion.condicion_iva, "Exento")
 
     def test_cotizacion_guarda_y_muestra_forma_pago_condicion_y_observacion(self):
@@ -539,9 +552,9 @@ class CotizadorCalculosTest(unittest.TestCase):
         cotizacion_con_descuento = self._cotizacion(con_descuento_id)
 
         self.assertIn("Desc. %", html_con_descuento)
-        self.assertAlmostEqual(cotizacion_con_descuento.total_neto, 172.37, places=2)
-        self.assertAlmostEqual(cotizacion_con_descuento.total_iva, 36.20, places=2)
-        self.assertAlmostEqual(cotizacion_con_descuento.total_final, 208.57, places=2)
+        self.assertAlmostEqual(cotizacion_con_descuento.total_neto, 143.64, places=2)
+        self.assertAlmostEqual(cotizacion_con_descuento.total_iva, 30.16, places=2)
+        self.assertAlmostEqual(cotizacion_con_descuento.total_final, 173.80, places=2)
 
     def test_caso_2_tipo_cambio_guardado_no_se_pisa_con_bna_actual(self):
         cotizacion_id = self._crear_cotizacion()
@@ -573,8 +586,8 @@ class CotizadorCalculosTest(unittest.TestCase):
         cotizacion = self._cotizacion(cotizacion_id)
 
         self.assertEqual(cotizacion.items[0].cantidad, 2)
-        self.assertAlmostEqual(cotizacion.total_neto, 383.04, places=2)
-        self.assertAlmostEqual(cotizacion.total_final, 463.48, places=2)
+        self.assertAlmostEqual(cotizacion.total_neto, 319.20, places=2)
+        self.assertAlmostEqual(cotizacion.total_final, 386.23, places=2)
 
 
 if __name__ == "__main__":
