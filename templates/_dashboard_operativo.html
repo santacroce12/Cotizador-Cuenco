@@ -14,11 +14,11 @@
                 <a
                     class="dash-state-link {% if filtro_estado == key %}active{% endif %}"
                     data-dashboard-operativo-link="1"
-                    href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=key, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, op_familia=filtro_op_familia, sector=filtro_sector, subsector=filtro_subsector, moneda=filtro_moneda, op_page=1) }}"
+                    href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=key, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, op_familia=filtro_op_familia, sector=filtro_sector, subsector=filtro_subsector, op_page=1) }}"
                 >{{ label }}</a>
                 {% endfor %}
             </div>
-            <p class="dash-head-copy mt-3 mb-0">Cambia estado y familia sin perder el rango, cliente, moneda o segmento que ya venias mirando arriba.</p>
+            <p class="dash-head-copy mt-3 mb-0">Cambia estado y familia sin perder el rango, cliente o segmento que ya venias mirando arriba.</p>
         </div>
         <form method="GET" action="{{ url_for('dashboard_page') }}" class="dash-operativo-filter-card" data-dashboard-operativo-form="1">
             <input type="hidden" name="periodo" value="{{ filtro_periodo }}">
@@ -29,7 +29,6 @@
             <input type="hidden" name="familia" value="{{ filtro_familia }}">
             <input type="hidden" name="sector" value="{{ filtro_sector }}">
             <input type="hidden" name="subsector" value="{{ filtro_subsector }}">
-            <input type="hidden" name="moneda" value="{{ filtro_moneda }}">
             <input type="hidden" name="op_page" value="1">
             <div class="dash-label mb-2">Familia del detalle</div>
             <div class="dash-operativo-form">
@@ -43,7 +42,7 @@
                 <a
                     class="btn btn-outline-dark"
                     data-dashboard-operativo-link="1"
-                    href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=filtro_estado, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, sector=filtro_sector, subsector=filtro_subsector, moneda=filtro_moneda, op_page=1) }}"
+                    href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=filtro_estado, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, sector=filtro_sector, subsector=filtro_subsector, op_page=1) }}"
                 >Limpiar</a>
             </div>
             <div class="dash-operativo-active">
@@ -65,8 +64,7 @@
                     <th>Familia</th>
                     <th>Fecha de creacion</th>
                     <th class="text-center">Estado</th>
-                    <th class="text-end">Moneda</th>
-                    <th class="text-end">Total</th>
+                    <th class="text-end">Total USD</th>
                     <th class="text-end">Acciones</th>
                 </tr>
             </thead>
@@ -90,7 +88,6 @@
                         <td class="text-center">
                             <span class="estado-pill {% if cot.estado == 'Aceptada' %}estado-aceptada{% elif cot.estado == 'Rechazada' %}estado-rechazada{% else %}estado-en-progreso{% endif %}">{{ cot.estado or 'En progreso' }}</span>
                         </td>
-                        <td class="text-end fw-semibold">{{ cot.moneda or 'ARS' }}</td>
                         <td class="text-end fw-bold">{{ "{:,.2f}".format(cot.total_final or 0) }}</td>
                         <td class="text-end dash-actions-cell">
                             <div class="dash-actions-grid">
@@ -103,7 +100,7 @@
                     </tr>
                     {% endfor %}
                 {% else %}
-                    <tr><td colspan="8" class="dash-empty"><i class="bi bi-inbox"></i>No hay cotizaciones para esta vista. Cambia el rango o el segmento.</td></tr>
+                    <tr><td colspan="7" class="dash-empty"><i class="bi bi-inbox"></i>No hay cotizaciones para esta vista. Cambia el rango o el segmento.</td></tr>
                 {% endif %}
             </tbody>
         </table>
@@ -116,19 +113,19 @@
         <nav aria-label="Paginacion detalle operativo">
             <ul class="pagination pagination-sm mb-0">
                 <li class="page-item {% if not paginacion_operativa.has_prev %}disabled{% endif %}">
-                    <a class="page-link" {% if paginacion_operativa.has_prev %}data-dashboard-operativo-link="1" href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=filtro_estado, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, op_familia=filtro_op_familia, sector=filtro_sector, subsector=filtro_subsector, moneda=filtro_moneda, op_page=paginacion_operativa.prev_page) }}"{% endif %}>Anterior</a>
+                    <a class="page-link" {% if paginacion_operativa.has_prev %}data-dashboard-operativo-link="1" href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=filtro_estado, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, op_familia=filtro_op_familia, sector=filtro_sector, subsector=filtro_subsector, op_page=paginacion_operativa.prev_page) }}"{% endif %}>Anterior</a>
                 </li>
                 {% for page in paginacion_operativa.pages_visible %}
                     {% if page is none %}
                     <li class="page-item disabled"><span class="page-link">...</span></li>
                     {% else %}
                     <li class="page-item {% if page == paginacion_operativa.page %}active{% endif %}">
-                        <a class="page-link" data-dashboard-operativo-link="1" href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=filtro_estado, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, op_familia=filtro_op_familia, sector=filtro_sector, subsector=filtro_subsector, moneda=filtro_moneda, op_page=page) }}">{{ page }}</a>
+                        <a class="page-link" data-dashboard-operativo-link="1" href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=filtro_estado, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, op_familia=filtro_op_familia, sector=filtro_sector, subsector=filtro_subsector, op_page=page) }}">{{ page }}</a>
                     </li>
                     {% endif %}
                 {% endfor %}
                 <li class="page-item {% if not paginacion_operativa.has_next %}disabled{% endif %}">
-                    <a class="page-link" {% if paginacion_operativa.has_next %}data-dashboard-operativo-link="1" href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=filtro_estado, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, op_familia=filtro_op_familia, sector=filtro_sector, subsector=filtro_subsector, moneda=filtro_moneda, op_page=paginacion_operativa.next_page) }}"{% endif %}>Siguiente</a>
+                    <a class="page-link" {% if paginacion_operativa.has_next %}data-dashboard-operativo-link="1" href="{{ url_for('dashboard_page', periodo=filtro_periodo, estado=filtro_estado, desde=filtro_desde, hasta=filtro_hasta, cliente=filtro_cliente, familia=filtro_familia, op_familia=filtro_op_familia, sector=filtro_sector, subsector=filtro_subsector, op_page=paginacion_operativa.next_page) }}"{% endif %}>Siguiente</a>
                 </li>
             </ul>
         </nav>

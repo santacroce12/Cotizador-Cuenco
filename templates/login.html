@@ -21,7 +21,12 @@
                 </div>
                 <div class="mb-4">
                     <label class="form-label fw-semibold">Contraseña</label>
-                    <input type="password" name="password" class="form-control" autocomplete="current-password" required>
+                    <div class="password-field">
+                        <input type="password" name="password" class="form-control" autocomplete="current-password" required data-password-field>
+                        <button type="button" class="password-toggle-btn" data-password-toggle aria-label="Mostrar contraseña" title="Mostrar contraseña" aria-pressed="false">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-dark-custom w-100">Entrar</button>
             </form>

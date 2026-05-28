@@ -9,14 +9,10 @@
 
     .cotizador-workspace {
         width: 100%;
-    }
-
-    @media (min-width: 1400px) {
-        .cotizador-workspace {
-            width: min(calc(100vw - 48px), 1760px);
-            margin-left: auto;
-            margin-right: auto;
-        }
+        max-width: 100%;
+        margin-left: auto;
+        margin-right: auto;
+        overflow: hidden;
     }
 
     .cotizador-items-table thead th {
@@ -163,11 +159,15 @@
     }
 
     .table-grid-outline.table-responsive {
-        overflow: visible;
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior-x: contain;
+        scrollbar-gutter: stable both-edges;
     }
 
     .cotizador-table-shell {
         padding: 14px;
+        max-width: 100%;
     }
 
     .image-upload-cell {
@@ -236,11 +236,6 @@
     }
 
     @media (max-width: 1499.98px) {
-        .table-grid-outline.table-responsive {
-            overflow-x: auto;
-            overflow-y: hidden;
-        }
-
         .cotizador-items-table {
             min-width: 1560px;
         }
@@ -593,13 +588,13 @@
                             <span class="th-help-label">Costo Neto U.<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Costo unitario neto del proveedor, sin IVA de compra.">?</button></span>
                         </th>
                         <th class="text-center">
-                            <span class="th-help-label">IVA Compra %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA facturado por el proveedor. Entra en la base para formar precio y se muestra como credito fiscal interno.">?</button></span>
+                            <span class="th-help-label">IVA Compra %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA facturado por el proveedor. Se muestra como credito fiscal interno y no entra en la base de venta.">?</button></span>
                         </th>
                         <th class="text-center">
                             <span class="th-help-label">Otros %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Costo operativo adicional sobre el costo neto: flete, comision, financiacion simple u otros.">?</button></span>
                         </th>
                         <th class="text-center">
-                            <span class="th-help-label">Margen %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Margen comercial aplicado sobre Costo Neto + IVA Compra + Otros. Se ingresa como porcentaje.">?</button></span>
+                            <span class="th-help-label">Margen %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Margen comercial aplicado sobre Costo Neto + Otros. Se ingresa como porcentaje.">?</button></span>
                         </th>
                         <th class="text-center">
                             <span class="th-help-label">Desc. %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Descuento al cliente aplicado despues del margen. Solo aparece en el PDF si algun item tiene descuento.">?</button></span>
@@ -909,14 +904,29 @@ function mostrarAvisoBorradorRestaurado(draft) {
     alerta.classList.remove("d-none");
 }
 
+function ocultarAvisoBorradorRestaurado() {
+    const alerta = document.getElementById("draft-restored-alert");
+    if (alerta) {
+        alerta.classList.add("d-none");
+    }
+}
+
 function descartarBorradorCotizacion() {
+    draftSuppressSave = true;
+    window.clearTimeout(draftSaveTimer);
+    const form = document.getElementById("form-cotizador");
+    form?.removeEventListener("input", programarGuardarBorradorCotizacion, true);
+    form?.removeEventListener("change", programarGuardarBorradorCotizacion, true);
+    window.removeEventListener("beforeunload", guardarBorradorCotizacion);
     try {
         window.localStorage.removeItem(cotizadorDraftKey);
         window.sessionStorage.removeItem(cotizadorPendingDraftKey);
     } catch (_error) {
         // Nada que hacer.
     }
-    window.location.reload();
+    ocultarAvisoBorradorRestaurado();
+    const cleanUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.location.replace(cleanUrl);
 }
 
 function aplicarBorradorCotizacion(draft) {

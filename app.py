@@ -63,6 +63,7 @@ DEFAULT_SMTP_PORT = 465
 DEFAULT_SMTP_USERNAME = "cotizador@cuencotech.com"
 DEFAULT_SMTP_FROM = "cotizador@cuencotech.com"
 DEFAULT_APP_BASE_URL = "http://192.168.0.200:9000"
+DASHBOARD_FIXED_CURRENCY = "USD"
 LOCAL_SETTINGS_PATH = resolver_ruta_configurada(os.getenv("LOCAL_SETTINGS_PATH"), Path(app.root_path) / "local_settings.json")
 
 
@@ -1836,9 +1837,7 @@ def resolver_filtros_dashboard_request():
         if sector
         else normalizar_subsector_dashboard(request.args.get("subsector"))
     )
-    moneda = (request.args.get("moneda") or "").strip().upper()
-    if moneda not in ("ARS", "USD"):
-        moneda = ""
+    moneda = DASHBOARD_FIXED_CURRENCY
     cliente = (request.args.get("cliente") or "").strip()
 
     periodo, desde, hasta, desde_date, hasta_date = resolver_rango_dashboard(
@@ -1902,7 +1901,6 @@ def construir_contexto_dashboard_operativo(query_periodo, filtros):
         "filtro_op_familia": filtros["op_familia"] or "",
         "filtro_sector": filtros["sector"] or "",
         "filtro_subsector": filtros["subsector"] or "",
-        "filtro_moneda": filtros["moneda"] or "",
         "filtro_cliente": filtros["cliente"] or "",
         "filtro_op_page": paginacion["page"],
     }
@@ -2599,80 +2597,6 @@ def dashboard_page():
     }
 
     series = construir_series_dashboard(cotizaciones_periodo, desde_date, hasta_date)
-    monedas = {
-        "ARS": {
-            "cantidad": sum(1 for cot in cotizaciones_periodo if (cot.moneda or "ARS").upper() == "ARS"),
-            "total": round(sum((cot.total_final or 0.0) for cot in cotizaciones_periodo if (cot.moneda or "ARS").upper() == "ARS"), 2),
-        },
-        "USD": {
-            "cantidad": sum(1 for cot in cotizaciones_periodo if (cot.moneda or "ARS").upper() == "USD"),
-            "total": round(sum((cot.total_final or 0.0) for cot in cotizaciones_periodo if (cot.moneda or "ARS").upper() == "USD"), 2),
-        },
-    }
-    pipeline_por_moneda = {
-        "ARS": {
-            "cantidad": sum(
-                1
-                for cot in cotizaciones_periodo
-                if normalizar_estado_cotizacion(cot.estado) == "En progreso" and (cot.moneda or "ARS").upper() == "ARS"
-            ),
-            "total": round(
-                sum(
-                    (cot.total_final or 0.0)
-                    for cot in cotizaciones_periodo
-                    if normalizar_estado_cotizacion(cot.estado) == "En progreso" and (cot.moneda or "ARS").upper() == "ARS"
-                ),
-                2,
-            ),
-        },
-        "USD": {
-            "cantidad": sum(
-                1
-                for cot in cotizaciones_periodo
-                if normalizar_estado_cotizacion(cot.estado) == "En progreso" and (cot.moneda or "ARS").upper() == "USD"
-            ),
-            "total": round(
-                sum(
-                    (cot.total_final or 0.0)
-                    for cot in cotizaciones_periodo
-                    if normalizar_estado_cotizacion(cot.estado) == "En progreso" and (cot.moneda or "ARS").upper() == "USD"
-                ),
-                2,
-            ),
-        },
-    }
-    aceptado_por_moneda = {
-        "ARS": {
-            "cantidad": sum(
-                1
-                for cot in cotizaciones_periodo
-                if normalizar_estado_cotizacion(cot.estado) == "Aceptada" and (cot.moneda or "ARS").upper() == "ARS"
-            ),
-            "total": round(
-                sum(
-                    (cot.total_final or 0.0)
-                    for cot in cotizaciones_periodo
-                    if normalizar_estado_cotizacion(cot.estado) == "Aceptada" and (cot.moneda or "ARS").upper() == "ARS"
-                ),
-                2,
-            ),
-        },
-        "USD": {
-            "cantidad": sum(
-                1
-                for cot in cotizaciones_periodo
-                if normalizar_estado_cotizacion(cot.estado) == "Aceptada" and (cot.moneda or "ARS").upper() == "USD"
-            ),
-            "total": round(
-                sum(
-                    (cot.total_final or 0.0)
-                    for cot in cotizaciones_periodo
-                    if normalizar_estado_cotizacion(cot.estado) == "Aceptada" and (cot.moneda or "ARS").upper() == "USD"
-                ),
-                2,
-            ),
-        },
-    }
     top_clientes = construir_top_clientes_dashboard(cotizaciones_periodo)
     familias_breakdown = construir_desglose_dashboard(
         cotizaciones_periodo, lambda cot: cot.familia, default_label="Sin familia", limite=6
@@ -2696,8 +2620,6 @@ def dashboard_page():
         filtros_activos.append({"icon": "bi-building", "label": f"Sector: {sector}"})
     if subsector:
         filtros_activos.append({"icon": "bi-tags", "label": f"Subsector: {subsector}"})
-    if moneda:
-        filtros_activos.append({"icon": "bi-cash-stack", "label": f"Moneda: {moneda}"})
     if filtros["cliente"]:
         filtros_activos.append({"icon": "bi-person-vcard", "label": f"Cliente: {filtros['cliente']}"})
 
@@ -2709,9 +2631,6 @@ def dashboard_page():
         "dashboard.html",
         resumen=resumen,
         series=series,
-        monedas=monedas,
-        pipeline_por_moneda=pipeline_por_moneda,
-        aceptado_por_moneda=aceptado_por_moneda,
         top_clientes=top_clientes,
         familias_breakdown=familias_breakdown,
         sectores_breakdown=sectores_breakdown,

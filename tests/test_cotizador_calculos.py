@@ -408,6 +408,44 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertIn("Cliente Data Center", html)
         self.assertNotIn("Cliente Seguridad", html)
 
+    def test_dashboard_ignora_ars_y_muestra_solo_usd(self):
+        self._crear_cotizacion(
+            cliente_id="",
+            cliente="Cliente USD",
+            cliente_razon_social="Cliente USD SA",
+            cliente_cuit="30-33333333-3",
+            moneda="USD",
+            familia="SEGURIDAD URBANA",
+        )
+        self._crear_cotizacion(
+            cliente_id="",
+            cliente="Cliente ARS",
+            cliente_razon_social="Cliente ARS SA",
+            cliente_cuit="30-44444444-4",
+            moneda="ARS",
+            tipo_cambio="1",
+            familia="SEGURIDAD URBANA",
+        )
+
+        response = self.client.get("/dashboard?periodo=365&moneda=ARS")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('name="moneda"', html)
+        self.assertNotIn("Pesos argentinos", html)
+        self.assertNotIn("Total ARS", html)
+        self.assertIn("Volumen cotizado USD", html)
+        self.assertIn("Cliente USD", html)
+        self.assertNotIn("Cliente ARS", html)
+
+        response = self.client.get("/dashboard/detalle-operativo?periodo=365&moneda=ARS")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Total USD", html)
+        self.assertIn("Cliente USD", html)
+        self.assertNotIn("Cliente ARS", html)
+
     def test_links_de_recordatorio_usan_app_base_url_configurada(self):
         cotizacion_id = self._crear_cotizacion()
         cotizacion = self._cotizacion(cotizacion_id)

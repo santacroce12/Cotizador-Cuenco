@@ -22,7 +22,12 @@
             <form method="POST">
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Clave de instalación</label>
-                    <input type="password" name="setup_token" class="form-control" autocomplete="one-time-code" required>
+                    <div class="password-field">
+                        <input type="password" name="setup_token" class="form-control" autocomplete="one-time-code" required data-password-field>
+                        <button type="button" class="password-toggle-btn" data-password-toggle aria-label="Mostrar contraseña" title="Mostrar contraseña" aria-pressed="false">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
                     <div class="form-text">Esta clave evita que cualquiera cree el usuario inicial si el sistema queda expuesto.</div>
                 </div>
                 <div class="mb-3">
@@ -36,11 +41,21 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Contraseña</label>
-                    <input type="password" name="password" class="form-control" autocomplete="new-password" required>
+                    <div class="password-field">
+                        <input type="password" name="password" class="form-control" autocomplete="new-password" required data-password-field>
+                        <button type="button" class="password-toggle-btn" data-password-toggle aria-label="Mostrar contraseña" title="Mostrar contraseña" aria-pressed="false">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="mb-4">
                     <label class="form-label fw-semibold">Repetir contraseña</label>
-                    <input type="password" name="password_confirm" class="form-control" autocomplete="new-password" required>
+                    <div class="password-field">
+                        <input type="password" name="password_confirm" class="form-control" autocomplete="new-password" required data-password-field>
+                        <button type="button" class="password-toggle-btn" data-password-toggle aria-label="Mostrar contraseña" title="Mostrar contraseña" aria-pressed="false">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-dark-custom w-100">Crear administrador inicial</button>
             </form>

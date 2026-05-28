@@ -54,12 +54,22 @@
                                 </div>
                                 <div class="col-12">
                                     <label class="form-label fw-semibold">Contrasena</label>
-                                    <input type="password" name="password" class="form-control" autocomplete="new-password" required>
+                                    <div class="password-field">
+                                        <input type="password" name="password" class="form-control" autocomplete="new-password" required data-password-field>
+                                        <button type="button" class="password-toggle-btn" data-password-toggle aria-label="Mostrar contraseña" title="Mostrar contraseña" aria-pressed="false">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </div>
                                     <div class="form-text">Minimo 8 caracteres.</div>
                                 </div>
                                 <div class="col-12">
                                     <label class="form-label fw-semibold">Repetir contrasena</label>
-                                    <input type="password" name="password_confirm" class="form-control" autocomplete="new-password" required>
+                                    <div class="password-field">
+                                        <input type="password" name="password_confirm" class="form-control" autocomplete="new-password" required data-password-field>
+                                        <button type="button" class="password-toggle-btn" data-password-toggle aria-label="Mostrar contraseña" title="Mostrar contraseña" aria-pressed="false">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="col-12">
                                     <div class="form-check form-switch">

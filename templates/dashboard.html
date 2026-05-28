@@ -422,14 +422,6 @@
                 <div class="dash-label">Hasta</div>
                 <input type="date" name="hasta" class="form-control" value="{{ filtro_hasta }}">
             </div>
-            <div class="col-md-3 col-xl-2">
-                <div class="dash-label">Moneda</div>
-                <select name="moneda" class="form-select">
-                    <option value="" {% if not filtro_moneda %}selected{% endif %}>Todas</option>
-                    <option value="ARS" {% if filtro_moneda == 'ARS' %}selected{% endif %}>ARS</option>
-                    <option value="USD" {% if filtro_moneda == 'USD' %}selected{% endif %}>USD</option>
-                </select>
-            </div>
         </div>
         <div class="row g-3 align-items-end mt-1">
             <div class="col-lg-6 col-xl-3">
@@ -469,70 +461,19 @@
 
     <section class="dash-metrics">
         <article class="dash-card dash-metric-dark">
-            <div class="dash-label">Volumen cotizado por moneda</div>
-            <div class="dash-volume-stack">
-                <div class="dash-volume-row">
-                    <div class="dash-volume-meta">
-                        <span>Pesos argentinos</span>
-                        <span>ARS</span>
-                    </div>
-                    <div class="dash-value">{{ "{:,.2f}".format(monedas.ARS.total) }}</div>
-                    <p class="dash-volume-note">{{ monedas.ARS.cantidad }} cotizaciones emitidas en ARS.</p>
-                </div>
-                <div class="dash-volume-row">
-                    <div class="dash-volume-meta">
-                        <span>Dolares estadounidenses</span>
-                        <span>USD</span>
-                    </div>
-                    <div class="dash-value">{{ "{:,.2f}".format(monedas.USD.total) }}</div>
-                    <p class="dash-volume-note">{{ monedas.USD.cantidad }} cotizaciones emitidas en USD.</p>
-                </div>
-            </div>
-            <p class="dash-note">Separado por moneda para no mezclar importes incompatibles en una sola lectura.</p>
+            <div class="dash-label">Volumen cotizado USD</div>
+            <div class="dash-value">{{ "{:,.2f}".format(resumen.total_importe) }}</div>
+            <p class="dash-note">{{ resumen.total }} cotizaciones emitidas en dolares dentro del periodo.</p>
         </article>
         <article class="dash-card">
-            <div class="dash-label">Pipeline abierto</div>
-            <div class="dash-volume-stack">
-                <div class="dash-volume-row">
-                    <div class="dash-volume-meta">
-                        <span>Pesos argentinos</span>
-                        <span>ARS</span>
-                    </div>
-                    <div class="dash-value">{{ "{:,.2f}".format(pipeline_por_moneda.ARS.total) }}</div>
-                    <p class="dash-volume-note">{{ pipeline_por_moneda.ARS.cantidad }} cotizaciones activas en ARS.</p>
-                </div>
-                <div class="dash-volume-row">
-                    <div class="dash-volume-meta">
-                        <span>Dolares estadounidenses</span>
-                        <span>USD</span>
-                    </div>
-                    <div class="dash-value">{{ "{:,.2f}".format(pipeline_por_moneda.USD.total) }}</div>
-                    <p class="dash-volume-note">{{ pipeline_por_moneda.USD.cantidad }} cotizaciones activas en USD.</p>
-                </div>
-            </div>
-            <p class="dash-note">{{ resumen.en_progreso }} cotizaciones siguen activas en total.</p>
+            <div class="dash-label">Pipeline abierto USD</div>
+            <div class="dash-value">{{ "{:,.2f}".format(resumen.importe_pipeline) }}</div>
+            <p class="dash-note">{{ resumen.en_progreso }} cotizaciones siguen activas en dolares.</p>
         </article>
         <article class="dash-card">
-            <div class="dash-label">Volumen aceptado por moneda</div>
-            <div class="dash-volume-stack">
-                <div class="dash-volume-row">
-                    <div class="dash-volume-meta">
-                        <span>Pesos argentinos</span>
-                        <span>ARS</span>
-                    </div>
-                    <div class="dash-value">{{ "{:,.2f}".format(aceptado_por_moneda.ARS.total) }}</div>
-                    <p class="dash-volume-note">{{ aceptado_por_moneda.ARS.cantidad }} cotizaciones aceptadas en ARS.</p>
-                </div>
-                <div class="dash-volume-row">
-                    <div class="dash-volume-meta">
-                        <span>Dolares estadounidenses</span>
-                        <span>USD</span>
-                    </div>
-                    <div class="dash-value">{{ "{:,.2f}".format(aceptado_por_moneda.USD.total) }}</div>
-                    <p class="dash-volume-note">{{ aceptado_por_moneda.USD.cantidad }} cotizaciones aceptadas en USD.</p>
-                </div>
-            </div>
-            <p class="dash-note">Separado por moneda para leer aceptaciones sin mezclar ARS y USD.</p>
+            <div class="dash-label">Volumen aceptado USD</div>
+            <div class="dash-value">{{ "{:,.2f}".format(resumen.importe_aceptado) }}</div>
+            <p class="dash-note">{{ resumen.aceptadas }} cotizaciones aceptadas en dolares.</p>
         </article>
         <article class="dash-card">
             <div class="dash-label">Ticket promedio</div>
@@ -618,7 +559,7 @@
                         <span class="dash-mini-pill">{{ "{:,.1f}".format(item.porcentaje) }}%</span>
                     </div>
                     <div class="dash-bar"><span style="width: {{ item.porcentaje }}%; background:#2563eb;"></span></div>
-                    <div class="small text-muted mt-2">Total cotizado: {{ "{:,.2f}".format(item.total) }}</div>
+                    <div class="small text-muted mt-2">Total USD: {{ "{:,.2f}".format(item.total) }}</div>
                 </div>
                 {% endfor %}
             </div>
@@ -648,8 +589,7 @@
                     </div>
                     <div class="dash-bar"><span style="width: {{ item.porcentaje }}%; background:#0f766e;"></span></div>
                     <div class="dash-breakdown-money">
-                        <div class="dash-breakdown-money-line"><span>Total ARS</span><strong>{{ "{:,.2f}".format(item.total_ars) }}</strong></div>
-                        <div class="dash-breakdown-money-line"><span>Total USD</span><strong>{{ "{:,.2f}".format(item.total_usd) }}</strong></div>
+                        <div class="dash-breakdown-money-line"><span>Total USD</span><strong>{{ "{:,.2f}".format(item.total) }}</strong></div>
                     </div>
                 </div>
                 {% endfor %}
@@ -680,8 +620,7 @@
                     </div>
                     <div class="dash-bar"><span style="width: {{ item.porcentaje }}%; background:#7c3aed;"></span></div>
                     <div class="dash-breakdown-money">
-                        <div class="dash-breakdown-money-line"><span>Total ARS</span><strong>{{ "{:,.2f}".format(item.total_ars) }}</strong></div>
-                        <div class="dash-breakdown-money-line"><span>Total USD</span><strong>{{ "{:,.2f}".format(item.total_usd) }}</strong></div>
+                        <div class="dash-breakdown-money-line"><span>Total USD</span><strong>{{ "{:,.2f}".format(item.total) }}</strong></div>
                     </div>
                 </div>
                 {% endfor %}
@@ -696,21 +635,35 @@
         <article class="dash-card">
             <div class="dash-head">
                 <div>
-                    <div class="dash-head-title">Totales por moneda</div>
-                    <p class="dash-head-copy">Sirve para no mezclar volumen en pesos con volumen en dolares.</p>
+                    <div class="dash-head-title">Lectura USD</div>
+                    <p class="dash-head-copy">El dashboard toma solo cotizaciones en dolares para mantener una lectura consistente.</p>
                 </div>
-                <span class="dash-tag"><i class="bi bi-cash-stack"></i> Monedas</span>
+                <span class="dash-tag"><i class="bi bi-currency-dollar"></i> USD</span>
             </div>
-            <div class="dash-currency">
-                <div class="dash-currency-card ars">
-                    <div class="dash-currency-label">Pesos argentinos</div>
-                    <div class="dash-currency-value">{{ "{:,.2f}".format(monedas.ARS.total) }}</div>
-                    <p class="dash-currency-note">{{ monedas.ARS.cantidad }} cotizaciones emitidas en ARS.</p>
+            <div class="dash-volume-stack">
+                <div class="dash-volume-row">
+                    <div class="dash-volume-meta">
+                        <span>Volumen total</span>
+                        <span>USD</span>
+                    </div>
+                    <div class="dash-value">{{ "{:,.2f}".format(resumen.total_importe) }}</div>
+                    <p class="dash-volume-note">{{ resumen.total }} cotizaciones emitidas en dolares.</p>
                 </div>
-                <div class="dash-currency-card usd">
-                    <div class="dash-currency-label">Dolares estadounidenses</div>
-                    <div class="dash-currency-value">{{ "{:,.2f}".format(monedas.USD.total) }}</div>
-                    <p class="dash-currency-note">{{ monedas.USD.cantidad }} cotizaciones emitidas en USD.</p>
+                <div class="dash-volume-row">
+                    <div class="dash-volume-meta">
+                        <span>Pipeline abierto</span>
+                        <span>USD</span>
+                    </div>
+                    <div class="dash-value">{{ "{:,.2f}".format(resumen.importe_pipeline) }}</div>
+                    <p class="dash-volume-note">{{ resumen.en_progreso }} cotizaciones activas en dolares.</p>
+                </div>
+                <div class="dash-volume-row">
+                    <div class="dash-volume-meta">
+                        <span>Volumen aceptado</span>
+                        <span>USD</span>
+                    </div>
+                    <div class="dash-value">{{ "{:,.2f}".format(resumen.importe_aceptado) }}</div>
+                    <p class="dash-volume-note">{{ resumen.aceptadas }} cotizaciones aceptadas en dolares.</p>
                 </div>
             </div>
         </article>
@@ -734,9 +687,7 @@
                     <div class="small text-muted mb-2">{{ cliente.aceptadas }} aceptadas dentro del periodo</div>
                     <div class="dash-bar"><span style="width: {{ (cliente.cantidad / (top_clientes[0].cantidad or 1)) * 100 }}%; background:#2563eb;"></span></div>
                     <div class="dash-breakdown-money">
-                        <div class="dash-breakdown-money-line"><span>Total ARS</span><strong>{{ "{:,.2f}".format(cliente.total_ars) }}</strong></div>
-                        <div class="dash-breakdown-money-line"><span>Total USD</span><strong>{{ "{:,.2f}".format(cliente.total_usd) }}</strong></div>
-                        <div class="dash-breakdown-money-line"><span>Total combinado</span><strong>{{ "{:,.2f}".format(cliente.total) }}</strong></div>
+                        <div class="dash-breakdown-money-line"><span>Total USD</span><strong>{{ "{:,.2f}".format(cliente.total) }}</strong></div>
                     </div>
                 </div>
                 {% endfor %}
