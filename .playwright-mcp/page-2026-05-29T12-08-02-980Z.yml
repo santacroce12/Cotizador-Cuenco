@@ -1,0 +1,743 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "Cuenco Tech Logo" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img "Cuenco Tech Logo" [ref=e5]
+      - generic [ref=e6]:
+        - list [ref=e7]:
+          - listitem [ref=e8]:
+            - link " Nuevo Presupuesto" [ref=e9] [cursor=pointer]:
+              - /url: /
+              - generic [ref=e10]: 
+              - text: Nuevo Presupuesto
+          - listitem [ref=e11]:
+            - link " Historial" [ref=e12] [cursor=pointer]:
+              - /url: /historial
+              - generic [ref=e13]: 
+              - text: Historial
+          - listitem [ref=e14]:
+            - link " Auditoría" [ref=e15] [cursor=pointer]:
+              - /url: /auditoria
+              - generic [ref=e16]: 
+              - text: Auditoría
+          - listitem [ref=e17]:
+            - link " Dashboard" [ref=e18] [cursor=pointer]:
+              - /url: /dashboard
+              - generic [ref=e19]: 
+              - text: Dashboard
+        - generic [ref=e20]:
+          - link " Familias" [ref=e21] [cursor=pointer]:
+            - /url: /familias
+            - generic [ref=e22]: 
+            - text: Familias
+          - link " Usuarios" [ref=e23] [cursor=pointer]:
+            - /url: /usuarios
+            - generic [ref=e24]: 
+            - text: Usuarios
+          - generic [ref=e25]: Admin
+          - generic [ref=e26]: Luca
+          - link " Salir" [ref=e27] [cursor=pointer]:
+            - /url: /logout
+            - generic [ref=e28]: 
+            - text: Salir
+  - generic [ref=e30]:
+    - generic [ref=e31]:
+      - heading " Historial de Cotizaciones" [level=2] [ref=e32]:
+        - generic [ref=e33]: 
+        - text: Historial de Cotizaciones
+      - group "Filtro moneda" [ref=e34]:
+        - button "Todas" [ref=e35] [cursor=pointer]
+        - button "Solo ARS" [ref=e36] [cursor=pointer]
+        - button "Solo USD" [ref=e37] [cursor=pointer]
+    - generic [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]: Buscar Cliente
+        - combobox [ref=e41]:
+          - option "Buscar por nombre, razon social o CUIT..." [selected]
+          - option "1"
+          - option "Cliente Tom Select | Cliente Tom Select S.A. (30-12345678-9)"
+          - option "Luca | Luca (2042124123)"
+          - option "Municipalidad Lujan | Municipalidad Lujan (2044835533)"
+        - generic [ref=e43] [cursor=pointer]:
+          - generic [ref=e44]: Buscar por nombre, razon social o CUIT...
+          - combobox "Buscar por nombre, razon social o CUIT..." [ref=e45]
+          - button "×" [ref=e46]
+      - generic [ref=e47]:
+        - generic [ref=e48]: Desde
+        - textbox [ref=e49]
+      - generic [ref=e50]:
+        - generic [ref=e51]: Hasta
+        - textbox [ref=e52]
+      - button " Filtrar" [ref=e54] [cursor=pointer]:
+        - generic [ref=e55]: 
+        - text: Filtrar
+    - table [ref=e57]:
+      - rowgroup [ref=e58]:
+        - row "Nro Cliente Fecha Estado Total Final ($) Acciones" [ref=e59]:
+          - columnheader "Nro" [ref=e60]
+          - columnheader "Cliente" [ref=e61]
+          - columnheader "Fecha" [ref=e62]
+          - columnheader "Estado" [ref=e63]
+          - columnheader "Total Final ($)" [ref=e64]
+          - columnheader "Acciones" [ref=e65]
+      - rowgroup [ref=e66]:
+        - row "#CT-2026-0022  Municipalidad Lujan  SEGURIDAD URBANA 21/04/2026 En progreso USD$ 231,74  Editar  Ver Online  Excel  PDF " [ref=e67]:
+          - cell "#CT-2026-0022" [ref=e68]:
+            - generic [ref=e69]: "#CT-2026-0022"
+          - cell " Municipalidad Lujan  SEGURIDAD URBANA" [ref=e70]:
+            - generic [ref=e71]: 
+            - strong [ref=e72]: Municipalidad Lujan
+            - generic [ref=e74]:
+              - generic [ref=e75]: 
+              - text: SEGURIDAD URBANA
+          - cell "21/04/2026" [ref=e76]
+          - cell "En progreso" [ref=e77]:
+            - generic [ref=e78]: En progreso
+          - cell "USD$ 231,74" [ref=e79]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e80]:
+            - link " Editar" [ref=e81] [cursor=pointer]:
+              - /url: /cotizacion/22/editar
+              - generic [ref=e82]: 
+              - text: Editar
+            - link " Ver Online" [ref=e83] [cursor=pointer]:
+              - /url: /cotizacion/22
+              - generic [ref=e84]: 
+              - text: Ver Online
+            - link " Excel" [ref=e85] [cursor=pointer]:
+              - /url: /cotizacion/22/xlsx
+              - generic [ref=e86]: 
+              - text: Excel
+            - link " PDF" [ref=e87] [cursor=pointer]:
+              - /url: /cotizacion/22?download=1
+              - generic [ref=e88]: 
+              - text: PDF
+            - button "" [ref=e89] [cursor=pointer]:
+              - generic [ref=e90]: 
+        - row "#CT-2026-0021  Municipalidad Lujan  SEGURIDAD URBANA 15/04/2026 En progreso ARS$ 336.021,84  Editar  Ver Online  Excel  PDF " [ref=e91]:
+          - cell "#CT-2026-0021" [ref=e92]:
+            - generic [ref=e93]: "#CT-2026-0021"
+          - cell " Municipalidad Lujan  SEGURIDAD URBANA" [ref=e94]:
+            - generic [ref=e95]: 
+            - strong [ref=e96]: Municipalidad Lujan
+            - generic [ref=e98]:
+              - generic [ref=e99]: 
+              - text: SEGURIDAD URBANA
+          - cell "15/04/2026" [ref=e100]
+          - cell "En progreso" [ref=e101]:
+            - generic [ref=e102]: En progreso
+          - cell "ARS$ 336.021,84" [ref=e103]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e104]:
+            - link " Editar" [ref=e105] [cursor=pointer]:
+              - /url: /cotizacion/21/editar
+              - generic [ref=e106]: 
+              - text: Editar
+            - link " Ver Online" [ref=e107] [cursor=pointer]:
+              - /url: /cotizacion/21
+              - generic [ref=e108]: 
+              - text: Ver Online
+            - link " Excel" [ref=e109] [cursor=pointer]:
+              - /url: /cotizacion/21/xlsx
+              - generic [ref=e110]: 
+              - text: Excel
+            - link " PDF" [ref=e111] [cursor=pointer]:
+              - /url: /cotizacion/21?download=1
+              - generic [ref=e112]: 
+              - text: PDF
+            - button "" [ref=e113] [cursor=pointer]:
+              - generic [ref=e114]: 
+        - row "#CT-2026-0020  Luca  CONECTIVIDAD SATELITAL 10/04/2026 En progreso ARS$ 35,57  Editar  Ver Online  Excel  PDF " [ref=e115]:
+          - cell "#CT-2026-0020" [ref=e116]:
+            - generic [ref=e117]: "#CT-2026-0020"
+          - cell " Luca  CONECTIVIDAD SATELITAL" [ref=e118]:
+            - generic [ref=e119]: 
+            - strong [ref=e120]: Luca
+            - generic [ref=e122]:
+              - generic [ref=e123]: 
+              - text: CONECTIVIDAD SATELITAL
+          - cell "10/04/2026" [ref=e124]
+          - cell "En progreso" [ref=e125]:
+            - generic [ref=e126]: En progreso
+          - cell "ARS$ 35,57" [ref=e127]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e128]:
+            - link " Editar" [ref=e129] [cursor=pointer]:
+              - /url: /cotizacion/20/editar
+              - generic [ref=e130]: 
+              - text: Editar
+            - link " Ver Online" [ref=e131] [cursor=pointer]:
+              - /url: /cotizacion/20
+              - generic [ref=e132]: 
+              - text: Ver Online
+            - link " Excel" [ref=e133] [cursor=pointer]:
+              - /url: /cotizacion/20/xlsx
+              - generic [ref=e134]: 
+              - text: Excel
+            - link " PDF" [ref=e135] [cursor=pointer]:
+              - /url: /cotizacion/20?download=1
+              - generic [ref=e136]: 
+              - text: PDF
+            - button "" [ref=e137] [cursor=pointer]:
+              - generic [ref=e138]: 
+        - row "#CT-2026-0019  Cliente Tom Select  CONECTIVIDAD SATELITAL 10/04/2026 En progreso ARS$ 511,38  Editar  Ver Online  Excel  PDF " [ref=e139]:
+          - cell "#CT-2026-0019" [ref=e140]:
+            - generic [ref=e141]: "#CT-2026-0019"
+          - cell " Cliente Tom Select  CONECTIVIDAD SATELITAL" [ref=e142]:
+            - generic [ref=e143]: 
+            - strong [ref=e144]: Cliente Tom Select
+            - generic [ref=e146]:
+              - generic [ref=e147]: 
+              - text: CONECTIVIDAD SATELITAL
+          - cell "10/04/2026" [ref=e148]
+          - cell "En progreso" [ref=e149]:
+            - generic [ref=e150]: En progreso
+          - cell "ARS$ 511,38" [ref=e151]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e152]:
+            - link " Editar" [ref=e153] [cursor=pointer]:
+              - /url: /cotizacion/19/editar
+              - generic [ref=e154]: 
+              - text: Editar
+            - link " Ver Online" [ref=e155] [cursor=pointer]:
+              - /url: /cotizacion/19
+              - generic [ref=e156]: 
+              - text: Ver Online
+            - link " Excel" [ref=e157] [cursor=pointer]:
+              - /url: /cotizacion/19/xlsx
+              - generic [ref=e158]: 
+              - text: Excel
+            - link " PDF" [ref=e159] [cursor=pointer]:
+              - /url: /cotizacion/19?download=1
+              - generic [ref=e160]: 
+              - text: PDF
+            - button "" [ref=e161] [cursor=pointer]:
+              - generic [ref=e162]: 
+        - row "#CT-2026-0018  Cliente Tom Select  DATA CENTER 09/04/2026 En progreso ARS$ 0,00  Editar  Ver Online  Excel  PDF " [ref=e163]:
+          - cell "#CT-2026-0018" [ref=e164]:
+            - generic [ref=e165]: "#CT-2026-0018"
+          - cell " Cliente Tom Select  DATA CENTER" [ref=e166]:
+            - generic [ref=e167]: 
+            - strong [ref=e168]: Cliente Tom Select
+            - generic [ref=e170]:
+              - generic [ref=e171]: 
+              - text: DATA CENTER
+          - cell "09/04/2026" [ref=e172]
+          - cell "En progreso" [ref=e173]:
+            - generic [ref=e174]: En progreso
+          - cell "ARS$ 0,00" [ref=e175]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e176]:
+            - link " Editar" [ref=e177] [cursor=pointer]:
+              - /url: /cotizacion/18/editar
+              - generic [ref=e178]: 
+              - text: Editar
+            - link " Ver Online" [ref=e179] [cursor=pointer]:
+              - /url: /cotizacion/18
+              - generic [ref=e180]: 
+              - text: Ver Online
+            - link " Excel" [ref=e181] [cursor=pointer]:
+              - /url: /cotizacion/18/xlsx
+              - generic [ref=e182]: 
+              - text: Excel
+            - link " PDF" [ref=e183] [cursor=pointer]:
+              - /url: /cotizacion/18?download=1
+              - generic [ref=e184]: 
+              - text: PDF
+            - button "" [ref=e185] [cursor=pointer]:
+              - generic [ref=e186]: 
+        - row "#CT-2026-0017  Luca  SALAS DE CONTROL 09/04/2026 En progreso ARS$ 733,71  Editar  Ver Online  Excel  PDF " [ref=e187]:
+          - cell "#CT-2026-0017" [ref=e188]:
+            - generic [ref=e189]: "#CT-2026-0017"
+          - cell " Luca  SALAS DE CONTROL" [ref=e190]:
+            - generic [ref=e191]: 
+            - strong [ref=e192]: Luca
+            - generic [ref=e194]:
+              - generic [ref=e195]: 
+              - text: SALAS DE CONTROL
+          - cell "09/04/2026" [ref=e196]
+          - cell "En progreso" [ref=e197]:
+            - generic [ref=e198]: En progreso
+          - cell "ARS$ 733,71" [ref=e199]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e200]:
+            - link " Editar" [ref=e201] [cursor=pointer]:
+              - /url: /cotizacion/17/editar
+              - generic [ref=e202]: 
+              - text: Editar
+            - link " Ver Online" [ref=e203] [cursor=pointer]:
+              - /url: /cotizacion/17
+              - generic [ref=e204]: 
+              - text: Ver Online
+            - link " Excel" [ref=e205] [cursor=pointer]:
+              - /url: /cotizacion/17/xlsx
+              - generic [ref=e206]: 
+              - text: Excel
+            - link " PDF" [ref=e207] [cursor=pointer]:
+              - /url: /cotizacion/17?download=1
+              - generic [ref=e208]: 
+              - text: PDF
+            - button "" [ref=e209] [cursor=pointer]:
+              - generic [ref=e210]: 
+        - row "#CT-2026-0016  1  DATA CENTER 09/04/2026 En progreso ARS$ 0,00  Editar  Ver Online  Excel  PDF " [ref=e211]:
+          - cell "#CT-2026-0016" [ref=e212]:
+            - generic [ref=e213]: "#CT-2026-0016"
+          - cell " 1  DATA CENTER" [ref=e214]:
+            - generic [ref=e215]: 
+            - strong [ref=e216]: "1"
+            - generic [ref=e218]:
+              - generic [ref=e219]: 
+              - text: DATA CENTER
+          - cell "09/04/2026" [ref=e220]
+          - cell "En progreso" [ref=e221]:
+            - generic [ref=e222]: En progreso
+          - cell "ARS$ 0,00" [ref=e223]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e224]:
+            - link " Editar" [ref=e225] [cursor=pointer]:
+              - /url: /cotizacion/16/editar
+              - generic [ref=e226]: 
+              - text: Editar
+            - link " Ver Online" [ref=e227] [cursor=pointer]:
+              - /url: /cotizacion/16
+              - generic [ref=e228]: 
+              - text: Ver Online
+            - link " Excel" [ref=e229] [cursor=pointer]:
+              - /url: /cotizacion/16/xlsx
+              - generic [ref=e230]: 
+              - text: Excel
+            - link " PDF" [ref=e231] [cursor=pointer]:
+              - /url: /cotizacion/16?download=1
+              - generic [ref=e232]: 
+              - text: PDF
+            - button "" [ref=e233] [cursor=pointer]:
+              - generic [ref=e234]: 
+        - row "#CT-2026-0015  Cliente Tom Select  TRANSPORTE INTELIGENTE 25/03/2026 En progreso ARS$ 14,96  Editar  Ver Online  Excel  PDF " [ref=e235]:
+          - cell "#CT-2026-0015" [ref=e236]:
+            - generic [ref=e237]: "#CT-2026-0015"
+          - cell " Cliente Tom Select  TRANSPORTE INTELIGENTE" [ref=e238]:
+            - generic [ref=e239]: 
+            - strong [ref=e240]: Cliente Tom Select
+            - generic [ref=e242]:
+              - generic [ref=e243]: 
+              - text: TRANSPORTE INTELIGENTE
+          - cell "25/03/2026" [ref=e244]
+          - cell "En progreso" [ref=e245]:
+            - generic [ref=e246]: En progreso
+          - cell "ARS$ 14,96" [ref=e247]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e248]:
+            - link " Editar" [ref=e249] [cursor=pointer]:
+              - /url: /cotizacion/15/editar
+              - generic [ref=e250]: 
+              - text: Editar
+            - link " Ver Online" [ref=e251] [cursor=pointer]:
+              - /url: /cotizacion/15
+              - generic [ref=e252]: 
+              - text: Ver Online
+            - link " Excel" [ref=e253] [cursor=pointer]:
+              - /url: /cotizacion/15/xlsx
+              - generic [ref=e254]: 
+              - text: Excel
+            - link " PDF" [ref=e255] [cursor=pointer]:
+              - /url: /cotizacion/15?download=1
+              - generic [ref=e256]: 
+              - text: PDF
+            - button "" [ref=e257] [cursor=pointer]:
+              - generic [ref=e258]: 
+        - row "#CT-2026-0014  Luca  SMART CITIES 25/03/2026 Aceptada ARS$ 5.416,90  Editar  Ver Online  Excel  PDF " [ref=e259]:
+          - cell "#CT-2026-0014" [ref=e260]:
+            - generic [ref=e261]: "#CT-2026-0014"
+          - cell " Luca  SMART CITIES" [ref=e262]:
+            - generic [ref=e263]: 
+            - strong [ref=e264]: Luca
+            - generic [ref=e266]:
+              - generic [ref=e267]: 
+              - text: SMART CITIES
+          - cell "25/03/2026" [ref=e268]
+          - cell "Aceptada" [ref=e269]:
+            - generic [ref=e270]: Aceptada
+          - cell "ARS$ 5.416,90" [ref=e271]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e272]:
+            - link " Editar" [ref=e273] [cursor=pointer]:
+              - /url: /cotizacion/14/editar
+              - generic [ref=e274]: 
+              - text: Editar
+            - link " Ver Online" [ref=e275] [cursor=pointer]:
+              - /url: /cotizacion/14
+              - generic [ref=e276]: 
+              - text: Ver Online
+            - link " Excel" [ref=e277] [cursor=pointer]:
+              - /url: /cotizacion/14/xlsx
+              - generic [ref=e278]: 
+              - text: Excel
+            - link " PDF" [ref=e279] [cursor=pointer]:
+              - /url: /cotizacion/14?download=1
+              - generic [ref=e280]: 
+              - text: PDF
+            - button "" [ref=e281] [cursor=pointer]:
+              - generic [ref=e282]: 
+        - row "#CT-2026-0013  Luca  SMART CITIES 25/03/2026 Aceptada ARS$ 24.432,67  Editar  Ver Online  Excel  PDF " [ref=e283]:
+          - cell "#CT-2026-0013" [ref=e284]:
+            - generic [ref=e285]: "#CT-2026-0013"
+          - cell " Luca  SMART CITIES" [ref=e286]:
+            - generic [ref=e287]: 
+            - strong [ref=e288]: Luca
+            - generic [ref=e290]:
+              - generic [ref=e291]: 
+              - text: SMART CITIES
+          - cell "25/03/2026" [ref=e292]
+          - cell "Aceptada" [ref=e293]:
+            - generic [ref=e294]: Aceptada
+          - cell "ARS$ 24.432,67" [ref=e295]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e296]:
+            - link " Editar" [ref=e297] [cursor=pointer]:
+              - /url: /cotizacion/13/editar
+              - generic [ref=e298]: 
+              - text: Editar
+            - link " Ver Online" [ref=e299] [cursor=pointer]:
+              - /url: /cotizacion/13
+              - generic [ref=e300]: 
+              - text: Ver Online
+            - link " Excel" [ref=e301] [cursor=pointer]:
+              - /url: /cotizacion/13/xlsx
+              - generic [ref=e302]: 
+              - text: Excel
+            - link " PDF" [ref=e303] [cursor=pointer]:
+              - /url: /cotizacion/13?download=1
+              - generic [ref=e304]: 
+              - text: PDF
+            - button "" [ref=e305] [cursor=pointer]:
+              - generic [ref=e306]: 
+        - row "#CT-2026-0012  Cliente Tom Select  SMART CITIES 18/03/2026 Aceptada ARS$ 559,02  Editar  Ver Online  Excel  PDF " [ref=e307]:
+          - cell "#CT-2026-0012" [ref=e308]:
+            - generic [ref=e309]: "#CT-2026-0012"
+          - cell " Cliente Tom Select  SMART CITIES" [ref=e310]:
+            - generic [ref=e311]: 
+            - strong [ref=e312]: Cliente Tom Select
+            - generic [ref=e314]:
+              - generic [ref=e315]: 
+              - text: SMART CITIES
+          - cell "18/03/2026" [ref=e316]
+          - cell "Aceptada" [ref=e317]:
+            - generic [ref=e318]: Aceptada
+          - cell "ARS$ 559,02" [ref=e319]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e320]:
+            - link " Editar" [ref=e321] [cursor=pointer]:
+              - /url: /cotizacion/12/editar
+              - generic [ref=e322]: 
+              - text: Editar
+            - link " Ver Online" [ref=e323] [cursor=pointer]:
+              - /url: /cotizacion/12
+              - generic [ref=e324]: 
+              - text: Ver Online
+            - link " Excel" [ref=e325] [cursor=pointer]:
+              - /url: /cotizacion/12/xlsx
+              - generic [ref=e326]: 
+              - text: Excel
+            - link " PDF" [ref=e327] [cursor=pointer]:
+              - /url: /cotizacion/12?download=1
+              - generic [ref=e328]: 
+              - text: PDF
+            - button "" [ref=e329] [cursor=pointer]:
+              - generic [ref=e330]: 
+        - row "#CT-2026-0011  Luca  SMART CITIES 18/03/2026 Aceptada USD$ 194,58  Editar  Ver Online  Excel  PDF " [ref=e331]:
+          - cell "#CT-2026-0011" [ref=e332]:
+            - generic [ref=e333]: "#CT-2026-0011"
+          - cell " Luca  SMART CITIES" [ref=e334]:
+            - generic [ref=e335]: 
+            - strong [ref=e336]: Luca
+            - generic [ref=e338]:
+              - generic [ref=e339]: 
+              - text: SMART CITIES
+          - cell "18/03/2026" [ref=e340]
+          - cell "Aceptada" [ref=e341]:
+            - generic [ref=e342]: Aceptada
+          - cell "USD$ 194,58" [ref=e343]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e344]:
+            - link " Editar" [ref=e345] [cursor=pointer]:
+              - /url: /cotizacion/11/editar
+              - generic [ref=e346]: 
+              - text: Editar
+            - link " Ver Online" [ref=e347] [cursor=pointer]:
+              - /url: /cotizacion/11
+              - generic [ref=e348]: 
+              - text: Ver Online
+            - link " Excel" [ref=e349] [cursor=pointer]:
+              - /url: /cotizacion/11/xlsx
+              - generic [ref=e350]: 
+              - text: Excel
+            - link " PDF" [ref=e351] [cursor=pointer]:
+              - /url: /cotizacion/11?download=1
+              - generic [ref=e352]: 
+              - text: PDF
+            - button "" [ref=e353] [cursor=pointer]:
+              - generic [ref=e354]: 
+        - row "#CT-2026-0010  Luca  SMART CITIES 18/03/2026 Aceptada ARS$ 44,47  Editar  Ver Online  Excel  PDF " [ref=e355]:
+          - cell "#CT-2026-0010" [ref=e356]:
+            - generic [ref=e357]: "#CT-2026-0010"
+          - cell " Luca  SMART CITIES" [ref=e358]:
+            - generic [ref=e359]: 
+            - strong [ref=e360]: Luca
+            - generic [ref=e362]:
+              - generic [ref=e363]: 
+              - text: SMART CITIES
+          - cell "18/03/2026" [ref=e364]
+          - cell "Aceptada" [ref=e365]:
+            - generic [ref=e366]: Aceptada
+          - cell "ARS$ 44,47" [ref=e367]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e368]:
+            - link " Editar" [ref=e369] [cursor=pointer]:
+              - /url: /cotizacion/10/editar
+              - generic [ref=e370]: 
+              - text: Editar
+            - link " Ver Online" [ref=e371] [cursor=pointer]:
+              - /url: /cotizacion/10
+              - generic [ref=e372]: 
+              - text: Ver Online
+            - link " Excel" [ref=e373] [cursor=pointer]:
+              - /url: /cotizacion/10/xlsx
+              - generic [ref=e374]: 
+              - text: Excel
+            - link " PDF" [ref=e375] [cursor=pointer]:
+              - /url: /cotizacion/10?download=1
+              - generic [ref=e376]: 
+              - text: PDF
+            - button "" [ref=e377] [cursor=pointer]:
+              - generic [ref=e378]: 
+        - row "#CT-2026-0009  Cliente Tom Select  SMART CITIES 18/03/2026 Aceptada ARS$ 444,68  Editar  Ver Online  Excel  PDF " [ref=e379]:
+          - cell "#CT-2026-0009" [ref=e380]:
+            - generic [ref=e381]: "#CT-2026-0009"
+          - cell " Cliente Tom Select  SMART CITIES" [ref=e382]:
+            - generic [ref=e383]: 
+            - strong [ref=e384]: Cliente Tom Select
+            - generic [ref=e386]:
+              - generic [ref=e387]: 
+              - text: SMART CITIES
+          - cell "18/03/2026" [ref=e388]
+          - cell "Aceptada" [ref=e389]:
+            - generic [ref=e390]: Aceptada
+          - cell "ARS$ 444,68" [ref=e391]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e392]:
+            - link " Editar" [ref=e393] [cursor=pointer]:
+              - /url: /cotizacion/9/editar
+              - generic [ref=e394]: 
+              - text: Editar
+            - link " Ver Online" [ref=e395] [cursor=pointer]:
+              - /url: /cotizacion/9
+              - generic [ref=e396]: 
+              - text: Ver Online
+            - link " Excel" [ref=e397] [cursor=pointer]:
+              - /url: /cotizacion/9/xlsx
+              - generic [ref=e398]: 
+              - text: Excel
+            - link " PDF" [ref=e399] [cursor=pointer]:
+              - /url: /cotizacion/9?download=1
+              - generic [ref=e400]: 
+              - text: PDF
+            - button "" [ref=e401] [cursor=pointer]:
+              - generic [ref=e402]: 
+        - row "#CT-2026-0008  Luca  SEGURIDAD URBANA 18/03/2026 En progreso ARS$ 667.012,50  Editar  Ver Online  Excel  PDF " [ref=e403]:
+          - cell "#CT-2026-0008" [ref=e404]:
+            - generic [ref=e405]: "#CT-2026-0008"
+          - cell " Luca  SEGURIDAD URBANA" [ref=e406]:
+            - generic [ref=e407]: 
+            - strong [ref=e408]: Luca
+            - generic [ref=e410]:
+              - generic [ref=e411]: 
+              - text: SEGURIDAD URBANA
+          - cell "18/03/2026" [ref=e412]
+          - cell "En progreso" [ref=e413]:
+            - generic [ref=e414]: En progreso
+          - cell "ARS$ 667.012,50" [ref=e415]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e416]:
+            - link " Editar" [ref=e417] [cursor=pointer]:
+              - /url: /cotizacion/8/editar
+              - generic [ref=e418]: 
+              - text: Editar
+            - link " Ver Online" [ref=e419] [cursor=pointer]:
+              - /url: /cotizacion/8
+              - generic [ref=e420]: 
+              - text: Ver Online
+            - link " Excel" [ref=e421] [cursor=pointer]:
+              - /url: /cotizacion/8/xlsx
+              - generic [ref=e422]: 
+              - text: Excel
+            - link " PDF" [ref=e423] [cursor=pointer]:
+              - /url: /cotizacion/8?download=1
+              - generic [ref=e424]: 
+              - text: PDF
+            - button "" [ref=e425] [cursor=pointer]:
+              - generic [ref=e426]: 
+        - row "#CT-2026-0007  a  SMART CITIES 11/03/2026 En progreso ARS$ 5.971,35  Editar  Ver Online  Excel  PDF " [ref=e427]:
+          - cell "#CT-2026-0007" [ref=e428]:
+            - generic [ref=e429]: "#CT-2026-0007"
+          - cell " a  SMART CITIES" [ref=e430]:
+            - generic [ref=e431]: 
+            - strong [ref=e432]: a
+            - generic [ref=e434]:
+              - generic [ref=e435]: 
+              - text: SMART CITIES
+          - cell "11/03/2026" [ref=e436]
+          - cell "En progreso" [ref=e437]:
+            - generic [ref=e438]: En progreso
+          - cell "ARS$ 5.971,35" [ref=e439]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e440]:
+            - link " Editar" [ref=e441] [cursor=pointer]:
+              - /url: /cotizacion/7/editar
+              - generic [ref=e442]: 
+              - text: Editar
+            - link " Ver Online" [ref=e443] [cursor=pointer]:
+              - /url: /cotizacion/7
+              - generic [ref=e444]: 
+              - text: Ver Online
+            - link " Excel" [ref=e445] [cursor=pointer]:
+              - /url: /cotizacion/7/xlsx
+              - generic [ref=e446]: 
+              - text: Excel
+            - link " PDF" [ref=e447] [cursor=pointer]:
+              - /url: /cotizacion/7?download=1
+              - generic [ref=e448]: 
+              - text: PDF
+            - button "" [ref=e449] [cursor=pointer]:
+              - generic [ref=e450]: 
+        - row "#CT-2026-0006  Cliente Test  SMART CITIES 11/03/2026 En progreso ARS$ 222,34  Editar  Ver Online  Excel  PDF " [ref=e451]:
+          - cell "#CT-2026-0006" [ref=e452]:
+            - generic [ref=e453]: "#CT-2026-0006"
+          - cell " Cliente Test  SMART CITIES" [ref=e454]:
+            - generic [ref=e455]: 
+            - strong [ref=e456]: Cliente Test
+            - generic [ref=e458]:
+              - generic [ref=e459]: 
+              - text: SMART CITIES
+          - cell "11/03/2026" [ref=e460]
+          - cell "En progreso" [ref=e461]:
+            - generic [ref=e462]: En progreso
+          - cell "ARS$ 222,34" [ref=e463]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e464]:
+            - link " Editar" [ref=e465] [cursor=pointer]:
+              - /url: /cotizacion/6/editar
+              - generic [ref=e466]: 
+              - text: Editar
+            - link " Ver Online" [ref=e467] [cursor=pointer]:
+              - /url: /cotizacion/6
+              - generic [ref=e468]: 
+              - text: Ver Online
+            - link " Excel" [ref=e469] [cursor=pointer]:
+              - /url: /cotizacion/6/xlsx
+              - generic [ref=e470]: 
+              - text: Excel
+            - link " PDF" [ref=e471] [cursor=pointer]:
+              - /url: /cotizacion/6?download=1
+              - generic [ref=e472]: 
+              - text: PDF
+            - button "" [ref=e473] [cursor=pointer]:
+              - generic [ref=e474]: 
+        - row "#CT-2026-0005  Pepi  SEGURIDAD URBANA 10/03/2026 En progreso ARS$ 110.239,47  Editar  Ver Online  Excel  PDF " [ref=e475]:
+          - cell "#CT-2026-0005" [ref=e476]:
+            - generic [ref=e477]: "#CT-2026-0005"
+          - cell " Pepi  SEGURIDAD URBANA" [ref=e478]:
+            - generic [ref=e479]: 
+            - strong [ref=e480]: Pepi
+            - generic [ref=e482]:
+              - generic [ref=e483]: 
+              - text: SEGURIDAD URBANA
+          - cell "10/03/2026" [ref=e484]
+          - cell "En progreso" [ref=e485]:
+            - generic [ref=e486]: En progreso
+          - cell "ARS$ 110.239,47" [ref=e487]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e488]:
+            - link " Editar" [ref=e489] [cursor=pointer]:
+              - /url: /cotizacion/5/editar
+              - generic [ref=e490]: 
+              - text: Editar
+            - link " Ver Online" [ref=e491] [cursor=pointer]:
+              - /url: /cotizacion/5
+              - generic [ref=e492]: 
+              - text: Ver Online
+            - link " Excel" [ref=e493] [cursor=pointer]:
+              - /url: /cotizacion/5/xlsx
+              - generic [ref=e494]: 
+              - text: Excel
+            - link " PDF" [ref=e495] [cursor=pointer]:
+              - /url: /cotizacion/5?download=1
+              - generic [ref=e496]: 
+              - text: PDF
+            - button "" [ref=e497] [cursor=pointer]:
+              - generic [ref=e498]: 
+        - row "#CT-2026-0004  Lynx  SEGURIDAD URBANA 10/03/2026 En progreso USD$ 2.110,33  Editar  Ver Online  Excel  PDF " [ref=e499]:
+          - cell "#CT-2026-0004" [ref=e500]:
+            - generic [ref=e501]: "#CT-2026-0004"
+          - cell " Lynx  SEGURIDAD URBANA" [ref=e502]:
+            - generic [ref=e503]: 
+            - strong [ref=e504]: Lynx
+            - generic [ref=e506]:
+              - generic [ref=e507]: 
+              - text: SEGURIDAD URBANA
+          - cell "10/03/2026" [ref=e508]
+          - cell "En progreso" [ref=e509]:
+            - generic [ref=e510]: En progreso
+          - cell "USD$ 2.110,33" [ref=e511]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e512]:
+            - link " Editar" [ref=e513] [cursor=pointer]:
+              - /url: /cotizacion/4/editar
+              - generic [ref=e514]: 
+              - text: Editar
+            - link " Ver Online" [ref=e515] [cursor=pointer]:
+              - /url: /cotizacion/4
+              - generic [ref=e516]: 
+              - text: Ver Online
+            - link " Excel" [ref=e517] [cursor=pointer]:
+              - /url: /cotizacion/4/xlsx
+              - generic [ref=e518]: 
+              - text: Excel
+            - link " PDF" [ref=e519] [cursor=pointer]:
+              - /url: /cotizacion/4?download=1
+              - generic [ref=e520]: 
+              - text: PDF
+            - button "" [ref=e521] [cursor=pointer]:
+              - generic [ref=e522]: 
+        - row "#CT-2026-0003  4  SMART CITIES 09/03/2026 En progreso USD$ 978,28  Editar  Ver Online  Excel  PDF " [ref=e523]:
+          - cell "#CT-2026-0003" [ref=e524]:
+            - generic [ref=e525]: "#CT-2026-0003"
+          - cell " 4  SMART CITIES" [ref=e526]:
+            - generic [ref=e527]: 
+            - strong [ref=e528]: "4"
+            - generic [ref=e530]:
+              - generic [ref=e531]: 
+              - text: SMART CITIES
+          - cell "09/03/2026" [ref=e532]
+          - cell "En progreso" [ref=e533]:
+            - generic [ref=e534]: En progreso
+          - cell "USD$ 978,28" [ref=e535]
+          - cell " Editar  Ver Online  Excel  PDF " [ref=e536]:
+            - link " Editar" [ref=e537] [cursor=pointer]:
+              - /url: /cotizacion/3/editar
+              - generic [ref=e538]: 
+              - text: Editar
+            - link " Ver Online" [ref=e539] [cursor=pointer]:
+              - /url: /cotizacion/3
+              - generic [ref=e540]: 
+              - text: Ver Online
+            - link " Excel" [ref=e541] [cursor=pointer]:
+              - /url: /cotizacion/3/xlsx
+              - generic [ref=e542]: 
+              - text: Excel
+            - link " PDF" [ref=e543] [cursor=pointer]:
+              - /url: /cotizacion/3?download=1
+              - generic [ref=e544]: 
+              - text: PDF
+            - button "" [ref=e545] [cursor=pointer]:
+              - generic [ref=e546]: 
+    - generic [ref=e547]:
+      - generic [ref=e548]:
+        - text: Mostrando
+        - strong [ref=e549]: "1"
+        - text: a
+        - strong [ref=e550]: "20"
+        - text: de
+        - strong [ref=e551]: "22"
+        - text: cotizaciones
+      - navigation "Paginacion historial" [ref=e552]:
+        - list [ref=e553]:
+          - listitem [ref=e554]:
+            - button "Anterior"
+          - listitem [ref=e555]:
+            - button "1" [ref=e556] [cursor=pointer]
+          - listitem [ref=e557]:
+            - button "2" [ref=e558] [cursor=pointer]
+          - listitem [ref=e559]:
+            - button "Siguiente" [ref=e560] [cursor=pointer]

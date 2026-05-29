@@ -312,9 +312,9 @@
                     {% if quote_signature.validity_days %}
                     <li>Validez de la oferta: {{ quote_signature.validity_days }} dias.</li>
                     {% endif %}
-                    {% if cot.condicion_cotizacion %}
-                    <li>{{ cot.condicion_cotizacion }}</li>
-                    {% endif %}
+                    {% for condicion in condiciones_cotizacion %}
+                    <li>{{ condicion }}</li>
+                    {% endfor %}
                     <li>{{ quote_signature.footer_note }}</li>
                     <li>La aceptacion de esta cotizacion confirma cantidades, moneda y condiciones indicadas.</li>
                 </ul>

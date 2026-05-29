@@ -1,0 +1,534 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "Cuenco Tech Logo" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img "Cuenco Tech Logo" [ref=e5]
+      - generic [ref=e6]:
+        - list [ref=e7]:
+          - listitem [ref=e8]:
+            - link " Nuevo Presupuesto" [ref=e9] [cursor=pointer]:
+              - /url: /
+              - generic [ref=e10]: 
+              - text: Nuevo Presupuesto
+          - listitem [ref=e11]:
+            - link " Historial" [ref=e12] [cursor=pointer]:
+              - /url: /historial
+              - generic [ref=e13]: 
+              - text: Historial
+          - listitem [ref=e14]:
+            - link " Auditoría" [ref=e15] [cursor=pointer]:
+              - /url: /auditoria
+              - generic [ref=e16]: 
+              - text: Auditoría
+          - listitem [ref=e17]:
+            - link " Dashboard" [ref=e18] [cursor=pointer]:
+              - /url: /dashboard
+              - generic [ref=e19]: 
+              - text: Dashboard
+        - generic [ref=e20]:
+          - link " Familias" [ref=e21] [cursor=pointer]:
+            - /url: /familias
+            - generic [ref=e22]: 
+            - text: Familias
+          - link " Usuarios" [ref=e23] [cursor=pointer]:
+            - /url: /usuarios
+            - generic [ref=e24]: 
+            - text: Usuarios
+          - generic [ref=e25]: Admin
+          - generic [ref=e26]: Luca
+          - link " Salir" [ref=e27] [cursor=pointer]:
+            - /url: /logout
+            - generic [ref=e28]: 
+            - text: Salir
+  - generic [ref=e30]:
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - generic [ref=e35]: 
+          - text: Dashboard comercial
+        - heading "Mira volumen, cierre y pipeline en el rango que te interesa." [level=1] [ref=e36]
+        - paragraph [ref=e37]: Este panel trabaja sobre la fecha de creacion de cada cotizacion y te deja cambiar rapido el periodo sin perder contexto.
+        - generic [ref=e38]:
+          - generic [ref=e39]:
+            - generic [ref=e40]: 
+            - text: 30/05/2025 a 29/05/2026
+          - generic [ref=e41]:
+            - generic [ref=e42]: 
+            - text: 365 dias
+          - generic [ref=e43]:
+            - generic [ref=e44]: 
+            - text: Vista general del periodo
+      - generic [ref=e46]:
+        - generic [ref=e47]:
+          - generic [ref=e48]: Cotizaciones del periodo
+          - generic [ref=e49]: "5"
+          - paragraph [ref=e50]: +100.0% vs periodo anterior
+        - generic [ref=e51]:
+          - generic [ref=e52]: Aceptadas
+          - generic [ref=e53]: "1"
+          - paragraph [ref=e54]: +100.0% vs periodo anterior
+        - generic [ref=e55]:
+          - generic [ref=e56]: Tasa de aceptacion
+          - generic [ref=e57]: 20.0%
+          - paragraph [ref=e58]: Aceptadas sobre el total emitido del periodo
+    - generic [ref=e59]:
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - generic [ref=e62]: Rangos rapidos
+          - generic [ref=e63]:
+            - button "7 dias" [ref=e64] [cursor=pointer]
+            - button "30 dias" [ref=e65] [cursor=pointer]
+            - button "60 dias" [ref=e66] [cursor=pointer]
+            - button "90 dias" [ref=e67] [cursor=pointer]
+            - button "12 meses" [ref=e68] [cursor=pointer]
+        - generic [ref=e69]:
+          - generic [ref=e70]: Desde
+          - textbox [ref=e71]: 2025-05-30
+        - generic [ref=e72]:
+          - generic [ref=e73]: Hasta
+          - textbox [ref=e74]: 2026-05-29
+      - generic [ref=e75]:
+        - generic [ref=e76]:
+          - generic [ref=e77]: Cliente
+          - textbox "Nombre, razon social o CUIT/CUIL" [ref=e78]
+        - generic [ref=e79]:
+          - generic [ref=e80]: Familia
+          - combobox [ref=e81]:
+            - option "Todas las familias" [selected]
+            - option "CONECTIVIDAD SATELITAL"
+            - option "DATA CENTER"
+            - option "PARKING"
+            - option "RPUEBAAAA"
+            - option "SALAS DE CONTROL"
+            - option "SEGURIDAD URBANA"
+            - option "SMART CITIES"
+            - option "TRANSPORTE INTELIGENTE"
+        - generic [ref=e82]:
+          - generic [ref=e83]: Sector cliente
+          - combobox [ref=e84]:
+            - option "Todos los sectores" [selected]
+            - option "Publico"
+            - option "Privado"
+        - generic [ref=e85]:
+          - generic [ref=e86]: Subsector
+          - combobox [disabled] [ref=e87]:
+            - option "Todos los subsectores" [selected]
+        - generic [ref=e88]:
+          - button " Aplicar" [ref=e89] [cursor=pointer]:
+            - generic [ref=e90]: 
+            - text: Aplicar
+          - link "Limpiar" [ref=e91] [cursor=pointer]:
+            - /url: /dashboard
+    - generic [ref=e92]:
+      - article [ref=e93]:
+        - generic [ref=e94]: Volumen cotizado USD
+        - generic [ref=e95]: 3,746.67
+        - paragraph [ref=e96]: 5 cotizaciones emitidas en dolares dentro del periodo.
+      - article [ref=e97]:
+        - generic [ref=e98]: Pipeline abierto USD
+        - generic [ref=e99]: 3,552.09
+        - paragraph [ref=e100]: 4 cotizaciones siguen activas en dolares.
+      - article [ref=e101]:
+        - generic [ref=e102]: Volumen aceptado USD
+        - generic [ref=e103]: "194.58"
+        - paragraph [ref=e104]: 1 cotizaciones aceptadas en dolares.
+      - article [ref=e105]:
+        - generic [ref=e106]: Ticket promedio
+        - generic [ref=e107]: "749.33"
+        - paragraph [ref=e108]: 0.0 cotizaciones por dia en promedio.
+      - article [ref=e109]:
+        - generic [ref=e110]: Familia lider
+        - generic [ref=e111]: SEGURIDAD URBANA
+        - paragraph [ref=e112]: Familia con mas movimiento en el rango actual.
+      - article [ref=e113]:
+        - generic [ref=e114]: Segmento lider
+        - generic [ref=e115]:
+          - text: Sin sector
+          - generic [ref=e116]: Sin subsector
+        - paragraph [ref=e117]: Lectura rapida del corte sectorial mas dominante.
+    - generic [ref=e118]:
+      - article [ref=e119]:
+        - generic [ref=e120]:
+          - generic [ref=e121]:
+            - generic [ref=e122]: Ritmo de generacion y cierre
+            - paragraph [ref=e123]: Serie semanal para ver si el periodo viene acelerando o frenando.
+          - generic [ref=e124]:
+            - generic [ref=e125]: 
+            - text: Semanal
+      - article [ref=e128]:
+        - generic [ref=e129]:
+          - generic [ref=e130]:
+            - generic [ref=e131]: Composicion del pipeline
+            - paragraph [ref=e132]: Distribucion de estados dentro del periodo seleccionado.
+          - generic [ref=e133]:
+            - generic [ref=e134]: 
+            - text: Estados
+        - generic [ref=e137]:
+          - generic [ref=e139]:
+            - generic [ref=e140]: En progreso
+            - strong [ref=e142]: 4 · 80.0%
+          - generic [ref=e146]:
+            - generic [ref=e147]: Aceptadas
+            - strong [ref=e149]: 1 · 20.0%
+          - generic [ref=e153]:
+            - generic [ref=e154]: Rechazadas
+            - strong [ref=e156]: 0 · 0.0%
+    - generic [ref=e158]:
+      - article [ref=e159]:
+        - generic [ref=e160]:
+          - generic [ref=e161]:
+            - generic [ref=e162]: Familias mas cotizadas
+            - paragraph [ref=e163]: Te muestra que lineas de negocio dominan el periodo filtrado.
+          - generic [ref=e164]:
+            - generic [ref=e165]: 
+            - text: Familias
+        - generic [ref=e166]:
+          - generic [ref=e167]:
+            - generic [ref=e168]:
+              - generic [ref=e169]:
+                - generic [ref=e170]: SEGURIDAD URBANA
+                - generic [ref=e171]: 3 cotizaciones · 0 aceptadas
+              - generic [ref=e172]: 60.0%
+            - generic [ref=e175]: "Total USD: 2,573.81"
+          - generic [ref=e176]:
+            - generic [ref=e177]:
+              - generic [ref=e178]:
+                - generic [ref=e179]: SMART CITIES
+                - generic [ref=e180]: 2 cotizaciones · 1 aceptadas
+              - generic [ref=e181]: 40.0%
+            - generic [ref=e184]: "Total USD: 1,172.86"
+      - article [ref=e185]:
+        - generic [ref=e186]:
+          - generic [ref=e187]:
+            - generic [ref=e188]: Corte por sector
+            - paragraph [ref=e189]: Sirve para ver rapido cuanto viene desde Publico y cuanto desde Privado.
+          - generic [ref=e190]:
+            - generic [ref=e191]: 
+            - text: Sectores
+        - generic [ref=e193]:
+          - generic [ref=e194]:
+            - generic [ref=e195]:
+              - generic [ref=e196]: Sin sector
+              - generic [ref=e197]: 5 cotizaciones · 1 aceptadas
+            - generic [ref=e198]: 100.0%
+          - generic [ref=e202]:
+            - generic [ref=e203]: Total USD
+            - strong [ref=e204]: 3,746.67
+      - article [ref=e205]:
+        - generic [ref=e206]:
+          - generic [ref=e207]:
+            - generic [ref=e208]: Subsectores relevantes
+            - paragraph [ref=e209]: Detalle fino del origen comercial para no perder granularidad.
+          - generic [ref=e210]:
+            - generic [ref=e211]: 
+            - text: Subsectores
+        - generic [ref=e213]:
+          - generic [ref=e214]:
+            - generic [ref=e215]:
+              - generic [ref=e216]: Sin subsector
+              - generic [ref=e217]: 5 cotizaciones · 1 aceptadas
+            - generic [ref=e218]: 100.0%
+          - generic [ref=e222]:
+            - generic [ref=e223]: Total USD
+            - strong [ref=e224]: 3,746.67
+    - generic [ref=e225]:
+      - article [ref=e226]:
+        - generic [ref=e227]:
+          - generic [ref=e228]:
+            - generic [ref=e229]: Lectura USD
+            - paragraph [ref=e230]: El dashboard toma solo cotizaciones en dolares para mantener una lectura consistente.
+          - generic [ref=e231]:
+            - generic [ref=e232]: 
+            - text: USD
+        - generic [ref=e233]:
+          - generic [ref=e234]:
+            - generic [ref=e235]:
+              - generic [ref=e236]: Volumen total
+              - generic [ref=e237]: USD
+            - generic [ref=e238]: 3,746.67
+            - paragraph [ref=e239]: 5 cotizaciones emitidas en dolares.
+          - generic [ref=e240]:
+            - generic [ref=e241]:
+              - generic [ref=e242]: Pipeline abierto
+              - generic [ref=e243]: USD
+            - generic [ref=e244]: 3,552.09
+            - paragraph [ref=e245]: 4 cotizaciones activas en dolares.
+          - generic [ref=e246]:
+            - generic [ref=e247]:
+              - generic [ref=e248]: Volumen aceptado
+              - generic [ref=e249]: USD
+            - generic [ref=e250]: "194.58"
+            - paragraph [ref=e251]: 1 cotizaciones aceptadas en dolares.
+      - article [ref=e252]:
+        - generic [ref=e253]:
+          - generic [ref=e254]:
+            - generic [ref=e255]: Clientes mas activos
+            - paragraph [ref=e256]: Quienes concentraron mas movimiento dentro del rango actual.
+          - generic [ref=e257]:
+            - generic [ref=e258]: 
+            - text: Top 4
+        - generic [ref=e259]:
+          - generic [ref=e260]:
+            - generic [ref=e261]:
+              - generic [ref=e262]: Municipalidad Lujan
+              - generic [ref=e263]: 2 cotizaciones
+            - generic [ref=e264]: 0 aceptadas dentro del periodo
+            - generic [ref=e268]:
+              - generic [ref=e269]: Total USD
+              - strong [ref=e270]: "463.48"
+          - generic [ref=e271]:
+            - generic [ref=e272]:
+              - generic [ref=e273]: Lynx
+              - generic [ref=e274]: 1 cotizaciones
+            - generic [ref=e275]: 0 aceptadas dentro del periodo
+            - generic [ref=e279]:
+              - generic [ref=e280]: Total USD
+              - strong [ref=e281]: 2,110.33
+          - generic [ref=e282]:
+            - generic [ref=e283]:
+              - generic [ref=e284]: "4"
+              - generic [ref=e285]: 1 cotizaciones
+            - generic [ref=e286]: 0 aceptadas dentro del periodo
+            - generic [ref=e290]:
+              - generic [ref=e291]: Total USD
+              - strong [ref=e292]: "978.28"
+          - generic [ref=e293]:
+            - generic [ref=e294]:
+              - generic [ref=e295]: Luca
+              - generic [ref=e296]: 1 cotizaciones
+            - generic [ref=e297]: 1 aceptadas dentro del periodo
+            - generic [ref=e301]:
+              - generic [ref=e302]: Total USD
+              - strong [ref=e303]: "194.58"
+    - generic [ref=e305]:
+      - generic [ref=e306]:
+        - generic [ref=e307]:
+          - generic [ref=e308]: Detalle operativo
+          - paragraph [ref=e309]: Aca ves el listado operativo final. Estos filtros afectan solo la tabla de abajo, sin mover la lectura general del dashboard.
+        - generic [ref=e310]:
+          - generic [ref=e311]: 
+          - text: 5 resultados
+      - generic [ref=e312]:
+        - generic [ref=e313]:
+          - generic [ref=e314]: Filtro de estado
+          - generic [ref=e315]:
+            - link "Todo" [ref=e316] [cursor=pointer]:
+              - /url: /dashboard?periodo=365&estado=todos&desde=2025-05-30&hasta=2026-05-29&cliente=&familia=&op_familia=&sector=&subsector=&op_page=1
+            - link "Aceptadas" [ref=e317] [cursor=pointer]:
+              - /url: /dashboard?periodo=365&estado=aceptadas&desde=2025-05-30&hasta=2026-05-29&cliente=&familia=&op_familia=&sector=&subsector=&op_page=1
+            - link "Rechazadas" [ref=e318] [cursor=pointer]:
+              - /url: /dashboard?periodo=365&estado=rechazadas&desde=2025-05-30&hasta=2026-05-29&cliente=&familia=&op_familia=&sector=&subsector=&op_page=1
+            - link "En progreso" [ref=e319] [cursor=pointer]:
+              - /url: /dashboard?periodo=365&estado=en_progreso&desde=2025-05-30&hasta=2026-05-29&cliente=&familia=&op_familia=&sector=&subsector=&op_page=1
+          - paragraph [ref=e320]: Cambia estado y familia sin perder el rango, cliente o segmento que ya venias mirando arriba.
+        - generic [ref=e321]:
+          - generic [ref=e322]: Familia del detalle
+          - generic [ref=e323]:
+            - combobox [ref=e324]:
+              - option "Todas dentro del filtro actual" [selected]
+              - option "CONECTIVIDAD SATELITAL"
+              - option "DATA CENTER"
+              - option "PARKING"
+              - option "RPUEBAAAA"
+              - option "SALAS DE CONTROL"
+              - option "SEGURIDAD URBANA"
+              - option "SMART CITIES"
+              - option "TRANSPORTE INTELIGENTE"
+            - button " Aplicar" [ref=e325] [cursor=pointer]:
+              - generic [ref=e326]: 
+              - text: Aplicar
+            - link "Limpiar" [ref=e327] [cursor=pointer]:
+              - /url: /dashboard?periodo=365&estado=todos&desde=2025-05-30&hasta=2026-05-29&cliente=&familia=&sector=&subsector=&op_page=1
+      - table [ref=e329]:
+        - rowgroup [ref=e330]:
+          - row "Nro Cliente Familia Fecha de creacion Estado Total USD Acciones" [ref=e331]:
+            - columnheader "Nro" [ref=e332]
+            - columnheader "Cliente" [ref=e333]
+            - columnheader "Familia" [ref=e334]
+            - columnheader "Fecha de creacion" [ref=e335]
+            - columnheader "Estado" [ref=e336]
+            - columnheader "Total USD" [ref=e337]
+            - columnheader "Acciones" [ref=e338]
+        - rowgroup [ref=e339]:
+          - row "#CT-2026-0023 Municipalidad Lujan Municipalidad Lujan Sin sector Sin subsector SEGURIDAD URBANA 29/05/2026 12:10 En progreso 231.74  Editar  Ver  Excel  PDF" [ref=e340]:
+            - cell "#CT-2026-0023" [ref=e341]:
+              - generic [ref=e342]: "#CT-2026-0023"
+            - cell "Municipalidad Lujan Municipalidad Lujan Sin sector Sin subsector" [ref=e343]:
+              - strong [ref=e344]: Municipalidad Lujan
+              - generic [ref=e345]: Municipalidad Lujan
+              - generic [ref=e346]:
+                - generic [ref=e347]: Sin sector
+                - generic [ref=e348]: Sin subsector
+            - cell "SEGURIDAD URBANA" [ref=e349]:
+              - generic [ref=e350]: SEGURIDAD URBANA
+            - cell "29/05/2026 12:10" [ref=e351]
+            - cell "En progreso" [ref=e352]:
+              - generic [ref=e353]: En progreso
+            - cell "231.74" [ref=e354]
+            - cell " Editar  Ver  Excel  PDF" [ref=e355]:
+              - generic [ref=e356]:
+                - link " Editar" [ref=e357] [cursor=pointer]:
+                  - /url: /cotizacion/23/editar
+                  - generic [ref=e358]: 
+                  - text: Editar
+                - link " Ver" [ref=e359] [cursor=pointer]:
+                  - /url: /cotizacion/23
+                  - generic [ref=e360]: 
+                  - text: Ver
+                - link " Excel" [ref=e361] [cursor=pointer]:
+                  - /url: /cotizacion/23/xlsx
+                  - generic [ref=e362]: 
+                  - text: Excel
+                - link " PDF" [ref=e363] [cursor=pointer]:
+                  - /url: /cotizacion/23?download=1
+                  - generic [ref=e364]: 
+                  - text: PDF
+          - row "#CT-2026-0022 Municipalidad Lujan Municipalidad Lujan Sin sector Sin subsector SEGURIDAD URBANA 21/04/2026 13:25 En progreso 231.74  Editar  Ver  Excel  PDF" [ref=e365]:
+            - cell "#CT-2026-0022" [ref=e366]:
+              - generic [ref=e367]: "#CT-2026-0022"
+            - cell "Municipalidad Lujan Municipalidad Lujan Sin sector Sin subsector" [ref=e368]:
+              - strong [ref=e369]: Municipalidad Lujan
+              - generic [ref=e370]: Municipalidad Lujan
+              - generic [ref=e371]:
+                - generic [ref=e372]: Sin sector
+                - generic [ref=e373]: Sin subsector
+            - cell "SEGURIDAD URBANA" [ref=e374]:
+              - generic [ref=e375]: SEGURIDAD URBANA
+            - cell "21/04/2026 13:25" [ref=e376]
+            - cell "En progreso" [ref=e377]:
+              - generic [ref=e378]: En progreso
+            - cell "231.74" [ref=e379]
+            - cell " Editar  Ver  Excel  PDF" [ref=e380]:
+              - generic [ref=e381]:
+                - link " Editar" [ref=e382] [cursor=pointer]:
+                  - /url: /cotizacion/22/editar
+                  - generic [ref=e383]: 
+                  - text: Editar
+                - link " Ver" [ref=e384] [cursor=pointer]:
+                  - /url: /cotizacion/22
+                  - generic [ref=e385]: 
+                  - text: Ver
+                - link " Excel" [ref=e386] [cursor=pointer]:
+                  - /url: /cotizacion/22/xlsx
+                  - generic [ref=e387]: 
+                  - text: Excel
+                - link " PDF" [ref=e388] [cursor=pointer]:
+                  - /url: /cotizacion/22?download=1
+                  - generic [ref=e389]: 
+                  - text: PDF
+          - row "#CT-2026-0011 Luca Luca Sin sector Sin subsector SMART CITIES 18/03/2026 22:20 Aceptada 194.58  Editar  Ver  Excel  PDF" [ref=e390]:
+            - cell "#CT-2026-0011" [ref=e391]:
+              - generic [ref=e392]: "#CT-2026-0011"
+            - cell "Luca Luca Sin sector Sin subsector" [ref=e393]:
+              - strong [ref=e394]: Luca
+              - generic [ref=e395]: Luca
+              - generic [ref=e396]:
+                - generic [ref=e397]: Sin sector
+                - generic [ref=e398]: Sin subsector
+            - cell "SMART CITIES" [ref=e399]:
+              - generic [ref=e400]: SMART CITIES
+            - cell "18/03/2026 22:20" [ref=e401]
+            - cell "Aceptada" [ref=e402]:
+              - generic [ref=e403]: Aceptada
+            - cell "194.58" [ref=e404]
+            - cell " Editar  Ver  Excel  PDF" [ref=e405]:
+              - generic [ref=e406]:
+                - link " Editar" [ref=e407] [cursor=pointer]:
+                  - /url: /cotizacion/11/editar
+                  - generic [ref=e408]: 
+                  - text: Editar
+                - link " Ver" [ref=e409] [cursor=pointer]:
+                  - /url: /cotizacion/11
+                  - generic [ref=e410]: 
+                  - text: Ver
+                - link " Excel" [ref=e411] [cursor=pointer]:
+                  - /url: /cotizacion/11/xlsx
+                  - generic [ref=e412]: 
+                  - text: Excel
+                - link " PDF" [ref=e413] [cursor=pointer]:
+                  - /url: /cotizacion/11?download=1
+                  - generic [ref=e414]: 
+                  - text: PDF
+          - row "#CT-2026-0004 Lynx Sin sector Sin subsector SEGURIDAD URBANA 10/03/2026 13:28 En progreso 2,110.33  Editar  Ver  Excel  PDF" [ref=e415]:
+            - cell "#CT-2026-0004" [ref=e416]:
+              - generic [ref=e417]: "#CT-2026-0004"
+            - cell "Lynx Sin sector Sin subsector" [ref=e418]:
+              - strong [ref=e419]: Lynx
+              - generic [ref=e420]:
+                - generic [ref=e421]: Sin sector
+                - generic [ref=e422]: Sin subsector
+            - cell "SEGURIDAD URBANA" [ref=e423]:
+              - generic [ref=e424]: SEGURIDAD URBANA
+            - cell "10/03/2026 13:28" [ref=e425]
+            - cell "En progreso" [ref=e426]:
+              - generic [ref=e427]: En progreso
+            - cell "2,110.33" [ref=e428]
+            - cell " Editar  Ver  Excel  PDF" [ref=e429]:
+              - generic [ref=e430]:
+                - link " Editar" [ref=e431] [cursor=pointer]:
+                  - /url: /cotizacion/4/editar
+                  - generic [ref=e432]: 
+                  - text: Editar
+                - link " Ver" [ref=e433] [cursor=pointer]:
+                  - /url: /cotizacion/4
+                  - generic [ref=e434]: 
+                  - text: Ver
+                - link " Excel" [ref=e435] [cursor=pointer]:
+                  - /url: /cotizacion/4/xlsx
+                  - generic [ref=e436]: 
+                  - text: Excel
+                - link " PDF" [ref=e437] [cursor=pointer]:
+                  - /url: /cotizacion/4?download=1
+                  - generic [ref=e438]: 
+                  - text: PDF
+          - row "#CT-2026-0003 4 Sin sector Sin subsector SMART CITIES 09/03/2026 15:57 En progreso 978.28  Editar  Ver  Excel  PDF" [ref=e439]:
+            - cell "#CT-2026-0003" [ref=e440]:
+              - generic [ref=e441]: "#CT-2026-0003"
+            - cell "4 Sin sector Sin subsector" [ref=e442]:
+              - strong [ref=e443]: "4"
+              - generic [ref=e444]:
+                - generic [ref=e445]: Sin sector
+                - generic [ref=e446]: Sin subsector
+            - cell "SMART CITIES" [ref=e447]:
+              - generic [ref=e448]: SMART CITIES
+            - cell "09/03/2026 15:57" [ref=e449]
+            - cell "En progreso" [ref=e450]:
+              - generic [ref=e451]: En progreso
+            - cell "978.28" [ref=e452]
+            - cell " Editar  Ver  Excel  PDF" [ref=e453]:
+              - generic [ref=e454]:
+                - link " Editar" [ref=e455] [cursor=pointer]:
+                  - /url: /cotizacion/3/editar
+                  - generic [ref=e456]: 
+                  - text: Editar
+                - link " Ver" [ref=e457] [cursor=pointer]:
+                  - /url: /cotizacion/3
+                  - generic [ref=e458]: 
+                  - text: Ver
+                - link " Excel" [ref=e459] [cursor=pointer]:
+                  - /url: /cotizacion/3/xlsx
+                  - generic [ref=e460]: 
+                  - text: Excel
+                - link " PDF" [ref=e461] [cursor=pointer]:
+                  - /url: /cotizacion/3?download=1
+                  - generic [ref=e462]: 
+                  - text: PDF
+      - generic [ref=e463]:
+        - generic [ref=e464]:
+          - text: Mostrando
+          - strong [ref=e465]: "1"
+          - text: a
+          - strong [ref=e466]: "5"
+          - text: de
+          - strong [ref=e467]: "5"
+          - text: cotizaciones
+        - navigation "Paginacion detalle operativo" [ref=e468]:
+          - list [ref=e469]:
+            - listitem [ref=e470]:
+              - generic: Anterior
+            - listitem [ref=e471]:
+              - link "1" [ref=e472] [cursor=pointer]:
+                - /url: /dashboard?periodo=365&estado=todos&desde=2025-05-30&hasta=2026-05-29&cliente=&familia=&op_familia=&sector=&subsector=&op_page=1
+            - listitem [ref=e473]:
+              - generic: Siguiente

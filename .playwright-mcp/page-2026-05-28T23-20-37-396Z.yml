@@ -1,0 +1,20 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - link "Cuenco Tech Logo" [ref=e4] [cursor=pointer]:
+      - /url: /
+      - img "Cuenco Tech Logo" [ref=e5]
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - heading "Ingresar" [level=2] [ref=e11]
+      - generic [ref=e12]: Acceso al cotizador
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - generic [ref=e15]: Usuario
+        - textbox [ref=e16]
+      - generic [ref=e17]:
+        - generic [ref=e18]: Contraseña
+        - generic [ref=e19]:
+          - textbox [ref=e20]
+          - button "Mostrar contraseña" [ref=e21] [cursor=pointer]:
+            - generic [ref=e22]: 
+      - button "Entrar" [ref=e23] [cursor=pointer]

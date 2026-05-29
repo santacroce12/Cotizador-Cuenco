@@ -2,34 +2,12 @@
 
 {% block content %}
 <style>
-    .cotizador-items-table {
-        width: 100%;
-        table-layout: fixed;
-    }
-
     .cotizador-workspace {
         width: 100%;
         max-width: 100%;
         margin-left: auto;
         margin-right: auto;
         overflow: hidden;
-    }
-
-    .cotizador-items-table thead th {
-        font-size: 0.78rem;
-        letter-spacing: 0.025em;
-        vertical-align: middle;
-        white-space: normal;
-        padding: 1rem 0.55rem;
-        line-height: 1.25;
-    }
-
-    .th-help-label {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 0.28rem;
     }
 
     .summary-help-label {
@@ -91,49 +69,158 @@
         color: #0f172a;
     }
 
-    .cotizador-items-table td {
-        padding: 0.85rem 0.45rem;
+    .cotizador-items-list {
+        display: grid;
+        gap: 1rem;
     }
 
-    .cotizador-items-table .form-control,
-    .cotizador-items-table .form-select {
+    .cotizador-item-card {
+        border: 1px solid #d2ddeb;
+        border-radius: 16px;
+        background: #ffffff;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        padding: 0.95rem 1rem 1rem;
+    }
+
+    .cotizador-item-head {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
         width: 100%;
-        padding: 0.68rem 0.72rem;
-        font-size: 0.98rem;
     }
 
-    .cotizador-items-table textarea.form-control {
-        min-height: 76px;
+    .cotizador-item-index {
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #475569;
+        align-self: center;
+    }
+
+    .cotizador-item-layout {
+        display: grid;
+        grid-template-columns: 94px minmax(0, 1fr);
+        gap: 1rem;
+        align-items: start;
+    }
+
+    .cotizador-item-content {
+        display: grid;
+        grid-template-columns: minmax(250px, 0.95fr) minmax(520px, 1.55fr) 220px;
+        gap: 1rem;
+        align-items: start;
+    }
+
+    .cotizador-item-identity {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.9rem;
+    }
+
+    .cotizador-item-metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.9rem 1rem;
+    }
+
+    .cotizador-item-summary {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.85rem;
+        align-content: start;
+    }
+
+    .cotizador-field {
+        display: grid;
+        gap: 0.35rem;
+    }
+
+    .cotizador-field-label {
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: #475569;
+    }
+
+    .cotizador-input,
+    .cotizador-select,
+    .cotizador-textarea {
+        width: 100%;
+        min-height: 52px;
+        padding: 0.68rem 0.8rem;
+        font-size: 0.96rem;
+        border: 1px solid #bfd0e2;
+        border-radius: 14px;
+        background: #ffffff;
+    }
+
+    .cotizador-textarea {
+        min-height: 82px;
         resize: vertical;
     }
 
-    .cotizador-items-table .ganancia-badge,
-    .cotizador-items-table .venta-total-badge {
-        min-width: 100%;
-        display: inline-flex;
+    .cotizador-select {
+        padding-right: 2.2rem;
+    }
+
+    .cotizador-item-pill {
+        min-height: 76px;
+        border-radius: 14px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
         justify-content: center;
-        font-size: 0.9rem;
-        padding: 0.72rem 0.48rem !important;
+        gap: 0.35rem;
+        padding: 0.85rem 0.95rem;
+        font-weight: 700;
     }
 
-    .cotizador-items-table .venta-total-badge {
-        margin-right: 0;
+    .cotizador-item-pill-label {
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        opacity: 0.8;
+    }
+
+    .cotizador-item-pill-value {
+        font-size: 1.18rem;
         white-space: nowrap;
+        align-self: flex-end;
     }
 
-    .cotizador-items-table .select-iva {
-        min-width: 0;
-        max-width: none;
-        width: 100%;
-        padding-inline: 0.45rem 1.65rem;
-        text-align-last: center;
-        font-size: 0.84rem;
+    .cotizador-item-pill.ganancia {
+        background: #0f172a;
+        color: #22c55e;
     }
 
-    .cotizador-items-table .item-delete-btn {
+    .cotizador-item-pill.venta {
+        background: #1f2937;
+        color: #ffffff;
+    }
+
+    .cotizador-number-no-spin::-webkit-outer-spin-button,
+    .cotizador-number-no-spin::-webkit-inner-spin-button,
+    #bonificacion_cierre_monto::-webkit-outer-spin-button,
+    #bonificacion_cierre_monto::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    .cotizador-number-no-spin,
+    #bonificacion_cierre_monto {
+        -moz-appearance: textfield;
+        appearance: textfield;
+    }
+
+    .item-delete-btn {
         width: 34px;
         height: 34px;
-        margin-left: 0.75rem;
+        margin: 0 auto;
         border-radius: 10px;
         border: 1px solid #ef4444;
         background: #fff1f2;
@@ -145,34 +232,29 @@
         transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
     }
 
-    .cotizador-items-table .item-delete-btn:hover,
-    .cotizador-items-table .item-delete-btn:focus {
+    .item-delete-btn:hover,
+    .item-delete-btn:focus {
         background: #fee2e2;
         border-color: #dc2626;
         color: #b91c1c;
         transform: translateY(-1px);
     }
 
-    .cotizador-items-table .item-delete-btn i {
+    .item-delete-btn i {
         font-size: 0.95rem;
         line-height: 1;
     }
 
-    .table-grid-outline.table-responsive {
-        overflow-x: auto;
-        overflow-y: hidden;
-        overscroll-behavior-x: contain;
-        scrollbar-gutter: stable both-edges;
-    }
-
     .cotizador-table-shell {
-        padding: 14px;
+        padding: 18px;
         max-width: 100%;
     }
 
     .image-upload-cell {
         width: 88px;
         min-width: 88px;
+        display: grid;
+        justify-items: center;
     }
 
     .image-upload-input {
@@ -235,14 +317,52 @@
         min-height: 20px;
     }
 
-    @media (max-width: 1499.98px) {
-        .cotizador-items-table {
-            min-width: 1560px;
+    @media (max-width: 1399.98px) {
+        .cotizador-item-content {
+            grid-template-columns: minmax(220px, 0.9fr) minmax(0, 1.3fr);
+        }
+
+        .cotizador-item-summary {
+            grid-column: 1 / -1;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 1199.98px) {
+        .cotizador-item-metrics {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
         }
     }
 
     @media (max-width: 991.98px) {
         .calc-help-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .cotizador-item-content {
+            grid-template-columns: 1fr;
+        }
+
+        .cotizador-item-layout,
+        .cotizador-item-metrics {
+            grid-template-columns: 1fr;
+        }
+
+        .cotizador-item-summary {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 767.98px) {
+        .cotizador-item-metrics {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .cotizador-table-shell {
+            padding: 14px;
+        }
+
+        .cotizador-item-summary {
             grid-template-columns: 1fr;
         }
     }
@@ -446,25 +566,16 @@
                             {% endfor %}
                         </select>
                     </div>
-                    {% set condicion_actual = cotizacion.condicion_cotizacion if cotizacion and cotizacion.condicion_cotizacion else condicion_cotizacion_default %}
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold small text-muted text-uppercase">Condicion frecuente</label>
-                        <select id="condicion_cotizacion_preset" class="form-select" onchange="aplicarCondicionCotizacionPreset(this.value)">
-                            {% for condicion in condiciones_cotizacion %}
-                            <option value="{{ condicion }}" {% if condicion_actual == condicion %}selected{% endif %}>{{ condicion }}</option>
-                            {% endfor %}
-                            <option value="__custom__" {% if condicion_actual not in condiciones_cotizacion %}selected{% endif %}>Personalizada</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold small text-muted text-uppercase">Detalle de condicion</label>
+                    <div class="col-md-8">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Condiciones comerciales</label>
                         <textarea
                             name="condicion_cotizacion"
                             id="condicion_cotizacion"
                             class="form-control"
-                            rows="2"
-                            oninput="sincronizarCondicionCotizacionPreset()"
-                        >{{ condicion_actual }}</textarea>
+                            rows="5"
+                            placeholder="Una condicion por linea."
+                        >{{ condicion_cotizacion_texto_inicial }}</textarea>
+                        <div class="form-text">Las condiciones base ya vienen cargadas. Podes sumar o editar una por linea.</div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-bold small text-muted text-uppercase">Bonificacion de cierre</label>
@@ -576,65 +687,7 @@
         </div>
 
         <div class="table-container mt-4 cotizador-table-shell">
-        <div class="table-responsive table-grid-outline">
-            <table class="table table-hover align-middle mb-0 table-custom cotizador-items-table">
-                <colgroup>
-                    <col style="width: 92px;">
-                    <col style="width: 14%;">
-                    <col style="width: 18%;">
-                    <col style="width: 5.2%;">
-                    <col style="width: 7.4%;">
-                    <col style="width: 6.4%;">
-                    <col style="width: 6.2%;">
-                    <col style="width: 6.2%;">
-                    <col style="width: 5.8%;">
-                    <col style="width: 6.4%;">
-                    <col style="width: 6.8%;">
-                    <col style="width: 9.4%;">
-                    <col style="width: 9%;">
-                    <col style="width: 66px;">
-                </colgroup>
-                <thead class="thead-dark-custom">
-                    <tr>
-                        <th class="text-center">Foto</th>
-                        <th>Producto / Servicio</th>
-                        <th>Descripcion</th>
-                        <th class="text-center">
-                            <span class="th-help-label">Cant.<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Cantidad entera. El sistema redondea hacia abajo si se ingresa decimal.">?</button></span>
-                        </th>
-                        <th class="text-center">
-                            <span class="th-help-label">Costo Neto U.<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Costo unitario neto del proveedor, sin IVA de compra.">?</button></span>
-                        </th>
-                        <th class="text-center">
-                            <span class="th-help-label">IVA Compra %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA facturado por el proveedor. Se muestra como credito fiscal interno y no entra en la base de venta.">?</button></span>
-                        </th>
-                        <th class="text-center">
-                            <span class="th-help-label">Otros %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Costo operativo adicional sobre el costo neto: flete, comision, financiacion simple u otros.">?</button></span>
-                        </th>
-                        <th class="text-center">
-                            <span class="th-help-label">Margen %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Margen comercial aplicado sobre Costo Neto + Otros. Se ingresa como porcentaje.">?</button></span>
-                        </th>
-                        <th class="text-center">
-                            <span class="th-help-label">Desc. %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Descuento al cliente aplicado despues del margen. Solo aparece en el PDF si algun item tiene descuento.">?</button></span>
-                        </th>
-                        <th class="text-center text-danger">
-                            <span class="th-help-label">Carga F. %<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Carga fiscal interna: IIBB, Ganancias, sellos, impuesto al cheque, retenciones u otras. No incluye IVA.">?</button></span>
-                        </th>
-                        <th class="text-center">
-                            <span class="th-help-label">IVA<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA de venta. Se calcula internamente siempre; en el PDF se detalla solo para Responsable Inscrito.">?</button></span>
-                        </th>
-                        <th class="text-center">
-                            <span class="th-help-label">Ganancia Neta U.<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Por unidad: Venta neta - Costo neto real - Carga fiscal. El IVA compra se separa como credito fiscal.">?</button></span>
-                        </th>
-                        <th class="text-center">
-                            <span class="th-help-label">Venta total<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Cantidad x precio unitario final con IVA de venta incluido.">?</button></span>
-                        </th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="cuerpo-tabla"></tbody>
-            </table>
-        </div>
+            <div id="cuerpo-tabla" class="cotizador-items-list"></div>
         </div>
         <button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="agregarFila()">+ Item</button>
 
@@ -751,7 +804,6 @@ const placeholderProductUrl = "{{ url_for('static', filename='placeholder_produc
 const itemsPrecargados = {{ items_precargados|default([], true)|tojson }};
 const tipoCambioUrl = "{{ url_for('api_tipo_cambio_oficial') }}";
 const tipoCambioGuardado = {{ tipo_cambio_guardado|tojson }};
-const condicionesCotizacion = {{ condiciones_cotizacion|default([], true)|tojson }};
 const cotizadorDraftKey = "cuencotech:cotizacion:draft:{{ 'edit:' ~ cotizacion.id if modo_edicion else 'new' }}";
 const cotizadorPendingDraftKey = "cuencotech:cotizacion:pending-draft-key";
 let draftSaveTimer = null;
@@ -821,12 +873,13 @@ function borradorTieneContenido(draft) {
     if (!draft) {
         return false;
     }
+    const condicionesGuardadas = leerCondicionesCotizacionSerializadas(draft.condicion_cotizacion).length;
     if (
         draft.cliente_id
         || draft.familia
         || draft.seguimiento_activo
         || draft.forma_pago
-        || draft.condicion_cotizacion
+        || condicionesGuardadas > 0
         || draft.observacion_cliente
         || Number(draft.bonificacion_cierre_monto || 0) > 0
     ) {
@@ -845,29 +898,49 @@ function obtenerValor(selector) {
     return document.querySelector(selector)?.value || "";
 }
 
-function aplicarCondicionCotizacionPreset(valor) {
-    const textarea = document.getElementById("condicion_cotizacion");
-    if (!textarea || !valor || valor === "__custom__") {
-        return;
-    }
-    textarea.value = valor;
-    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+function normalizarTextoCondicionCotizacion(texto) {
+    return (texto || "")
+        .toString()
+        .replace(/\s+/g, " ")
+        .trim();
 }
 
-function sincronizarCondicionCotizacionPreset() {
-    const select = document.getElementById("condicion_cotizacion_preset");
-    const textarea = document.getElementById("condicion_cotizacion");
-    if (!select || !textarea) {
-        return;
+function leerCondicionesCotizacionSerializadas(valor) {
+    if (Array.isArray(valor)) {
+        return valor
+            .map((item) => normalizarTextoCondicionCotizacion(item))
+            .filter(Boolean);
     }
-    select.value = condicionesCotizacion.includes(textarea.value) ? textarea.value : "__custom__";
+    const texto = (valor || "").toString().trim();
+    if (!texto) {
+        return [];
+    }
+    try {
+        const data = JSON.parse(texto);
+        if (Array.isArray(data)) {
+            return data
+                .map((item) => normalizarTextoCondicionCotizacion(item))
+                .filter(Boolean);
+        }
+    } catch (_error) {
+        // Compatibilidad con cotizaciones viejas y drafts previos.
+    }
+    return texto
+        .split(/\r?\n/)
+        .map((item) => item.replace(/^[\-\u2022]\s*/, ""))
+        .map((item) => normalizarTextoCondicionCotizacion(item))
+        .filter(Boolean);
+}
+
+function formatearCondicionesCotizacionParaTextarea(valor) {
+    return leerCondicionesCotizacionSerializadas(valor).join("\n");
 }
 
 function obtenerBorradorCotizacion() {
     const select = document.getElementById("cliente_select");
     const estadoSelect = document.getElementById("estado_cotizacion");
     const seguimientoActivo = document.getElementById("seguimiento_activo");
-    const items = Array.from(document.querySelectorAll("#cuerpo-tabla tr")).map((row) => ({
+    const items = Array.from(document.querySelectorAll("#cuerpo-tabla .cotizador-item-card")).map((row) => ({
         item_id: row.querySelector('[name="item_id[]"]')?.value || "",
         imagen_url: row.querySelector('[name="imagen_actual[]"]')?.value || "",
         descripcion: row.querySelector('[name="desc[]"]')?.value || "",
@@ -977,8 +1050,7 @@ function aplicarBorradorCotizacion(draft) {
     setValue("#tipo_cambio", draft.tipo_cambio);
     setValue("#condicion_iva", draft.condicion_iva);
     setValue("#forma_pago", draft.forma_pago);
-    setValue("#condicion_cotizacion", draft.condicion_cotizacion);
-    sincronizarCondicionCotizacionPreset();
+    setValue("#condicion_cotizacion", formatearCondicionesCotizacionParaTextarea(draft.condicion_cotizacion));
     setValue("#observacion_cliente", draft.observacion_cliente);
     setValue("#bonificacion_cierre_monto", draft.bonificacion_cierre_monto);
     setValue("#estado_cotizacion", draft.estado);
@@ -1423,7 +1495,7 @@ function actualizarIndicadorFamilia() {
 function prepararEnvio() {
     const form = document.getElementById("form-cotizador");
     const select = document.getElementById("cliente_select");
-    const rows = document.querySelectorAll("#cuerpo-tabla tr");
+    const rows = document.querySelectorAll("#cuerpo-tabla .cotizador-item-card");
     if (!form) {
         return;
     }
@@ -1542,7 +1614,8 @@ function formatoMoneda(valor) {
 
 function agregarFila(data = {}) {
     const cuerpo = document.getElementById("cuerpo-tabla");
-    const fila = document.createElement("tr");
+    const fila = document.createElement("div");
+    fila.className = "cotizador-item-card";
     itemRowCounter += 1;
     const rowId = `item_${itemRowCounter}`;
     const descripcion = data.descripcion || "";
@@ -1563,10 +1636,17 @@ function agregarFila(data = {}) {
     const imagenActualHtml = escapeHtml(imagenActual);
     const previewUrlHtml = escapeHtml(previewUrl);
     fila.innerHTML = `
-        <td class="text-center image-upload-cell">
-            <input type="hidden" name="row_id[]" value="${rowId}">
-            <input type="hidden" name="item_id[]" value="${escapeHtml(data.item_id || "")}">
-            <input type="hidden" name="imagen_actual[]" value="${imagenActualHtml}">
+        <input type="hidden" name="row_id[]" value="${rowId}">
+        <input type="hidden" name="item_id[]" value="${escapeHtml(data.item_id || "")}">
+        <input type="hidden" name="imagen_actual[]" value="${imagenActualHtml}">
+        <div class="cotizador-item-head">
+            <span class="cotizador-item-index">Item ${itemRowCounter}</span>
+            <button type="button" class="btn item-delete-btn" onclick="quitarFila(this);" title="Eliminar item">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+        <div class="cotizador-item-layout">
+            <div class="text-center image-upload-cell">
             <input type="file" name="foto_${rowId}" id="foto_${rowId}" class="image-upload-input" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif" onchange="previsualizarFoto(this)">
             <label class="image-upload-trigger ${hasImageClass}" for="foto_${rowId}" title="Cargar imagen del producto">
                 <img src="${previewUrlHtml}" alt="Vista previa" class="image-upload-preview" data-existing-src="${previewUrlHtml}">
@@ -1576,30 +1656,68 @@ function agregarFila(data = {}) {
             <div class="image-upload-actions mt-1">
                 <button type="button" class="btn btn-link btn-sm p-0 text-danger d-none" onclick="quitarFoto(this)">Deshacer</button>
             </div>
-        </td>
-        <td><input type="text" name="desc[]" class="form-control" placeholder="Producto o servicio..." value="${descripcionHtml}" required></td>
-        <td><textarea name="detalle[]" class="form-control" rows="2" placeholder="Descripcion adicional del item...">${detalleHtml}</textarea></td>
-        <td><input type="number" name="cant[]" class="form-control text-center" value="${cantidad}" min="1" step="1" inputmode="numeric" oninput="validarCantidadEntera(this); calcularTodo()"></td>
-        <td><input type="number" name="costo[]" class="form-control text-end" value="${costoUnitario}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()"></td>
-        <td><input type="number" name="iva_compra[]" class="form-control text-end" value="${ivaCompra}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()" title="IVA del proveedor. Se usa como credito fiscal interno."></td>
-        <td><input type="number" name="extra[]" class="form-control text-end" value="${costoExtra}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()"></td>
-        <td><input type="number" name="margen[]" class="form-control text-end" value="${margen}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()"></td>
-        <td><input type="number" name="descuento[]" class="form-control text-end" value="${descuento}" min="0" max="100" step="0.01" oninput="validarPorcentaje(this); calcularTodo()"></td>
-        <td><input type="number" name="carga_fiscal[]" class="form-control text-end text-danger fw-bold" value="${cargaFiscal}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()"></td>
-        <td>
-            <select name="iva_item[]" class="form-select form-select-sm select-iva" onchange="calcularTodo()">
-                <option value="21" ${Number(ivaItem) === 21 ? "selected" : ""}>21%</option>
-                <option value="10.5" ${Number(ivaItem) === 10.5 ? "selected" : ""}>10.5%</option>
-                <option value="0" ${Number(ivaItem) === 0 ? "selected" : ""}>0%</option>
-            </select>
-        </td>
-        <td class="text-center"><span class="badge py-2 px-3 ganancia-badge">$ 0.00</span></td>
-        <td class="text-center px-2"><span class="badge py-2 px-3 text-bg-dark venta-total-badge">$ 0.00</span></td>
-        <td class="text-center">
-            <button type="button" class="btn item-delete-btn" onclick="quitarFila(this);" title="Eliminar item">
-                <i class="bi bi-trash"></i>
-            </button>
-        </td>
+            </div>
+            <div class="cotizador-item-content">
+                <div class="cotizador-item-identity">
+                    <div class="cotizador-field">
+                        <label class="cotizador-field-label">Producto / Servicio</label>
+                        <input type="text" name="desc[]" class="form-control cotizador-input" placeholder="Producto o servicio..." value="${descripcionHtml}" required>
+                    </div>
+                    <div class="cotizador-field">
+                        <label class="cotizador-field-label">Descripcion</label>
+                        <textarea name="detalle[]" class="form-control cotizador-textarea" rows="2" placeholder="Descripcion adicional del item...">${detalleHtml}</textarea>
+                    </div>
+                </div>
+                <div class="cotizador-item-metrics">
+                    <div class="cotizador-field">
+                        <label class="cotizador-field-label">Cant.</label>
+                        <input type="number" name="cant[]" class="form-control cotizador-input cotizador-number-no-spin text-center" value="${cantidad}" min="1" step="1" inputmode="numeric" oninput="validarCantidadEntera(this); calcularTodo()">
+                    </div>
+                    <div class="cotizador-field">
+                        <label class="cotizador-field-label">Costo Neto U.</label>
+                        <input type="number" name="costo[]" class="form-control cotizador-input cotizador-number-no-spin text-end" value="${costoUnitario}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()">
+                    </div>
+                    <div class="cotizador-field">
+                        <label class="cotizador-field-label">IVA Compra %</label>
+                        <input type="number" name="iva_compra[]" class="form-control cotizador-input cotizador-number-no-spin text-end" value="${ivaCompra}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()" title="IVA del proveedor. Se usa como credito fiscal interno.">
+                    </div>
+                    <div class="cotizador-field">
+                        <label class="cotizador-field-label">Otros %</label>
+                        <input type="number" name="extra[]" class="form-control cotizador-input cotizador-number-no-spin text-end" value="${costoExtra}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()">
+                    </div>
+                    <div class="cotizador-field">
+                        <label class="cotizador-field-label">Margen %</label>
+                        <input type="number" name="margen[]" class="form-control cotizador-input cotizador-number-no-spin text-end" value="${margen}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()">
+                    </div>
+                    <div class="cotizador-field">
+                        <label class="cotizador-field-label">Desc. %</label>
+                        <input type="number" name="descuento[]" class="form-control cotizador-input cotizador-number-no-spin text-end" value="${descuento}" min="0" max="100" step="0.01" oninput="validarPorcentaje(this); calcularTodo()">
+                    </div>
+                    <div class="cotizador-field">
+                        <label class="cotizador-field-label text-danger">Carga F. %</label>
+                        <input type="number" name="carga_fiscal[]" class="form-control cotizador-input cotizador-number-no-spin text-end text-danger fw-bold" value="${cargaFiscal}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()">
+                    </div>
+                    <div class="cotizador-field">
+                        <label class="cotizador-field-label">IVA</label>
+                        <select name="iva_item[]" class="form-select cotizador-select select-iva" onchange="calcularTodo()">
+                            <option value="21" ${Number(ivaItem) === 21 ? "selected" : ""}>21%</option>
+                            <option value="10.5" ${Number(ivaItem) === 10.5 ? "selected" : ""}>10.5%</option>
+                            <option value="0" ${Number(ivaItem) === 0 ? "selected" : ""}>0%</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="cotizador-item-summary">
+                    <div class="cotizador-item-pill ganancia">
+                        <span class="cotizador-item-pill-label">Ganancia Neta U.</span>
+                        <span class="cotizador-item-pill-value ganancia-badge">$ 0.00</span>
+                    </div>
+                    <div class="cotizador-item-pill venta">
+                        <span class="cotizador-item-pill-label">Venta total</span>
+                        <span class="cotizador-item-pill-value venta-total-badge">$ 0.00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
     `;
     if (!imagenActual) {
         fila.querySelector(".image-upload-preview").src = placeholderProductUrl;
@@ -1646,7 +1764,7 @@ function validarImagenesAntesDeEnviar() {
 }
 
 function previsualizarFoto(input) {
-    const fila = input.closest("tr");
+    const fila = input.closest(".cotizador-item-card");
     if (!fila) {
         return;
     }
@@ -1718,7 +1836,7 @@ function previsualizarFoto(input) {
 }
 
 function quitarFoto(button) {
-    const fila = button.closest("tr");
+    const fila = button.closest(".cotizador-item-card");
     if (!fila) {
         return;
     }
@@ -1730,7 +1848,7 @@ function quitarFoto(button) {
 }
 
 function quitarFila(button) {
-    const fila = button.closest("tr");
+    const fila = button.closest(".cotizador-item-card");
     if (!fila) {
         return;
     }
@@ -1855,7 +1973,7 @@ function calcularTodo() {
     let ivaTotalAcumulado = 0;
     let totalCargaFiscalAcumulado = 0;
 
-    const rows = document.querySelectorAll("#cuerpo-tabla tr");
+    const rows = document.querySelectorAll("#cuerpo-tabla .cotizador-item-card");
     rows.forEach((row) => {
         const cant = Math.max(1, parseInt(row.querySelector('[name="cant[]"]')?.value, 10) || 0);
         const costoUnitario = Math.max(0, parseNumero(row.querySelector('[name="costo[]"]')?.value));
@@ -1970,7 +2088,6 @@ window.onload = function () {
     actualizarEstiloEstadoForm(document.getElementById("estado_cotizacion"));
     toggleSeguimientoFields();
     actualizarIndicadorFamilia();
-    sincronizarCondicionCotizacionPreset();
     const borradorRestaurado = inicializarBorradorCotizacion();
     if (!borradorRestaurado) {
         draftSuppressSave = true;

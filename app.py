@@ -197,6 +197,14 @@ class Cotizacion(db.Model):
     total_final = db.Column(db.Float)
     items = db.relationship("ItemCotizacion", backref="parent", cascade="all, delete-orphan")
 
+    @property
+    def condiciones_cotizacion_lista(self):
+        return normalizar_condiciones_cotizacion(self.condicion_cotizacion)
+
+    @property
+    def condicion_cotizacion_texto(self):
+        return formatear_condiciones_cotizacion(self.condicion_cotizacion)
+
 
 class ItemCotizacion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -469,6 +477,65 @@ def normalizar_tipo_cambio_valor(valor):
 
 def obtener_condicion_cotizacion_default():
     return CONDICIONES_COTIZACION[0]
+
+
+def obtener_condiciones_cotizacion_default():
+    return list(CONDICIONES_COTIZACION)
+
+
+def normalizar_condicion_cotizacion_item(valor):
+    texto = unescape(str(valor or "")).strip()
+    if not texto:
+        return ""
+    texto = re.sub(r"^[\-\u2022]+\s*", "", texto)
+    return re.sub(r"\s+", " ", texto).strip()
+
+
+def normalizar_condiciones_cotizacion(valor):
+    if valor is None:
+        return []
+
+    candidatos = []
+    if isinstance(valor, (list, tuple, set)):
+        candidatos = list(valor)
+    elif isinstance(valor, str):
+        texto = valor.strip()
+        if not texto:
+            return []
+        if texto.startswith("["):
+            try:
+                data = json.loads(texto)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                data = None
+            if isinstance(data, list):
+                candidatos = data
+            else:
+                candidatos = texto.splitlines() if "\n" in texto else [texto]
+        else:
+            candidatos = texto.splitlines() if "\n" in texto else [texto]
+    else:
+        candidatos = [valor]
+
+    condiciones = []
+    condiciones_vistas = set()
+    for candidato in candidatos:
+        texto = normalizar_condicion_cotizacion_item(candidato)
+        if not texto:
+            continue
+        clave = texto.casefold()
+        if clave in condiciones_vistas:
+            continue
+        condiciones_vistas.add(clave)
+        condiciones.append(texto)
+    return condiciones
+
+
+def serializar_condiciones_cotizacion(valor):
+    return json.dumps(normalizar_condiciones_cotizacion(valor), ensure_ascii=False)
+
+
+def formatear_condiciones_cotizacion(valor, separador="\n"):
+    return separador.join(normalizar_condiciones_cotizacion(valor))
 
 
 def parsear_decimal(valor, default=0.0):
@@ -1417,6 +1484,11 @@ def construir_items_precargados(cotizacion):
 def renderizar_cotizador(cotizacion=None):
     clientes = Cliente.query.order_by(Cliente.nombre).all()
     tipo_cambio_ctx = construir_contexto_tipo_cambio_cotizador(cotizacion)
+    condiciones_iniciales = (
+        cotizacion.condiciones_cotizacion_lista
+        if cotizacion
+        else obtener_condiciones_cotizacion_default()
+    )
     return render_template(
         "cotizador.html",
         clientes=clientes,
@@ -1433,8 +1505,7 @@ def renderizar_cotizador(cotizacion=None):
         tipo_cambio_estado_texto=tipo_cambio_ctx["estado_texto"],
         tipo_cambio_estado_error=tipo_cambio_ctx["estado_error"],
         formas_pago_cotizacion=FORMAS_PAGO_COTIZACION,
-        condiciones_cotizacion=CONDICIONES_COTIZACION,
-        condicion_cotizacion_default=obtener_condicion_cotizacion_default(),
+        condicion_cotizacion_texto_inicial=formatear_condiciones_cotizacion(condiciones_iniciales),
     )
 
 
@@ -1495,7 +1566,7 @@ def generar_excel_cotizacion(cotizacion):
         ("Tipo de cambio usado", cotizacion.tipo_cambio_usado if cotizacion.tipo_cambio_usado is not None else ""),
         ("Condicion IVA", cotizacion.condicion_iva or ""),
         ("Forma de pago", cotizacion.forma_pago or ""),
-        ("Condicion de la cotizacion", cotizacion.condicion_cotizacion or ""),
+        ("Condicion de la cotizacion", formatear_condiciones_cotizacion(cotizacion.condicion_cotizacion)),
         ("Observacion al cliente", cotizacion.observacion_cliente or ""),
     ]
     for label, value in datos_generales:
@@ -1952,7 +2023,12 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     if cliente_sel and cliente_sel.condicion_iva in ("Exento", "Consumidor Final", "Responsable Inscrito"):
         condicion_iva = cliente_sel.condicion_iva
     forma_pago = normalizar_forma_pago(request.form.get("forma_pago"))
-    condicion_cotizacion = (request.form.get("condicion_cotizacion") or "").strip() or obtener_condicion_cotizacion_default()
+    condiciones_cotizacion_raw = request.form.get("condicion_cotizacion")
+    if condiciones_cotizacion_raw is None:
+        condiciones_cotizacion = obtener_condiciones_cotizacion_default()
+    else:
+        condiciones_cotizacion = normalizar_condiciones_cotizacion(condiciones_cotizacion_raw)
+    condicion_cotizacion = serializar_condiciones_cotizacion(condiciones_cotizacion) if condiciones_cotizacion else ""
     observacion_cliente = (request.form.get("observacion_cliente") or "").strip()
     bonificacion_cierre_solicitada = max(0.0, parsear_decimal(request.form.get("bonificacion_cierre_monto") or 0))
 
@@ -2801,6 +2877,7 @@ def ver_cotizacion(id):
     return render_template(
         "cotizacion_cliente.html",
         cot=cot,
+        condiciones_cotizacion=cot.condiciones_cotizacion_lista,
         domicilio_empresa=DOMICILIO,
         mostrar_descuento=mostrar_descuento,
         desglose_iva=desglose_iva,

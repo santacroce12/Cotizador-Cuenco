@@ -1,3 +1,4 @@
+import json
 import os
 import requests
 import tempfile
@@ -184,6 +185,10 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertIn("Bonificacion de cierre", html)
         self.assertIn("Ganancia Neta (Bolsillo)", html)
         self.assertIn("inicializarAyudasCalculo", html)
+        self.assertIn("Una condicion por linea.", html)
+        self.assertIn("Las condiciones base ya vienen cargadas.", html)
+        self.assertIn("Las imagenes son ilustrativas.", html)
+        self.assertNotIn("Agregar personalizada", html)
 
     def test_formulario_cliente_tiene_guardado_con_manejo_de_errores(self):
         payload_bna = {
@@ -585,22 +590,29 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertEqual(cotizacion.condicion_iva, "Exento")
 
     def test_cotizacion_guarda_y_muestra_forma_pago_condicion_y_observacion(self):
+        condiciones = [
+            "Las imagenes son ilustrativas.",
+            "Oferta sujeta a stock.",
+            "Entrega y validez a confirmar.",
+        ]
         cotizacion_id = self._crear_cotizacion(
             forma_pago="30 dias",
-            condicion_cotizacion="Las imagenes son ilustrativas. Oferta sujeta a stock.",
+            condicion_cotizacion=json.dumps(condiciones, ensure_ascii=False),
             observacion_cliente="Solicitud de presupuesto n 4587 - Lic municipal 221304",
         )
 
         cotizacion = self._cotizacion(cotizacion_id)
         self.assertEqual(cotizacion.forma_pago, "30 dias")
-        self.assertEqual(cotizacion.condicion_cotizacion, "Las imagenes son ilustrativas. Oferta sujeta a stock.")
+        self.assertEqual(cotizacion.condiciones_cotizacion_lista, condiciones)
         self.assertEqual(cotizacion.observacion_cliente, "Solicitud de presupuesto n 4587 - Lic municipal 221304")
 
         html = self.client.get(f"/cotizacion/{cotizacion_id}").get_data(as_text=True)
         self.assertIn("Forma de pago", html)
         self.assertIn("30 dias", html)
         self.assertIn("Solicitud de presupuesto n 4587 - Lic municipal 221304", html)
-        self.assertIn("Las imagenes son ilustrativas. Oferta sujeta a stock.", html)
+        for condicion in condiciones:
+            self.assertIn(condicion, html)
+        self.assertNotIn('["Las imagenes son ilustrativas."', html)
 
         with app.app_context():
             cotizacion_db = db.session.get(Cotizacion, cotizacion_id)
@@ -610,12 +622,26 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertEqual(self._valor_por_etiqueta(ws, "Forma de pago"), "30 dias")
         self.assertEqual(
             self._valor_por_etiqueta(ws, "Condicion de la cotizacion"),
-            "Las imagenes son ilustrativas. Oferta sujeta a stock.",
+            "\n".join(condiciones),
         )
         self.assertEqual(
             self._valor_por_etiqueta(ws, "Observacion al cliente"),
             "Solicitud de presupuesto n 4587 - Lic municipal 221304",
         )
+
+    def test_condicion_cotizacion_legado_sigue_leyendose_como_unica_condicion(self):
+        cotizacion_id = self._crear_cotizacion(
+            condicion_cotizacion="Las imagenes son ilustrativas. Oferta sujeta a stock.",
+        )
+
+        cotizacion = self._cotizacion(cotizacion_id)
+        self.assertEqual(
+            cotizacion.condiciones_cotizacion_lista,
+            ["Las imagenes son ilustrativas. Oferta sujeta a stock."],
+        )
+
+        html = self.client.get(f"/cotizacion/{cotizacion_id}").get_data(as_text=True)
+        self.assertIn("Las imagenes son ilustrativas. Oferta sujeta a stock.", html)
 
     def test_pdf_toma_nombre_visible_del_usuario_logueado(self):
         cotizacion_id = self._crear_cotizacion()

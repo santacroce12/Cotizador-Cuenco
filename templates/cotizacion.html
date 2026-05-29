@@ -205,6 +205,17 @@
                         </div>
                     </div>
                 </div>
+
+                {% if cotizacion.condiciones_cotizacion_lista %}
+                <section class="mt-4">
+                    <h6 class="text-dark mb-2">Condiciones comerciales</h6>
+                    <ul class="mb-0">
+                        {% for condicion in cotizacion.condiciones_cotizacion_lista %}
+                        <li>{{ condicion }}</li>
+                        {% endfor %}
+                    </ul>
+                </section>
+                {% endif %}
             </div>
         </section>
     </main>

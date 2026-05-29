@@ -1,0 +1,314 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "Cuenco Tech Logo" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img "Cuenco Tech Logo" [ref=e5]
+      - generic [ref=e6]:
+        - list [ref=e7]:
+          - listitem [ref=e8]:
+            - link " Nuevo Presupuesto" [ref=e9] [cursor=pointer]:
+              - /url: /
+              - generic [ref=e10]: 
+              - text: Nuevo Presupuesto
+          - listitem [ref=e11]:
+            - link " Historial" [ref=e12] [cursor=pointer]:
+              - /url: /historial
+              - generic [ref=e13]: 
+              - text: Historial
+          - listitem [ref=e14]:
+            - link " Auditoría" [ref=e15] [cursor=pointer]:
+              - /url: /auditoria
+              - generic [ref=e16]: 
+              - text: Auditoría
+          - listitem [ref=e17]:
+            - link " Dashboard" [ref=e18] [cursor=pointer]:
+              - /url: /dashboard
+              - generic [ref=e19]: 
+              - text: Dashboard
+        - generic [ref=e20]:
+          - link " Familias" [ref=e21] [cursor=pointer]:
+            - /url: /familias
+            - generic [ref=e22]: 
+            - text: Familias
+          - link " Usuarios" [ref=e23] [cursor=pointer]:
+            - /url: /usuarios
+            - generic [ref=e24]: 
+            - text: Usuarios
+          - generic [ref=e25]: Admin
+          - generic [ref=e26]: Luca
+          - link " Salir" [ref=e27] [cursor=pointer]:
+            - /url: /logout
+            - generic [ref=e28]: 
+            - text: Salir
+  - generic [ref=e29]:
+    - generic [ref=e30]:
+      - heading " Nuevo Presupuesto" [level=2] [ref=e32]:
+        - generic [ref=e33]: 
+        - text: Nuevo Presupuesto
+      - alert [ref=e34]:
+        - generic [ref=e35]:
+          - generic [ref=e36]:
+            - strong [ref=e37]: Borrador recuperado.
+            - text: Se restauraron datos guardados el 28/5/2026, 08:27:20.
+            - generic [ref=e38]: Por seguridad del navegador, las imagenes nuevas seleccionadas no se pueden recuperar automaticamente.
+          - button "Descartar borrador" [ref=e39] [cursor=pointer]
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - heading " Informacion del Cliente" [level=6] [ref=e43]:
+            - generic [ref=e44]: 
+            - text: Informacion del Cliente
+          - generic [ref=e46]:
+            - generic [ref=e47]:
+              - generic [ref=e48]: Seleccionar Cliente
+              - generic [ref=e49]:
+                - combobox [ref=e50]:
+                  - option "Buscar por nombre o CUIT..." [selected]
+                  - option "1"
+                  - option "Cliente Tom Select (30-12345678-9)"
+                  - option "Luca (2042124123)"
+                  - option "Municipalidad Lujan (2044835533)"
+                - generic [ref=e52] [cursor=pointer]:
+                  - generic [ref=e53]: Buscar por nombre o CUIT...
+                  - combobox "Buscar por nombre o CUIT..." [ref=e54]
+                - button "" [ref=e55] [cursor=pointer]:
+                  - generic [ref=e56]: 
+                - button "" [ref=e57] [cursor=pointer]:
+                  - generic [ref=e58]: 
+            - generic [ref=e59]:
+              - generic [ref=e60]: Condicion IVA (Auto)
+              - textbox "Detectado al elegir cliente" [ref=e61]
+        - generic [ref=e62]:
+          - generic [ref=e63]:
+            - generic [ref=e64]: Moneda de la cotizacion
+            - combobox [ref=e65]:
+              - option "Dolares (USD)" [selected]
+              - option "Pesos (ARS)"
+          - generic [ref=e66]:
+            - generic [ref=e67]: Tipo de Cambio Oficial USD/ARS ($)
+            - generic [ref=e68]:
+              - spinbutton [ref=e69]: "1430"
+              - button "" [ref=e70] [cursor=pointer]:
+                - generic [ref=e71]: 
+            - generic [ref=e72]: BNA billete vendedor - 28/5/2026 17:00
+          - generic [ref=e73]:
+            - generic [ref=e74]: Condicion IVA
+            - combobox [ref=e75]:
+              - option "Responsable Inscrito" [selected]
+              - option "Consumidor Final"
+              - option "Exento"
+          - generic [ref=e76]:
+            - generic [ref=e77]: Estado
+            - generic [ref=e79]: En progreso
+        - generic [ref=e80]:
+          - heading " Seguimiento por Mail" [level=6] [ref=e82]:
+            - generic [ref=e83]: 
+            - text: Seguimiento por Mail
+          - generic [ref=e84]:
+            - generic [ref=e85]:
+              - generic [ref=e87]:
+                - switch "Activar recordatorio" [ref=e88]
+                - generic [ref=e89]: Activar recordatorio
+              - generic [ref=e90]:
+                - generic [ref=e91]: Enviar a
+                - textbox [ref=e92]: cotizador@cuencotech.com
+              - generic [ref=e93]:
+                - generic [ref=e94]: Cada (días)
+                - spinbutton [ref=e95]: "7"
+              - generic [ref=e96]:
+                - generic [ref=e97]: Próximo aviso
+                - textbox [ref=e98]: Pendiente
+            - generic [ref=e99]:
+              - generic [ref=e100]:
+                - generic [ref=e101]: Último envío
+                - textbox [ref=e102]: Sin enviar
+              - generic [ref=e104]:
+                - text: El sistema enviará un mail preguntando “¿Hay alguna novedad con esta cotización?” y agregará un link directo para verla y otro para editarla/cambiar el estado. Solo se envía mientras la cotización siga en
+                - strong [ref=e105]: En progreso
+                - text: .
+        - generic [ref=e106]:
+          - heading " Condiciones de la Cotizacion" [level=6] [ref=e108]:
+            - generic [ref=e109]: 
+            - text: Condiciones de la Cotizacion
+          - generic [ref=e111]:
+            - generic [ref=e112]:
+              - generic [ref=e113]: Forma de pago
+              - combobox [ref=e114]:
+                - option "Contado"
+                - option "15 dias fecha fact."
+                - option "30 dias"
+                - option "60 dias"
+                - option "A convenir" [selected]
+            - generic [ref=e115]:
+              - generic [ref=e116]: Condicion frecuente
+              - combobox [ref=e117]:
+                - option "Las imagenes son ilustrativas." [selected]
+                - option "Oferta sujeta a stock."
+                - option "Precios sujetos a variacion sin previo aviso."
+                - option "Entrega y validez a confirmar."
+                - option "Personalizada"
+            - generic [ref=e118]:
+              - generic [ref=e119]: Detalle de condicion
+              - textbox [ref=e120]: Las imagenes son ilustrativas.
+            - generic [ref=e121]:
+              - generic [ref=e122]: Observacion al cliente
+              - 'textbox "Ej: Solicitud de presupuesto n 4587 - Lic municipal 221304." [ref=e123]'
+        - generic [ref=e124]:
+          - generic [ref=e125]:
+            - text: Criterio interno de calculo
+            - button "?" [ref=e126] [cursor=pointer]
+          - generic [ref=e127]:
+            - generic [ref=e128]:
+              - strong [ref=e129]: "Base venta:"
+              - text: Costo neto + Otros. El IVA compra queda como credito.
+            - generic [ref=e130]:
+              - strong [ref=e131]: "Venta neta:"
+              - text: Base venta x (1 + Margen %) x (1 - Desc. %).
+            - generic [ref=e132]:
+              - strong [ref=e133]: "Total cliente:"
+              - text: Venta neta + IVA venta.
+            - generic [ref=e134]:
+              - strong [ref=e135]: "Ganancia neta:"
+              - text: Venta neta - Costo neto real - Carga fiscal.
+        - table [ref=e138]:
+          - rowgroup [ref=e154]:
+            - row "Foto Producto / Servicio Descripcion Cant. ? Costo Neto U. ? IVA Compra % ? Otros % ? Margen % ? Desc. % ? Carga F. % ? IVA ? Ganancia Neta U. ? Venta total ?" [ref=e155]:
+              - columnheader "Foto" [ref=e156]
+              - columnheader "Producto / Servicio" [ref=e157]
+              - columnheader "Descripcion" [ref=e158]
+              - columnheader "Cant. ?" [ref=e159]:
+                - generic [ref=e160]:
+                  - text: Cant.
+                  - button "?" [ref=e161] [cursor=pointer]
+              - columnheader "Costo Neto U. ?" [ref=e162]:
+                - generic [ref=e163]:
+                  - text: Costo Neto U.
+                  - button "?" [ref=e164] [cursor=pointer]
+              - columnheader "IVA Compra % ?" [ref=e165]:
+                - generic [ref=e166]:
+                  - text: IVA Compra %
+                  - button "?" [ref=e167] [cursor=pointer]
+              - columnheader "Otros % ?" [ref=e168]:
+                - generic [ref=e169]:
+                  - text: Otros %
+                  - button "?" [ref=e170] [cursor=pointer]
+              - columnheader "Margen % ?" [ref=e171]:
+                - generic [ref=e172]:
+                  - text: Margen %
+                  - button "?" [ref=e173] [cursor=pointer]
+              - columnheader "Desc. % ?" [ref=e174]:
+                - generic [ref=e175]:
+                  - text: Desc. %
+                  - button "?" [ref=e176] [cursor=pointer]
+              - columnheader "Carga F. % ?" [ref=e177]:
+                - generic [ref=e178]:
+                  - text: Carga F. %
+                  - button "?" [ref=e179] [cursor=pointer]
+              - columnheader "IVA ?" [ref=e180]:
+                - generic [ref=e181]:
+                  - text: IVA
+                  - button "?" [ref=e182] [cursor=pointer]
+              - columnheader "Ganancia Neta U. ?" [ref=e183]:
+                - generic [ref=e184]:
+                  - text: Ganancia Neta U.
+                  - button "?" [ref=e185] [cursor=pointer]
+              - columnheader "Venta total ?" [ref=e186]:
+                - generic [ref=e187]:
+                  - text: Venta total
+                  - button "?" [ref=e188] [cursor=pointer]
+              - columnheader [ref=e189]
+          - rowgroup [ref=e190]:
+            - row " Agregar foto 1 0 21 5 75 0 0 21% $ 0,00 $ 0,00 " [ref=e191]:
+              - cell " Agregar foto" [ref=e192]:
+                - generic "Cargar imagen del producto" [ref=e193] [cursor=pointer]:
+                  - generic [ref=e194]: 
+                  - generic [ref=e195]: Agregar foto
+              - cell [ref=e197]:
+                - textbox "Producto o servicio..." [ref=e198]
+              - cell [ref=e199]:
+                - textbox "Descripcion adicional del item..." [ref=e200]
+              - cell "1" [ref=e201]:
+                - spinbutton [ref=e202]: "1"
+              - cell "0" [ref=e203]:
+                - spinbutton [ref=e204]: "0"
+              - cell "21" [ref=e205]:
+                - spinbutton "IVA del proveedor. Se usa como credito fiscal interno." [ref=e206]: "21"
+              - cell "5" [ref=e207]:
+                - spinbutton [ref=e208]: "5"
+              - cell "75" [ref=e209]:
+                - spinbutton [ref=e210]: "75"
+              - cell "0" [ref=e211]:
+                - spinbutton [ref=e212]: "0"
+              - cell "0" [ref=e213]:
+                - spinbutton [ref=e214]: "0"
+              - cell "21%" [ref=e215]:
+                - combobox [ref=e216]:
+                  - option "21%" [selected]
+                  - option "10.5%"
+                  - option "0%"
+              - cell "$ 0,00" [ref=e217]:
+                - generic [ref=e218]: $ 0,00
+              - cell "$ 0,00" [ref=e219]:
+                - generic [ref=e220]: $ 0,00
+              - cell "" [ref=e221]:
+                - button "" [ref=e222] [cursor=pointer]:
+                  - generic [ref=e223]: 
+        - button "+ Item" [ref=e224] [cursor=pointer]
+        - generic [ref=e227]:
+          - heading " Analisis Financiero ?" [level=5] [ref=e228]:
+            - generic [ref=e229]: 
+            - text: Analisis Financiero
+            - button "?" [ref=e230] [cursor=pointer]
+          - generic [ref=e231]:
+            - generic [ref=e232]:
+              - text: "Costo neto real (Base + Otros):"
+              - button "?" [ref=e233] [cursor=pointer]
+            - generic [ref=e234]: $ 0,00
+          - generic [ref=e235]:
+            - generic [ref=e236]:
+              - text: "IVA compra credito:"
+              - button "?" [ref=e237] [cursor=pointer]
+            - generic [ref=e238]: $ 0,00
+          - generic [ref=e239]:
+            - generic [ref=e240]:
+              - text: "IVA a pagar estimado:"
+              - button "?" [ref=e241] [cursor=pointer]
+            - generic [ref=e242]: $ 0,00
+          - generic [ref=e243]:
+            - generic [ref=e244]:
+              - text: "Descuento total:"
+              - button "?" [ref=e245] [cursor=pointer]
+            - generic [ref=e246]: "-$ 0,00"
+          - generic [ref=e247]:
+            - generic [ref=e248]:
+              - text: "Subtotal Venta Neto:"
+              - button "?" [ref=e249] [cursor=pointer]
+            - generic [ref=e250]: $ 0,00
+          - generic [ref=e251]:
+            - generic [ref=e252]:
+              - generic [ref=e253]: 
+              - text: "Carga Fiscal Retenida:"
+              - button "?" [ref=e254] [cursor=pointer]
+            - generic [ref=e255]: "-$ 0,00"
+          - generic [ref=e256]:
+            - generic [ref=e257]:
+              - text: "Ganancia Neta (Bolsillo):"
+              - button "?" [ref=e258] [cursor=pointer]
+            - generic [ref=e259]: $ 0,00
+          - generic [ref=e260]:
+            - generic [ref=e261]:
+              - text: "IVA TOTAL:"
+              - button "?" [ref=e262] [cursor=pointer]
+            - generic [ref=e263]: $ 0,00
+          - generic [ref=e264]:
+            - generic [ref=e265]: "TOTAL A COBRAR (USD):"
+            - generic [ref=e266]: $ 0,00
+          - generic [ref=e267]:
+            - generic [ref=e268]: "Equivalente en ARS:"
+            - generic [ref=e269]: $ 0,00
+        - generic [ref=e270]:
+          - generic [ref=e271]:
+            - generic [ref=e272]: Familia
+            - generic [ref=e273]: Sin definir
+          - button "Generar Presupuesto" [ref=e274] [cursor=pointer]
+    - text:  
