@@ -91,6 +91,7 @@ class CotizadorCalculosTest(unittest.TestCase):
             "tipo_cambio": "1450",
             "condicion_iva": "Exento",
             "estado": "En progreso",
+            "bonificacion_cierre_monto": "0",
             "seguimiento_email": "",
             "seguimiento_cada_dias": "7",
             "row_id[]": ["row-1"],
@@ -124,6 +125,12 @@ class CotizadorCalculosTest(unittest.TestCase):
             if cotizacion:
                 list(cotizacion.items)
             return cotizacion
+
+    def _set_fecha_cotizacion(self, cotizacion_id, fecha):
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            cotizacion.fecha = fecha
+            db.session.commit()
 
     def _valor_por_etiqueta(self, ws, etiqueta):
         for row in ws.iter_rows():
@@ -174,6 +181,7 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertIn('data-bs-toggle="tooltip"', html)
         self.assertIn("Costo Neto U.", html)
         self.assertIn("IVA Compra %", html)
+        self.assertIn("Bonificacion de cierre", html)
         self.assertIn("Ganancia Neta (Bolsillo)", html)
         self.assertIn("inicializarAyudasCalculo", html)
 
@@ -217,6 +225,7 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertIn("function inicializarBorradorCotizacion()", html)
         self.assertIn("function aplicarBorradorCotizacion(draft)", html)
         self.assertIn("function marcarBorradorComoPendienteDeEnvio()", html)
+        self.assertIn("bonificacion_cierre_monto", html)
         self.assertIn("localStorage.setItem(cotizadorDraftKey", html)
         self.assertIn("validarImagenesAntesDeEnviar", html)
         self.assertIn("limpiarBorradorCotizadorGuardado", html)
@@ -380,8 +389,99 @@ class CotizadorCalculosTest(unittest.TestCase):
         response = self.client.get(f"/cotizacion/{cotizacion_id}/editar")
         self.assertEqual(response.status_code, 200)
 
+    def test_historial_permite_clonar_y_clonado_duplica_cotizacion(self):
+        cotizacion_id = self._crear_cotizacion(
+            condicion_iva="Responsable Inscrito",
+            bonificacion_cierre_monto="50",
+            **{"descuento[]": ["10"]},
+        )
+
+        with app.app_context():
+            cotizacion_original = db.session.get(Cotizacion, cotizacion_id)
+            cotizacion_original.estado = "Aceptada"
+            cotizacion_original.seguimiento_activo = True
+            cotizacion_original.seguimiento_email = "seguimiento@cuencotech.com"
+            cotizacion_original.seguimiento_cada_dias = 5
+            cotizacion_original.seguimiento_proximo_envio = cotizador_app.datetime.utcnow()
+            cotizacion_original.seguimiento_ultimo_envio = cotizador_app.datetime.utcnow()
+            item_original = cotizacion_original.items[0]
+            imagen_relativa = "uploads/productos/test-clone-source.jpg"
+            (Path(app.static_folder) / "uploads" / "productos").mkdir(parents=True, exist_ok=True)
+            (Path(app.static_folder) / imagen_relativa).write_bytes(b"imagen-clon")
+            item_original.imagen_url = imagen_relativa
+            db.session.commit()
+
+        response_historial = self.client.get("/historial")
+        html_historial = response_historial.get_data(as_text=True)
+        self.assertEqual(response_historial.status_code, 200)
+        self.assertIn("function clonarCotizacion", html_historial)
+        self.assertIn("bi-copy", html_historial)
+        self.assertIn("/cotizacion/clonar/", html_historial)
+
+        response = self.client.post(f"/cotizacion/clonar/{cotizacion_id}")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["ok"])
+        self.assertIn("/editar", data["redirect_url"])
+
+        with app.app_context():
+            cotizacion_original = db.session.get(Cotizacion, cotizacion_id)
+            cotizacion_clonada = db.session.get(Cotizacion, data["nueva_id"])
+            self.assertIsNotNone(cotizacion_clonada)
+            self.assertNotEqual(cotizacion_clonada.id, cotizacion_original.id)
+            self.assertNotEqual(cotizacion_clonada.numero_cotizacion, cotizacion_original.numero_cotizacion)
+            self.assertEqual(cotizacion_clonada.estado, "En progreso")
+            self.assertGreaterEqual(cotizacion_clonada.fecha, cotizacion_original.fecha)
+            self.assertEqual(cotizacion_clonada.cliente, cotizacion_original.cliente)
+            self.assertEqual(cotizacion_clonada.cliente_id, cotizacion_original.cliente_id)
+            self.assertEqual(cotizacion_clonada.familia, cotizacion_original.familia)
+            self.assertEqual(cotizacion_clonada.condicion_iva, cotizacion_original.condicion_iva)
+            self.assertEqual(cotizacion_clonada.forma_pago, cotizacion_original.forma_pago)
+            self.assertEqual(cotizacion_clonada.condicion_cotizacion, cotizacion_original.condicion_cotizacion)
+            self.assertEqual(cotizacion_clonada.observacion_cliente, cotizacion_original.observacion_cliente)
+            self.assertAlmostEqual(cotizacion_clonada.total_neto, cotizacion_original.total_neto, places=2)
+            self.assertAlmostEqual(cotizacion_clonada.total_iva, cotizacion_original.total_iva, places=2)
+            self.assertAlmostEqual(cotizacion_clonada.total_final, cotizacion_original.total_final, places=2)
+            self.assertAlmostEqual(cotizacion_clonada.total_carga_fiscal, cotizacion_original.total_carga_fiscal, places=2)
+            self.assertAlmostEqual(
+                cotizacion_clonada.bonificacion_cierre_monto,
+                cotizacion_original.bonificacion_cierre_monto,
+                places=2,
+            )
+            self.assertFalse(cotizacion_clonada.seguimiento_activo)
+            self.assertIsNone(cotizacion_clonada.seguimiento_proximo_envio)
+            self.assertIsNone(cotizacion_clonada.seguimiento_ultimo_envio)
+            self.assertEqual(len(cotizacion_clonada.items), len(cotizacion_original.items))
+
+            item_clonado = cotizacion_clonada.items[0]
+            item_original = cotizacion_original.items[0]
+            self.assertEqual(item_clonado.descripcion, item_original.descripcion)
+            self.assertEqual(item_clonado.detalle, item_original.detalle)
+            self.assertEqual(item_clonado.cantidad, item_original.cantidad)
+            self.assertAlmostEqual(item_clonado.costo_unitario, item_original.costo_unitario, places=2)
+            self.assertAlmostEqual(item_clonado.iva_compra_pct, item_original.iva_compra_pct, places=2)
+            self.assertAlmostEqual(item_clonado.costo_extra, item_original.costo_extra, places=2)
+            self.assertAlmostEqual(item_clonado.margen, item_original.margen, places=4)
+            self.assertAlmostEqual(item_clonado.descuento_pct, item_original.descuento_pct, places=2)
+            self.assertAlmostEqual(item_clonado.carga_fiscal, item_original.carga_fiscal, places=2)
+            self.assertAlmostEqual(item_clonado.iva_item, item_original.iva_item, places=2)
+            self.assertAlmostEqual(item_clonado.precio_venta, item_original.precio_venta, places=2)
+            self.assertAlmostEqual(item_clonado.subtotal, item_original.subtotal, places=2)
+            self.assertNotEqual(item_clonado.imagen_url, item_original.imagen_url)
+            self.assertTrue((Path(app.static_folder) / item_original.imagen_url).exists())
+            self.assertTrue((cotizador_app.UPLOADS_PRODUCTOS_DIR / Path(item_clonado.imagen_url).name).exists())
+
+    def test_clonar_cotizacion_sin_sesion_responde_json_auth_required(self):
+        cotizacion_id = self._crear_cotizacion()
+        self.client.get("/logout")
+
+        response = self.client.post(f"/cotizacion/clonar/{cotizacion_id}")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.get_json()["error"], "auth_required")
+
     def test_detalle_operativo_dashboard_filtra_por_familia_propia(self):
-        self._crear_cotizacion(
+        seguridad_id = self._crear_cotizacion(
             cliente_id="",
             cliente="Cliente Seguridad",
             cliente_razon_social="Cliente Seguridad SA",
@@ -391,13 +491,16 @@ class CotizadorCalculosTest(unittest.TestCase):
         with app.app_context():
             db.session.add(FamiliaCotizacion(nombre="DATA CENTER", activa=True))
             db.session.commit()
-        self._crear_cotizacion(
+        data_center_id = self._crear_cotizacion(
             cliente_id="",
             cliente="Cliente Data Center",
             cliente_razon_social="Cliente Data Center SA",
             cliente_cuit="30-22222222-2",
             familia="DATA CENTER",
         )
+        fecha_dentro_del_rango = cotizador_app.datetime.utcnow() - cotizador_app.timedelta(days=1)
+        self._set_fecha_cotizacion(seguridad_id, fecha_dentro_del_rango)
+        self._set_fecha_cotizacion(data_center_id, fecha_dentro_del_rango)
 
         response = self.client.get("/dashboard/detalle-operativo?periodo=365&op_familia=DATA%20CENTER")
         html = response.get_data(as_text=True)
@@ -409,7 +512,7 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertNotIn("Cliente Seguridad", html)
 
     def test_dashboard_ignora_ars_y_muestra_solo_usd(self):
-        self._crear_cotizacion(
+        cotizacion_usd_id = self._crear_cotizacion(
             cliente_id="",
             cliente="Cliente USD",
             cliente_razon_social="Cliente USD SA",
@@ -417,7 +520,7 @@ class CotizadorCalculosTest(unittest.TestCase):
             moneda="USD",
             familia="SEGURIDAD URBANA",
         )
-        self._crear_cotizacion(
+        cotizacion_ars_id = self._crear_cotizacion(
             cliente_id="",
             cliente="Cliente ARS",
             cliente_razon_social="Cliente ARS SA",
@@ -426,6 +529,9 @@ class CotizadorCalculosTest(unittest.TestCase):
             tipo_cambio="1",
             familia="SEGURIDAD URBANA",
         )
+        fecha_dentro_del_rango = cotizador_app.datetime.utcnow() - cotizador_app.timedelta(days=1)
+        self._set_fecha_cotizacion(cotizacion_usd_id, fecha_dentro_del_rango)
+        self._set_fecha_cotizacion(cotizacion_ars_id, fecha_dentro_del_rango)
 
         response = self.client.get("/dashboard?periodo=365&moneda=ARS")
         html = response.get_data(as_text=True)
@@ -593,6 +699,31 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertAlmostEqual(cotizacion_con_descuento.total_neto, 143.64, places=2)
         self.assertAlmostEqual(cotizacion_con_descuento.total_iva, 30.16, places=2)
         self.assertAlmostEqual(cotizacion_con_descuento.total_final, 173.80, places=2)
+
+    def test_bonificacion_global_descuenta_total_sin_tocar_metricas_por_item(self):
+        cotizacion_id = self._crear_cotizacion(**{"bonificacion_cierre_monto": "50"})
+
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            item = cotizacion.items[0]
+
+            self.assertAlmostEqual(item.precio_venta, 159.60, places=2)
+            self.assertAlmostEqual(cotizacion.total_neto, 159.60, places=2)
+            self.assertAlmostEqual(cotizacion.total_iva, 33.52, places=2)
+            self.assertAlmostEqual(cotizacion.total_carga_fiscal, 7.98, places=2)
+            self.assertAlmostEqual(cotizacion.bonificacion_cierre_monto, 50.0, places=2)
+            self.assertAlmostEqual(cotizacion.total_final, 143.12, places=2)
+
+            wb = load_workbook(BytesIO(generar_excel_cotizacion(cotizacion)), data_only=True)
+
+        ws = wb.active
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Bonificacion de cierre"), 50.0, places=2)
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Ganancia neta (Bolsillo)"), 1.87, places=2)
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Total a cobrar"), 143.12, places=2)
+
+        html = self.client.get(f"/cotizacion/{cotizacion_id}").get_data(as_text=True)
+        self.assertIn("Bonificacion de cierre:", html)
+        self.assertIn("- $ 50.00", html)
 
     def test_caso_2_tipo_cambio_guardado_no_se_pisa_con_bna_actual(self):
         cotizacion_id = self._crear_cotizacion()

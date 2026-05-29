@@ -466,7 +466,25 @@
                             oninput="sincronizarCondicionCotizacionPreset()"
                         >{{ condicion_actual }}</textarea>
                     </div>
-                    <div class="col-12">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Bonificacion de cierre</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input
+                                type="number"
+                                name="bonificacion_cierre_monto"
+                                id="bonificacion_cierre_monto"
+                                class="form-control"
+                                min="0"
+                                step="0.01"
+                                placeholder="0.00"
+                                value="{{ '%.2f'|format(cotizacion.bonificacion_cierre_monto or 0) if cotizacion and (cotizacion.bonificacion_cierre_monto or 0) > 0 else '' }}"
+                                oninput="validarPositivo(this); calcularTodo()"
+                            >
+                        </div>
+                        <div class="form-text">Descuento global sobre el total. No altera margenes por item.</div>
+                    </div>
+                    <div class="col-md-8">
                         <label class="form-label fw-bold small text-muted text-uppercase">Observacion al cliente</label>
                         <textarea
                             name="observacion_cliente"
@@ -552,8 +570,8 @@
             <div class="calc-help-grid">
                 <div><strong>Base venta:</strong> Costo neto + Otros. El IVA compra queda como credito.</div>
                 <div><strong>Venta neta:</strong> Base venta x (1 + Margen %) x (1 - Desc. %).</div>
-                <div><strong>Total cliente:</strong> Venta neta + IVA venta.</div>
-                <div><strong>Ganancia neta:</strong> Venta neta - Costo neto real - Carga fiscal.</div>
+                <div><strong>Total cliente:</strong> Venta neta + IVA venta - Bonificacion de cierre.</div>
+                <div><strong>Ganancia neta:</strong> Venta neta - Costo neto real - Carga fiscal - Bonificacion.</div>
             </div>
         </div>
 
@@ -647,12 +665,16 @@
                         <span class="summary-help-label text-light">Subtotal Venta Neto:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Suma de ventas netas antes del IVA de venta.">?</button></span>
                         <span id="venta-neta-interna" class="fw-bold">$ 0.00</span>
                     </div>
+                    <div class="d-flex justify-content-between mb-1 small text-warning">
+                        <span class="summary-help-label">Bonificacion de cierre:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Descuento global sobre el total final. No modifica los margenes ni descuentos por item.">?</button></span>
+                        <span id="bonificacion-cierre-interno">-$ 0.00</span>
+                    </div>
                     <div class="d-flex justify-content-between mb-1 text-danger">
                         <span class="summary-help-label"><i class="bi bi-bank me-1"></i>Carga Fiscal Retenida:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Venta neta x Carga F. %. Es una carga interna, no modifica el total que ve el cliente.">?</button></span>
                         <span id="monto-carga-fiscal">-$ 0.00</span>
                     </div>
                     <div class="d-flex justify-content-between mb-2 pt-2 border-top border-secondary text-success h5">
-                        <span class="summary-help-label">Ganancia Neta (Bolsillo):<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Subtotal venta neto - costo neto real - carga fiscal retenida.">?</button></span>
+                        <span class="summary-help-label">Ganancia Neta (Bolsillo):<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Subtotal venta neto - costo neto real - carga fiscal retenida - bonificacion de cierre.">?</button></span>
                         <span id="ganancia-neta-real" class="text-success">$ 0.00</span>
                     </div>
                     <div class="d-flex justify-content-between mb-2 mt-3 p-2 bg-secondary bg-opacity-25 rounded border border-secondary">
@@ -799,7 +821,15 @@ function borradorTieneContenido(draft) {
     if (!draft) {
         return false;
     }
-    if (draft.cliente_id || draft.familia || draft.seguimiento_activo || draft.forma_pago || draft.condicion_cotizacion || draft.observacion_cliente) {
+    if (
+        draft.cliente_id
+        || draft.familia
+        || draft.seguimiento_activo
+        || draft.forma_pago
+        || draft.condicion_cotizacion
+        || draft.observacion_cliente
+        || Number(draft.bonificacion_cierre_monto || 0) > 0
+    ) {
         return true;
     }
     return (draft.items || []).some((item) => (
@@ -862,6 +892,7 @@ function obtenerBorradorCotizacion() {
         forma_pago: obtenerValor("#forma_pago"),
         condicion_cotizacion: obtenerValor("#condicion_cotizacion"),
         observacion_cliente: obtenerValor("#observacion_cliente"),
+        bonificacion_cierre_monto: obtenerValor("#bonificacion_cierre_monto"),
         estado: estadoSelect?.value || "En progreso",
         seguimiento_activo: Boolean(seguimientoActivo?.checked),
         seguimiento_cada_dias: obtenerValor("#seguimiento_cada_dias"),
@@ -949,6 +980,7 @@ function aplicarBorradorCotizacion(draft) {
     setValue("#condicion_cotizacion", draft.condicion_cotizacion);
     sincronizarCondicionCotizacionPreset();
     setValue("#observacion_cliente", draft.observacion_cliente);
+    setValue("#bonificacion_cierre_monto", draft.bonificacion_cierre_monto);
     setValue("#estado_cotizacion", draft.estado);
     setValue("#seguimiento_cada_dias", draft.seguimiento_cada_dias);
     const seguimientoActivo = document.getElementById("seguimiento_activo");
@@ -1813,7 +1845,7 @@ async function actualizarTipoCambioOficial(force = false) {
 function calcularTodo() {
     const tcRaw = parseNumero(document.getElementById("tipo_cambio")?.value, 0);
     const tc = Number.isFinite(tcRaw) && tcRaw > 0 ? tcRaw : null;
-    const condicionIva = document.getElementById("condicion_iva")?.value || "Exento";
+    const bonificacionSolicitada = Math.max(0, parseNumero(document.getElementById("bonificacion_cierre_monto")?.value, 0));
 
     let subtotalBaseAcumulado = 0;
     let totalExtrasAcumulado = 0;
@@ -1871,14 +1903,17 @@ function calcularTodo() {
 
     const costoNetoReal = subtotalBaseAcumulado + totalExtrasAcumulado;
     const ivaAPagar = ivaTotalAcumulado - totalIvaCompraAcumulado;
-    const gananciaNetaReal = subtotalVentaNeto - costoNetoReal - totalCargaFiscalAcumulado;
-    const totalFinal = subtotalVentaNeto + ivaTotalAcumulado;
+    const totalAntesBonificacion = subtotalVentaNeto + ivaTotalAcumulado;
+    const bonificacionCierre = Math.min(bonificacionSolicitada, totalAntesBonificacion);
+    const gananciaNetaReal = subtotalVentaNeto - costoNetoReal - totalCargaFiscalAcumulado - bonificacionCierre;
+    const totalFinal = totalAntesBonificacion - bonificacionCierre;
 
     document.getElementById("costo-total-interno").innerText = formatoMoneda(costoNetoReal);
     document.getElementById("iva-compra-credito").innerText = formatoMoneda(totalIvaCompraAcumulado);
     document.getElementById("iva-a-pagar").innerText = formatoMoneda(ivaAPagar);
     document.getElementById("total-descuentos-interno").innerText = `-${formatoMoneda(totalDescuentosAcumulado)}`;
     document.getElementById("venta-neta-interna").innerText = formatoMoneda(subtotalVentaNeto);
+    document.getElementById("bonificacion-cierre-interno").innerText = `-${formatoMoneda(bonificacionCierre)}`;
     document.getElementById("monto-carga-fiscal").innerText = `-${formatoMoneda(totalCargaFiscalAcumulado)}`;
     document.getElementById("total-iva-interno").innerText = formatoMoneda(ivaTotalAcumulado);
     document.getElementById("total-vista").innerText = formatoMoneda(totalFinal);

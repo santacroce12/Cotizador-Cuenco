@@ -290,6 +290,12 @@
                 <i>* Los precios unitarios incluyen IVA.</i>
             </div>
             {% endif %}
+            {% if (cot.bonificacion_cierre_monto or 0) > 0 %}
+            <div class="d-flex justify-content-between mb-2 text-success">
+                <span class="fw-bold">Bonificacion de cierre:</span>
+                <span>- $ {{ "{:,.2f}".format(cot.bonificacion_cierre_monto) }}</span>
+            </div>
+            {% endif %}
             <hr style="border-top: 2px solid #000;">
             <div class="d-flex justify-content-between h5 fw-bold" style="color: #000;">
                 <span>TOTAL:</span>

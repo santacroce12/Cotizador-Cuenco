@@ -191,6 +191,7 @@ class Cotizacion(db.Model):
     carga_fiscal_pct = db.Column(db.Float, default=0.0)
     carga_fiscal_monto = db.Column(db.Float, default=0.0)
     total_carga_fiscal = db.Column(db.Float, default=0.0)
+    bonificacion_cierre_monto = db.Column(db.Float, default=0.0)
     total_neto = db.Column(db.Float)
     total_iva = db.Column(db.Float)
     total_final = db.Column(db.Float)
@@ -614,6 +615,7 @@ def token_required(f):
                 "actualizar_estado_cotizacion",
                 "filtrar_historial",
                 "eliminar_cotizacion",
+                "clonar_cotizacion",
             }:
                 return jsonify({"error": "auth_required"}), 401
             return redirect(url_for("login", next=request.path))
@@ -739,6 +741,9 @@ with app.app_context():
         db.session.commit()
     if "total_carga_fiscal" not in columnas_cot:
         db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN total_carga_fiscal FLOAT DEFAULT 0.0"))
+        db.session.commit()
+    if "bonificacion_cierre_monto" not in columnas_cot:
+        db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN bonificacion_cierre_monto FLOAT DEFAULT 0.0"))
         db.session.commit()
     db.session.execute(
         db.text("UPDATE cotizacion SET estado = 'En progreso' WHERE estado IS NULL OR TRIM(estado) = ''")
@@ -898,6 +903,24 @@ def eliminar_imagen_local(ruta):
     archivo = Path(app.static_folder) / str(ruta)
     if archivo.exists():
         archivo.unlink()
+
+
+def clonar_imagen_local(ruta):
+    if not ruta:
+        return None
+    if not es_ruta_imagen_local(ruta):
+        return ruta
+
+    origen = Path(app.static_folder) / str(ruta)
+    if not origen.exists() or not origen.is_file():
+        return ruta
+
+    base = secure_filename(origen.stem) or "producto"
+    extension = origen.suffix or ".jpg"
+    nombre_archivo = f"{datetime.utcnow():%Y%m%d%H%M%S%f}_clone_{base}{extension}"
+    destino = UPLOADS_PRODUCTOS_DIR / nombre_archivo
+    destino.write_bytes(origen.read_bytes())
+    return f"uploads/productos/{nombre_archivo}"
 
 
 def generar_numero_cotizacion(fecha_referencia=None):
@@ -1546,7 +1569,8 @@ def generar_excel_cotizacion(cotizacion):
     subtotal_neto = cotizacion.total_neto or 0.0
     descuento_total = round(sum((item.descuento_total or 0.0) for item in cotizacion.items), 2)
     total_carga_fiscal = cotizacion.total_carga_fiscal or 0.0
-    ganancia_neta_bolsillo = subtotal_neto - costo_neto_real - total_carga_fiscal
+    bonificacion_cierre = cotizacion.bonificacion_cierre_monto or 0.0
+    ganancia_neta_bolsillo = subtotal_neto - costo_neto_real - total_carga_fiscal - bonificacion_cierre
     iva_a_pagar = (cotizacion.total_iva or 0.0) - iva_compra_total
     resumen = [
         ("Costo neto real (Base + Otros)", round(costo_neto_real, 2)),
@@ -1554,6 +1578,7 @@ def generar_excel_cotizacion(cotizacion):
         ("IVA a pagar estimado", round(iva_a_pagar, 2)),
         ("Descuento total", descuento_total),
         ("Subtotal venta neto", subtotal_neto),
+        ("Bonificacion de cierre", round(bonificacion_cierre, 2)),
         ("Carga fiscal retenida", round(total_carga_fiscal, 2)),
         ("Ganancia neta (Bolsillo)", round(ganancia_neta_bolsillo, 2)),
         ("IVA total", cotizacion.total_iva or 0),
@@ -1929,6 +1954,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     forma_pago = normalizar_forma_pago(request.form.get("forma_pago"))
     condicion_cotizacion = (request.form.get("condicion_cotizacion") or "").strip() or obtener_condicion_cotizacion_default()
     observacion_cliente = (request.form.get("observacion_cliente") or "").strip()
+    bonificacion_cierre_solicitada = max(0.0, parsear_decimal(request.form.get("bonificacion_cierre_monto") or 0))
 
     es_edicion = cotizacion is not None
     estado_anterior = None
@@ -1949,6 +1975,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
             carga_fiscal_pct=0.0,
             carga_fiscal_monto=0.0,
             total_carga_fiscal=0.0,
+            bonificacion_cierre_monto=0.0,
             total_neto=0.0,
             total_iva=0.0,
             total_final=0.0,
@@ -2099,10 +2126,14 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         kwargs = {"id": cotizacion.id} if es_edicion else {}
         return None, redirect(url_for(destino, **kwargs))
 
+    total_bruto = neto_total + iva_total
+    bonificacion_cierre_aplicada = min(bonificacion_cierre_solicitada, total_bruto)
+
     cotizacion.total_neto = round(neto_total, 2)
     cotizacion.total_iva = round(iva_total, 2)
-    cotizacion.total_final = round(sum(item.subtotal for item in cotizacion.items), 2)
+    cotizacion.total_final = round(total_bruto - bonificacion_cierre_aplicada, 2)
     cotizacion.total_carga_fiscal = round(carga_fiscal_total_acum, 2)
+    cotizacion.bonificacion_cierre_monto = round(bonificacion_cierre_aplicada, 2)
 
     db.session.add(cotizacion)
     db.session.commit()
@@ -2795,6 +2826,101 @@ def exportar_cotizacion_xlsx(id):
         contenido,
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{nombre_base}.xlsx"'},
+    )
+
+
+@app.route("/cotizacion/clonar/<int:id>", methods=["POST"])
+@token_required
+def clonar_cotizacion(id):
+    cot_original = Cotizacion.query.get_or_404(id)
+    fecha_clon = datetime.utcnow()
+    numero_nuevo = generar_numero_cotizacion(fecha_clon)
+    imagenes_clonadas = []
+
+    nueva_cotizacion = Cotizacion(
+        numero_cotizacion=numero_nuevo,
+        estado="En progreso",
+        seguimiento_activo=False,
+        seguimiento_email=cot_original.seguimiento_email,
+        seguimiento_cada_dias=cot_original.seguimiento_cada_dias,
+        seguimiento_proximo_envio=None,
+        seguimiento_ultimo_envio=None,
+        nombre_fantasia=cot_original.nombre_fantasia or NOMBRE_FANTASIA,
+        razon_social=cot_original.razon_social or RAZON_SOCIAL,
+        cuit=cot_original.cuit or CUIT,
+        cliente=cot_original.cliente,
+        cliente_id=cot_original.cliente_id,
+        cliente_razon_social=cot_original.cliente_razon_social,
+        cliente_cuit=cot_original.cliente_cuit,
+        familia=cot_original.familia,
+        fecha=fecha_clon,
+        moneda=cot_original.moneda or "USD",
+        tipo_cambio_usado=cot_original.tipo_cambio_usado,
+        condicion_iva=cot_original.condicion_iva,
+        condicion_cotizacion=cot_original.condicion_cotizacion,
+        forma_pago=cot_original.forma_pago,
+        observacion_cliente=cot_original.observacion_cliente,
+        carga_fiscal_pct=cot_original.carga_fiscal_pct or 0.0,
+        carga_fiscal_monto=cot_original.carga_fiscal_monto or 0.0,
+        total_carga_fiscal=cot_original.total_carga_fiscal or 0.0,
+        bonificacion_cierre_monto=cot_original.bonificacion_cierre_monto or 0.0,
+        total_neto=cot_original.total_neto or 0.0,
+        total_iva=cot_original.total_iva or 0.0,
+        total_final=cot_original.total_final or 0.0,
+    )
+
+    db.session.add(nueva_cotizacion)
+    db.session.flush()
+
+    try:
+        for item in cot_original.items:
+            imagen_clonada = clonar_imagen_local(item.imagen_url)
+            if imagen_clonada and imagen_clonada != item.imagen_url and es_ruta_imagen_local(imagen_clonada):
+                imagenes_clonadas.append(imagen_clonada)
+
+            nueva_cotizacion.items.append(
+                ItemCotizacion(
+                    descripcion=item.descripcion,
+                    detalle=item.detalle,
+                    cantidad=item.cantidad,
+                    costo_unitario=item.costo_unitario,
+                    iva_compra_pct=item.iva_compra_pct or 0.0,
+                    costo_extra=item.costo_extra or 0.0,
+                    margen=item.margen,
+                    descuento_pct=item.descuento_pct or 0.0,
+                    carga_fiscal=item.carga_fiscal or 0.0,
+                    iva_item=item.iva_item or 0.0,
+                    precio_venta=item.precio_venta,
+                    subtotal=item.subtotal,
+                    imagen_url=imagen_clonada,
+                )
+            )
+
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        for ruta in imagenes_clonadas:
+            eliminar_imagen_local(ruta)
+        raise
+
+    registrar_auditoria(
+        "Clono cotizacion",
+        "Cotizacion",
+        entidad_id=nueva_cotizacion.id,
+        entidad_ref=nueva_cotizacion.numero_cotizacion or str(nueva_cotizacion.id),
+        detalle=(
+            f"Origen: {cot_original.numero_cotizacion or cot_original.id}. "
+            f"Cliente: {nueva_cotizacion.cliente or 'Sin cliente'}. "
+            f"Nuevo total: {nueva_cotizacion.moneda or 'ARS'} {nueva_cotizacion.total_final or 0.0:,.2f}."
+        ),
+    )
+    return jsonify(
+        {
+            "ok": True,
+            "nueva_id": nueva_cotizacion.id,
+            "redirect_url": url_for("editar_cotizacion", id=nueva_cotizacion.id),
+            "mensaje": "Cotizacion duplicada con exito.",
+        }
     )
 
 

@@ -213,6 +213,40 @@ function eliminarCotizacion(id, numeroCotizacion) {
         });
 }
 
+function clonarCotizacion(id, numeroCotizacion) {
+    const confirmado = window.confirm(`Â¿Crear una copia de la cotizaciÃ³n #${numeroCotizacion} con fecha actual y estado En progreso?`);
+    if (!confirmado) {
+        return;
+    }
+
+    fetch(`/cotizacion/clonar/${id}`, {
+        method: "POST",
+        headers: {
+            "X-Requested-With": "XMLHttpRequest",
+        },
+    })
+        .then((response) => response.json().then((data) => ({ ok: response.ok, status: response.status, data })))
+        .then(({ ok, status, data }) => {
+            if (!ok) {
+                if (status === 401 && data?.error === "auth_required") {
+                    window.location.href = "{{ url_for('login') }}";
+                    return;
+                }
+                alert(data?.error || "No se pudo duplicar la cotizaciÃ³n.");
+                return;
+            }
+            const destino = data?.redirect_url || (data?.nueva_id ? `/cotizacion/${data.nueva_id}/editar` : "");
+            if (destino) {
+                window.location.href = destino;
+                return;
+            }
+            aplicarFiltros(historialPage);
+        })
+        .catch(() => {
+            alert("No se pudo duplicar la cotizaciÃ³n.");
+        });
+}
+
 function aplicarFiltros(page = historialPage) {
     const clienteSelect = document.getElementById("filtro_cliente_id");
     const clienteId = clienteSelect?.value || "";
@@ -277,6 +311,9 @@ function aplicarFiltros(page = historialPage) {
                             <a href="/cotizacion/${c.id}/editar" class="btn btn-sm btn-edit-custom me-1">
                                 <i class="bi bi-pencil-square"></i> Editar
                             </a>
+                            <button type="button" class="btn btn-sm btn-outline-warning me-1" onclick="clonarCotizacion(${c.id}, '${numeroCot}')" title="Duplicar cotizacion">
+                                <i class="bi bi-copy"></i>
+                            </button>
                             <a href="/cotizacion/${c.id}" class="btn btn-sm btn-view-custom me-1">
                                 <i class="bi bi-eye"></i> Ver Online
                             </a>

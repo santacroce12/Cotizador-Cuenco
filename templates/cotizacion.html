@@ -191,6 +191,12 @@
                                 <span>IVA {{ '%.0f'|format(iva_tasa * 100) }}%</span>
                                 <span>${{ '%.2f'|format(cotizacion.total_iva) }}</span>
                             </div>
+                            {% if (cotizacion.bonificacion_cierre_monto or 0) > 0 %}
+                            <div class="d-flex justify-content-between small text-success mb-2">
+                                <span>Bonificacion de cierre</span>
+                                <span>-${{ '%.2f'|format(cotizacion.bonificacion_cierre_monto) }}</span>
+                            </div>
+                            {% endif %}
                             <hr>
                             <div class="d-flex justify-content-between align-items-end">
                                 <span class="fs-5 text-dark">Total final</span>
