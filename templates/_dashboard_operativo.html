@@ -93,6 +93,7 @@
                             <div class="dash-actions-grid">
                                 <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-edit-custom dash-action-btn"><i class="bi bi-pencil-square"></i> Editar</a>
                                 <a href="{{ url_for('ver_cotizacion', id=cot.id) }}" class="btn btn-view-custom dash-action-btn"><i class="bi bi-eye"></i> Ver</a>
+                                <a href="{{ url_for('ver_cotizacion_llave_en_mano', id=cot.id) }}" class="btn btn-outline-dark dash-action-btn"><i class="bi bi-file-text"></i> Llave en mano</a>
                                 <a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="btn btn-excel-custom dash-action-btn"><i class="bi bi-file-earmark-excel"></i> Excel</a>
                                 <a href="{{ url_for('ver_cotizacion', id=cot.id) }}?download=1" class="btn btn-pdf-custom dash-action-btn"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
                             </div>

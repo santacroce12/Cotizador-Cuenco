@@ -107,6 +107,13 @@ QUOTE_FOOTER_NOTE = str(
     or LOCAL_SETTINGS.get("QUOTE_FOOTER_NOTE")
     or "Precios sujetos a disponibilidad y confirmacion comercial al momento de la aceptacion."
 ).strip()
+QUOTE_USD_FACTURACION_NOTE = (
+    "Nota: La factura se pesificara considerando el TC BNA Ventas Divisa del dia habil anterior a la "
+    "fecha de emision de la misma. En caso de existir variacion del tipo de cambio al momento de la "
+    "real acreditacion del pago con respecto al TC de facturacion, se emitira ND/NC sobre la diferencia "
+    "segun corresponda. Por favor corroborar que la OC contenga esta consideracion para evitar el "
+    "aplazamiento de inicio de obra por dilaciones administrativas."
+)
 try:
     QUOTE_VALIDITY_DAYS = int(
         os.getenv("QUOTE_VALIDITY_DAYS") or LOCAL_SETTINGS.get("QUOTE_VALIDITY_DAYS") or 7
@@ -178,6 +185,7 @@ class Cotizacion(db.Model):
     cuit = db.Column(db.String(50))
     cliente = db.Column(db.String(100), nullable=False)
     cliente_id = db.Column(db.Integer, db.ForeignKey("cliente.id"))
+    cliente_contacto = db.Column(db.String(100))
     cliente_razon_social = db.Column(db.String(100))
     cliente_cuit = db.Column(db.String(50))
     familia = db.Column(db.String(50))
@@ -579,6 +587,131 @@ def construir_desglose_iva_cotizacion(cotizacion):
     ]
 
 
+def normalizar_texto_documento(valor):
+    return re.sub(r"\s+", " ", str(valor or "").strip())
+
+
+def formatear_lista_humana(textos, limite=None):
+    items = [normalizar_texto_documento(texto) for texto in textos if normalizar_texto_documento(texto)]
+    if not items:
+        return ""
+    if limite and len(items) > limite:
+        resto = len(items) - limite
+        items = items[:limite] + [f"{resto} item{'s' if resto != 1 else ''} mas"]
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} y {items[1]}"
+    return f"{', '.join(items[:-1])} y {items[-1]}"
+
+
+def construir_contexto_documento_cotizacion(cotizacion):
+    current_user = getattr(g, "current_user", None)
+    return {
+        "cot": cotizacion,
+        "condiciones_cotizacion": cotizacion.condiciones_cotizacion_lista,
+        "domicilio_empresa": DOMICILIO,
+        "mostrar_descuento": any((item.descuento_pct or 0.0) > 0 for item in cotizacion.items),
+        "desglose_iva": construir_desglose_iva_cotizacion(cotizacion),
+        "precio_incluye_iva": cotizacion.condicion_iva != "Responsable Inscrito",
+        "cliente_sector": cotizacion.cliente_ref.sector if cotizacion.cliente_ref else "",
+        "cliente_subsector": cotizacion.cliente_ref.subsector if cotizacion.cliente_ref else "",
+        "quote_signature": {
+            "name": current_user.nombre_para_documentos if current_user else QUOTE_SIGNER_NAME,
+            "role": QUOTE_SIGNER_ROLE,
+            "email": QUOTE_CONTACT_EMAIL,
+            "phone": QUOTE_CONTACT_PHONE,
+            "image": QUOTE_SIGNATURE_IMAGE,
+            "validity_days": QUOTE_VALIDITY_DAYS,
+            "footer_note": QUOTE_FOOTER_NOTE,
+        },
+    }
+
+
+def construir_contexto_llave_en_mano(cotizacion):
+    items = list(cotizacion.items)
+    cliente_destino = cotizacion.cliente_razon_social or cotizacion.cliente or "Cliente"
+    familia = normalizar_texto_documento(cotizacion.familia)
+    sector = cotizacion.cliente_ref.sector if cotizacion.cliente_ref else ""
+    subsector = cotizacion.cliente_ref.subsector if cotizacion.cliente_ref else ""
+    cantidad_total = sum(normalizar_cantidad_entera(item.cantidad, default=1) for item in items)
+    componentes = formatear_lista_humana([item.descripcion for item in items], limite=4)
+    alcance_base = "La presente propuesta comercial contempla la provision, instalacion, configuracion y puesta en marcha"
+    alcance_base += " del proyecto cotizado"
+    alcance_base += f" para {cliente_destino}"
+    if componentes:
+        alcance_base += (
+            f", incluyendo {cantidad_total} unidad{'es' if cantidad_total != 1 else ''} distribuidas en "
+            f"{len(items)} item{'s' if len(items) != 1 else ''}: {componentes}."
+        )
+    else:
+        alcance_base += "."
+
+    memoria_items = []
+    for indice, item in enumerate(items, start=1):
+        detalle = normalizar_texto_documento(item.detalle)
+        descripcion = normalizar_texto_documento(item.descripcion) or f"Item {indice}"
+        detalle_base = detalle or "Sin descripcion adicional cargada."
+        memoria_items.append(
+            {
+                "indice": indice,
+                "titulo": descripcion,
+                "cantidad": normalizar_cantidad_entera(item.cantidad, default=1),
+                "detalle": detalle_base,
+            }
+        )
+
+    alicuotas = sorted({normalizar_iva_venta(item.iva_item or 0.0) for item in items})
+    precio_incluye_iva = cotizacion.condicion_iva != "Responsable Inscrito"
+    if precio_incluye_iva:
+        iva_resumen = "Incl."
+        nota_iva = "Los precios expresados incluyen IVA."
+        total_economico = cotizacion.total_final or 0.0
+    else:
+        iva_resumen = f"{str(alicuotas[0]).replace('.0', '')}%" if len(alicuotas) == 1 else "Mixto"
+        nota_iva = "Los precios expresados no incluyen el IVA detallado, el cual debera adicionarse."
+        total_economico = cotizacion.total_neto or 0.0
+
+    descripcion_referencia = "Provision de materiales, equipamiento y mano de obra"
+    if sector and subsector:
+        descripcion_referencia += f" ({sector} / {subsector})"
+    descripcion_referencia += "."
+
+    notas_especiales = []
+    if cotizacion.observacion_cliente:
+        notas_especiales.append(normalizar_texto_documento(cotizacion.observacion_cliente))
+    if cotizacion.moneda == "USD" and cotizacion.tipo_cambio_usado:
+        notas_especiales.append(
+            f"Tipo de cambio de referencia: 1 USD = $ {cotizacion.tipo_cambio_usado:,.4f} ARS."
+        )
+
+    condiciones_venta = []
+    if cotizacion.forma_pago:
+        condiciones_venta.append(f"Forma de pago: {cotizacion.forma_pago}.")
+    if QUOTE_VALIDITY_DAYS:
+        condiciones_venta.append(f"Mantenimiento de oferta: {QUOTE_VALIDITY_DAYS} dias corridos.")
+    condiciones_venta.extend(cotizacion.condiciones_cotizacion_lista)
+    if cotizacion.moneda == "USD":
+        condiciones_venta.append(QUOTE_USD_FACTURACION_NOTE)
+    if QUOTE_FOOTER_NOTE:
+        condiciones_venta.append(QUOTE_FOOTER_NOTE)
+
+    contexto = construir_contexto_documento_cotizacion(cotizacion)
+    contexto.update(
+        {
+            "propuesta_comercial_texto": alcance_base,
+            "memoria_items": memoria_items,
+            "iva_resumen": iva_resumen,
+            "nota_iva_llave_mano": nota_iva,
+            "total_economico_llave_mano": total_economico,
+            "descripcion_economica_llave_mano": descripcion_referencia,
+            "notas_especiales_llave_mano": notas_especiales,
+            "condiciones_venta_llave_mano": condiciones_venta,
+        }
+    )
+    return contexto
+
+
 def construir_contexto_tipo_cambio_cotizador(cotizacion=None):
     payload = obtener_tipo_cambio_oficial_bna()
     guardado = normalizar_tipo_cambio_valor(cotizacion.tipo_cambio_usado if cotizacion else None)
@@ -790,6 +923,9 @@ with app.app_context():
         db.session.commit()
     if "cliente_razon_social" not in columnas_cot:
         db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN cliente_razon_social VARCHAR(100)"))
+        db.session.commit()
+    if "cliente_contacto" not in columnas_cot:
+        db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN cliente_contacto VARCHAR(100)"))
         db.session.commit()
     if "cliente_cuit" not in columnas_cot:
         db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN cliente_cuit VARCHAR(50)"))
@@ -1560,6 +1696,7 @@ def generar_excel_cotizacion(cotizacion):
         ("Estado", cotizacion.estado or "En progreso"),
         ("Familia", cotizacion.familia or ""),
         ("Cliente", cotizacion.cliente or ""),
+        ("Contacto cliente", cotizacion.cliente_contacto or ""),
         ("Razon social cliente", cotizacion.cliente_razon_social or ""),
         ("CUIT cliente", cotizacion.cliente_cuit or ""),
         ("Moneda", cotizacion.moneda or "ARS"),
@@ -2030,6 +2167,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         condiciones_cotizacion = normalizar_condiciones_cotizacion(condiciones_cotizacion_raw)
     condicion_cotizacion = serializar_condiciones_cotizacion(condiciones_cotizacion) if condiciones_cotizacion else ""
     observacion_cliente = (request.form.get("observacion_cliente") or "").strip()
+    cliente_contacto = (request.form.get("cliente_contacto") or "").strip()
     bonificacion_cierre_solicitada = max(0.0, parsear_decimal(request.form.get("bonificacion_cierre_monto") or 0))
 
     es_edicion = cotizacion is not None
@@ -2069,6 +2207,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     cotizacion.cuit = CUIT
     cotizacion.cliente_id = cliente_sel.id if cliente_sel else None
     cotizacion.cliente = cliente_sel.nombre if cliente_sel else (request.form.get("cliente") or "").strip()
+    cotizacion.cliente_contacto = cliente_contacto or (cliente_sel.nombre if cliente_sel else cotizacion.cliente)
     cotizacion.cliente_razon_social = (
         cliente_sel.razon_social if cliente_sel else (request.form.get("cliente_razon_social") or "").strip()
     )
@@ -2871,26 +3010,14 @@ def filtrar_historial():
 @token_required
 def ver_cotizacion(id):
     cot = Cotizacion.query.get_or_404(id)
-    mostrar_descuento = any((item.descuento_pct or 0.0) > 0 for item in cot.items)
-    current_user = getattr(g, "current_user", None)
-    desglose_iva = construir_desglose_iva_cotizacion(cot)
-    return render_template(
-        "cotizacion_cliente.html",
-        cot=cot,
-        condiciones_cotizacion=cot.condiciones_cotizacion_lista,
-        domicilio_empresa=DOMICILIO,
-        mostrar_descuento=mostrar_descuento,
-        desglose_iva=desglose_iva,
-        quote_signature={
-            "name": current_user.nombre_para_documentos if current_user else QUOTE_SIGNER_NAME,
-            "role": QUOTE_SIGNER_ROLE,
-            "email": QUOTE_CONTACT_EMAIL,
-            "phone": QUOTE_CONTACT_PHONE,
-            "image": QUOTE_SIGNATURE_IMAGE,
-            "validity_days": QUOTE_VALIDITY_DAYS,
-            "footer_note": QUOTE_FOOTER_NOTE,
-        },
-    )
+    return render_template("cotizacion_cliente.html", **construir_contexto_documento_cotizacion(cot))
+
+
+@app.route("/cotizacion/<int:id>/llave-en-mano")
+@token_required
+def ver_cotizacion_llave_en_mano(id):
+    cot = Cotizacion.query.get_or_404(id)
+    return render_template("cotizacion_llave_en_mano.html", **construir_contexto_llave_en_mano(cot))
 
 
 @app.route("/cotizacion/<int:id>/xlsx")
@@ -2927,6 +3054,7 @@ def clonar_cotizacion(id):
         cuit=cot_original.cuit or CUIT,
         cliente=cot_original.cliente,
         cliente_id=cot_original.cliente_id,
+        cliente_contacto=cot_original.cliente_contacto,
         cliente_razon_social=cot_original.cliente_razon_social,
         cliente_cuit=cot_original.cliente_cuit,
         familia=cot_original.familia,

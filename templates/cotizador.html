@@ -448,6 +448,24 @@
                         <input type="text" id="display_iva" class="form-control bg-light" readonly placeholder="Detectado al elegir cliente">
                     </div>
                 </div>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Nombre de contacto</label>
+                        <input
+                            type="text"
+                            name="cliente_contacto"
+                            id="input_cliente_contacto"
+                            class="form-control"
+                            value="{{ cotizacion.cliente_contacto if cotizacion and cotizacion.cliente_contacto else (cotizacion.cliente if cotizacion and cotizacion.cliente else '') }}"
+                            data-cliente-id="{{ cotizacion.cliente_id if cotizacion and cotizacion.cliente_id else '' }}"
+                            data-auto-cliente="{{ cotizacion.cliente if cotizacion and cotizacion.cliente else '' }}"
+                            data-personalizado="{% if cotizacion and cotizacion.cliente_contacto and cotizacion.cliente_contacto != cotizacion.cliente %}1{% else %}0{% endif %}"
+                            placeholder="Ej: Martin Moreno"
+                            oninput="marcarContactoPersonalizado()"
+                            required
+                        >
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -955,13 +973,14 @@ function obtenerBorradorCotizacion() {
         iva_item: row.querySelector('[name="iva_item[]"]')?.value || "21",
     }));
 
-    return {
-        version: 1,
-        savedAt: new Date().toISOString(),
-        cliente_id: select?.value || "",
-        moneda: obtenerValor("#moneda"),
-        tipo_cambio: obtenerValor("#tipo_cambio"),
-        condicion_iva: obtenerValor("#condicion_iva"),
+        return {
+            version: 1,
+            savedAt: new Date().toISOString(),
+            cliente_id: select?.value || "",
+            cliente_contacto: obtenerValor("#input_cliente_contacto"),
+            moneda: obtenerValor("#moneda"),
+            tipo_cambio: obtenerValor("#tipo_cambio"),
+            condicion_iva: obtenerValor("#condicion_iva"),
         forma_pago: obtenerValor("#forma_pago"),
         condicion_cotizacion: obtenerValor("#condicion_cotizacion"),
         observacion_cliente: obtenerValor("#observacion_cliente"),
@@ -1049,6 +1068,7 @@ function aplicarBorradorCotizacion(draft) {
     setValue("#moneda", draft.moneda);
     setValue("#tipo_cambio", draft.tipo_cambio);
     setValue("#condicion_iva", draft.condicion_iva);
+    setValue("#input_cliente_contacto", draft.cliente_contacto);
     setValue("#forma_pago", draft.forma_pago);
     setValue("#condicion_cotizacion", formatearCondicionesCotizacionParaTextarea(draft.condicion_cotizacion));
     setValue("#observacion_cliente", draft.observacion_cliente);
@@ -1082,6 +1102,13 @@ function aplicarBorradorCotizacion(draft) {
     items.forEach((item) => agregarFila(item));
 
     sincronizarClienteSeleccionado();
+    const contactoInput = document.getElementById("input_cliente_contacto");
+    if (contactoInput && draft.cliente_contacto !== undefined) {
+        contactoInput.value = draft.cliente_contacto || "";
+        contactoInput.dataset.clienteId = draft.cliente_id || "";
+        contactoInput.dataset.autoCliente = document.getElementById("input_cliente_nombre")?.value || "";
+        contactoInput.dataset.personalizado = contactoInput.value && contactoInput.value !== contactoInput.dataset.autoCliente ? "1" : "0";
+    }
     actualizarEstiloEstadoForm(document.getElementById("estado_cotizacion"));
     toggleSeguimientoFields();
     actualizarIndicadorFamilia();
@@ -1218,11 +1245,18 @@ function resolverClientePendiente() {
 
 function sincronizarClienteSeleccionado() {
     const select = document.getElementById("cliente_select");
+    const contactoInput = document.getElementById("input_cliente_contacto");
     if (!select || !select.value) {
         document.getElementById("input_cliente_nombre").value = "";
         document.getElementById("input_cliente_razon_social").value = "";
         document.getElementById("input_cliente_cuit").value = "";
         document.getElementById("display_iva").value = "";
+        if (contactoInput) {
+            contactoInput.value = "";
+            contactoInput.dataset.clienteId = "";
+            contactoInput.dataset.autoCliente = "";
+            contactoInput.dataset.personalizado = "0";
+        }
         return;
     }
     const selectedOption = select.options[select.selectedIndex];
@@ -1236,12 +1270,34 @@ function sincronizarClienteSeleccionado() {
     document.getElementById("input_cliente_razon_social").value = razon;
     document.getElementById("input_cliente_cuit").value = cuit;
     document.getElementById("display_iva").value = condicionIva;
+    if (contactoInput) {
+        const clientePrevioId = contactoInput.dataset.clienteId || "";
+        const contactoActual = contactoInput.value || "";
+        const contactoAuto = contactoInput.dataset.autoCliente || "";
+        const esPersonalizado = contactoInput.dataset.personalizado === "1";
+        if (clientePrevioId !== select.value || !contactoActual || (!esPersonalizado && contactoActual === contactoAuto)) {
+            contactoInput.value = nombre;
+            contactoInput.dataset.personalizado = "0";
+        }
+        contactoInput.dataset.clienteId = select.value;
+        contactoInput.dataset.autoCliente = nombre;
+    }
 
     const ivaSelect = document.getElementById("condicion_iva");
     if (ivaSelect && Array.from(ivaSelect.options).some((o) => o.value === condicionIva)) {
         ivaSelect.value = condicionIva;
     }
     calcularTodo();
+}
+
+function marcarContactoPersonalizado() {
+    const contactoInput = document.getElementById("input_cliente_contacto");
+    if (!contactoInput) {
+        return;
+    }
+    const valor = (contactoInput.value || "").trim();
+    const auto = contactoInput.dataset.autoCliente || "";
+    contactoInput.dataset.personalizado = valor && valor !== auto ? "1" : "0";
 }
 
 function actualizarSubsectores(valorSeleccionado = "") {

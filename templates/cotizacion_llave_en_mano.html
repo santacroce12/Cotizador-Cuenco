@@ -1,0 +1,411 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<style>
+    .turnkey-shell {
+        max-width: 920px;
+        margin: 2rem auto 4rem;
+        padding: 36px 40px 42px;
+        background: #fff;
+        border: 1px solid #d8dde5;
+        box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+    }
+    .turnkey-topline,
+    .turnkey-footerline {
+        border-top: 1.5px solid #2f2f2f;
+        margin: 10px 0 18px;
+    }
+    .turnkey-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        align-items: flex-start;
+    }
+    .turnkey-company {
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+    }
+    .turnkey-company img {
+        width: 122px;
+        height: auto;
+        object-fit: contain;
+    }
+    .turnkey-company strong,
+    .turnkey-recipient strong,
+    .turnkey-section-title,
+    .turnkey-condition-title {
+        color: #111827;
+    }
+    .turnkey-company-copy,
+    .turnkey-meta,
+    .turnkey-body,
+    .turnkey-conditions,
+    .turnkey-notes {
+        color: #1f2937;
+        line-height: 1.34;
+    }
+    .turnkey-date {
+        min-width: 220px;
+        text-align: right;
+        font-size: 0.95rem;
+        padding-top: 16px;
+    }
+    .turnkey-recipient {
+        margin-top: 28px;
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0 4px;
+    }
+    .turnkey-recipient td:first-child {
+        width: 70px;
+        font-weight: 700;
+        vertical-align: top;
+    }
+    .turnkey-banner {
+        margin: 26px 0 22px;
+        border: 1px solid #7f7f7f;
+        background: #f4f4f4;
+        text-align: center;
+        font-size: 1rem;
+        letter-spacing: 0.02em;
+        padding: 4px 10px;
+        text-transform: uppercase;
+    }
+    .turnkey-section-title {
+        margin-top: 28px;
+        margin-bottom: 10px;
+        font-weight: 800;
+        text-align: center;
+        text-decoration: underline;
+        text-transform: uppercase;
+        font-size: 1.02rem;
+    }
+    .turnkey-subtitle {
+        margin-top: 18px;
+        margin-bottom: 10px;
+        font-size: 1rem;
+        font-weight: 700;
+        text-decoration: underline;
+    }
+    .turnkey-body {
+        font-size: 0.98rem;
+    }
+    .turnkey-scope-list {
+        margin-top: 16px;
+        display: grid;
+        gap: 14px;
+    }
+    .turnkey-scope-item {
+        display: grid;
+        grid-template-columns: 34px 1fr;
+        gap: 10px;
+        page-break-inside: avoid;
+    }
+    .turnkey-scope-index {
+        font-weight: 800;
+        font-style: italic;
+    }
+    .turnkey-scope-title {
+        font-weight: 800;
+        margin-bottom: 2px;
+    }
+    .turnkey-scope-meta {
+        font-size: 0.83rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #4b5563;
+        margin-bottom: 4px;
+    }
+    .turnkey-economic-title {
+        margin: 30px 0 8px;
+        font-size: 1rem;
+    }
+    .turnkey-economic-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 6px;
+        font-size: 0.95rem;
+    }
+    .turnkey-economic-table,
+    .turnkey-economic-table td,
+    .turnkey-economic-table th {
+        border: 1px solid #5f6368;
+    }
+    .turnkey-economic-table thead th {
+        background: #d9d9d9;
+        font-weight: 400;
+        padding: 6px 8px;
+        text-align: left;
+        vertical-align: bottom;
+    }
+    .turnkey-economic-table tbody td {
+        padding: 8px 10px;
+        vertical-align: bottom;
+    }
+    .turnkey-economic-desc {
+        font-size: 0.92rem;
+        line-height: 1.28;
+    }
+    .turnkey-economic-desc strong {
+        display: block;
+        font-size: 1.02rem;
+    }
+    .turnkey-totals {
+        margin-top: 16px;
+        margin-left: auto;
+        width: min(320px, 100%);
+        border: 1px solid #d7dde6;
+        background: #f8fafc;
+        padding: 14px 16px;
+        page-break-inside: avoid;
+    }
+    .turnkey-total-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 8px;
+    }
+    .turnkey-total-row:last-child {
+        margin-bottom: 0;
+    }
+    .turnkey-total-row.is-final {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1.5px solid #111827;
+        font-size: 1.08rem;
+        font-weight: 800;
+    }
+    .turnkey-note-copy {
+        margin-top: 10px;
+        font-size: 0.95rem;
+    }
+    .turnkey-notes,
+    .turnkey-conditions {
+        margin-top: 26px;
+        page-break-inside: avoid;
+    }
+    .turnkey-notes ul,
+    .turnkey-conditions ul {
+        margin: 10px 0 0 18px;
+    }
+    .turnkey-notes li,
+    .turnkey-conditions li {
+        margin-bottom: 8px;
+    }
+    .turnkey-footer {
+        margin-top: 34px;
+        text-align: center;
+        font-size: 0.96rem;
+    }
+    .turnkey-signature {
+        margin-top: 26px;
+        max-width: 340px;
+    }
+    .turnkey-signature img {
+        max-width: 150px;
+        max-height: 58px;
+        object-fit: contain;
+        display: block;
+        margin-bottom: 10px;
+    }
+    .turnkey-signature-line {
+        border-top: 1.5px solid #6b7280;
+        margin-bottom: 10px;
+    }
+    @media print {
+        .no-print,
+        .btn,
+        nav.navbar,
+        .container.no-print {
+            display: none !important;
+        }
+        body {
+            background: #fff !important;
+        }
+        .turnkey-shell {
+            margin: 0 !important;
+            max-width: none;
+            width: 100%;
+            border: none;
+            box-shadow: none;
+            padding: 20px 28px 24px;
+        }
+    }
+</style>
+
+<div class="container no-print text-center my-4">
+    <button onclick="window.print()" class="btn btn-pdf-custom btn-lg px-5">Guardar como PDF / Imprimir</button>
+    <a href="{{ url_for('ver_cotizacion', id=cot.id) }}" class="btn btn-view-custom btn-lg">Ver detalle</a>
+    <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-edit-custom btn-lg">Editar</a>
+    <a href="/historial" class="btn btn-outline-secondary btn-lg">Volver al Historial</a>
+</div>
+
+<article class="turnkey-shell">
+    <header class="turnkey-header">
+        <div class="turnkey-company">
+            <img src="{{ url_for('static', filename='LOGO color.png') }}" alt="Logo Cuenco Tech" onerror="this.onerror=null;this.src='{{ url_for('static', filename='logo.png') }}';">
+            <div class="turnkey-company-copy">
+                <strong>{{ cot.razon_social or "Cuenco Tech S.A." }}</strong><br>
+                {{ domicilio_empresa }}<br>
+                CUIT: {{ cot.cuit }}<br>
+                {% if quote_signature.phone %}Tel: {{ quote_signature.phone }}{% endif %}
+            </div>
+        </div>
+        <div class="turnkey-date">
+            MENDOZA, {{ cot.fecha.strftime('%d/%m/%Y') }}.
+        </div>
+    </header>
+
+    <div class="turnkey-topline"></div>
+
+    <table class="turnkey-recipient">
+        <tr>
+            <td>Sres.</td>
+            <td><strong>{{ cot.cliente_razon_social or cot.cliente }}</strong></td>
+        </tr>
+        <tr>
+            <td>At.</td>
+            <td>{{ cot.cliente_contacto or cot.cliente }}</td>
+        </tr>
+        <tr>
+            <td>Ref.</td>
+            <td>{{ descripcion_economica_llave_mano }}</td>
+        </tr>
+        <tr>
+            <td>Cot.</td>
+            <td>{{ cot.numero_cotizacion or ("%04d" | format(cot.id)) }}</td>
+        </tr>
+        {% if cliente_sector or cliente_subsector %}
+        <tr>
+            <td>Dato</td>
+            <td>
+                {% if cliente_sector %}<strong>Sector:</strong> {{ cliente_sector }}{% endif %}
+                {% if cliente_subsector %}{% if cliente_sector %} | {% endif %}<strong>Subsector:</strong> {{ cliente_subsector }}{% endif %}
+            </td>
+        </tr>
+        {% endif %}
+    </table>
+
+    <p class="turnkey-body mt-4 mb-0">Nos dirigimos a Uds. a efectos de elevarles la siguiente:</p>
+    <div class="turnkey-banner">Propuesta Comercial</div>
+
+    <p class="turnkey-body mb-0">{{ propuesta_comercial_texto }}</p>
+
+    <h2 class="turnkey-section-title">Memoria Descriptiva</h2>
+    <div class="turnkey-subtitle">Detalle:</div>
+
+    <section class="turnkey-scope-list">
+        {% for item in memoria_items %}
+        <article class="turnkey-scope-item">
+            <div class="turnkey-scope-index">{{ item.indice }}.</div>
+            <div>
+                <div class="turnkey-scope-title">{{ item.titulo }}</div>
+                <div class="turnkey-scope-meta">Cantidad {{ item.cantidad }}</div>
+                <div class="turnkey-body">{{ item.detalle }}</div>
+            </div>
+        </article>
+        {% endfor %}
+    </section>
+
+    <div class="turnkey-economic-title">Propuesta Económica.</div>
+    <table class="turnkey-economic-table">
+        <thead>
+            <tr>
+                <th style="width: 9%;">Cant.</th>
+                <th style="width: 10%;">IVA</th>
+                <th>Descripción</th>
+                <th style="width: 18%;">{{ "Precio" if precio_incluye_iva else "Precio Unitario" }}</th>
+                <th style="width: 18%;">Precio Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="text-center">1</td>
+                <td class="text-center">{{ iva_resumen }}</td>
+                <td class="turnkey-economic-desc">
+                    <strong>{{ descripcion_economica_llave_mano }}</strong>
+                    Total:
+                </td>
+                <td class="text-end">{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(total_economico_llave_mano) }}</td>
+                <td class="text-end">{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(total_economico_llave_mano) }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p class="turnkey-note-copy">{{ nota_iva_llave_mano }}</p>
+
+    <aside class="turnkey-totals">
+        {% if not precio_incluye_iva %}
+        <div class="turnkey-total-row">
+            <span>Subtotal neto</span>
+            <span>{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(cot.total_neto or 0) }}</span>
+        </div>
+        {% for iva_linea in desglose_iva %}
+        <div class="turnkey-total-row">
+            <span>{{ iva_linea.label }}</span>
+            <span>{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(iva_linea.amount) }}</span>
+        </div>
+        {% endfor %}
+        <div class="turnkey-total-row">
+            <span>IVA total</span>
+            <span>{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(cot.total_iva or 0) }}</span>
+        </div>
+        {% endif %}
+        {% if (cot.bonificacion_cierre_monto or 0) > 0 %}
+        <div class="turnkey-total-row">
+            <span>Bonificacion de cierre</span>
+            <span>- {{ cot.moneda or "USD" }} {{ "{:,.2f}".format(cot.bonificacion_cierre_monto) }}</span>
+        </div>
+        {% endif %}
+        <div class="turnkey-total-row is-final">
+            <span>Total final</span>
+            <span>{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(cot.total_final or 0) }}</span>
+        </div>
+    </aside>
+
+    {% if notas_especiales_llave_mano %}
+    <section class="turnkey-notes">
+        <div class="turnkey-subtitle" style="text-decoration: none; font-weight: 400;">Notas Especiales:</div>
+        <ul>
+            {% for nota in notas_especiales_llave_mano %}
+            <li>{{ nota }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    <section class="turnkey-conditions">
+        <div class="turnkey-condition-title turnkey-section-title" style="text-align: left; margin-top: 0;">Condiciones de Venta:</div>
+        <ul>
+            {% for condicion in condiciones_venta_llave_mano %}
+            <li>{{ condicion }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+
+    <section class="turnkey-signature">
+        {% if quote_signature.image %}
+        <img src="{{ url_for('static', filename=quote_signature.image) }}" alt="Firma {{ quote_signature.name }}">
+        {% endif %}
+        <div class="turnkey-signature-line"></div>
+        <strong>{{ quote_signature.name }}</strong><br>
+        {{ quote_signature.role }}<br>
+        {{ cot.razon_social or "Cuenco Tech S.A." }}
+    </section>
+
+    <footer class="turnkey-footer">
+        <div class="turnkey-footerline"></div>
+        {% if quote_signature.phone %}<div>{{ quote_signature.phone }}</div>{% endif %}
+    </footer>
+</article>
+
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("print") === "true" || urlParams.get("download") === "1") {
+        window.onload = function() {
+            window.print();
+        };
+    }
+</script>
+{% endblock %}

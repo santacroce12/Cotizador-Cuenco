@@ -85,6 +85,7 @@ class CotizadorCalculosTest(unittest.TestCase):
         data = {
             "cliente_id": str(self.cliente_exento_id),
             "cliente": "Municipalidad de Lujan",
+            "cliente_contacto": "Martin Moreno",
             "cliente_razon_social": "Municipalidad de Lujan",
             "cliente_cuit": "30-12345678-9",
             "familia": "SEGURIDAD URBANA",
@@ -439,6 +440,7 @@ class CotizadorCalculosTest(unittest.TestCase):
             self.assertGreaterEqual(cotizacion_clonada.fecha, cotizacion_original.fecha)
             self.assertEqual(cotizacion_clonada.cliente, cotizacion_original.cliente)
             self.assertEqual(cotizacion_clonada.cliente_id, cotizacion_original.cliente_id)
+            self.assertEqual(cotizacion_clonada.cliente_contacto, cotizacion_original.cliente_contacto)
             self.assertEqual(cotizacion_clonada.familia, cotizacion_original.familia)
             self.assertEqual(cotizacion_clonada.condicion_iva, cotizacion_original.condicion_iva)
             self.assertEqual(cotizacion_clonada.forma_pago, cotizacion_original.forma_pago)
@@ -579,7 +581,9 @@ class CotizadorCalculosTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("Tipo de cambio usado", html)
-        self.assertIn("Los precios unitarios incluyen IVA", html)
+        self.assertIn("Los precios incluyen IVA", html)
+        self.assertIn(">Precio</th>", html)
+        self.assertNotIn(">P. unit.</th>", html)
         self.assertIn("Condiciones comerciales", html)
         self.assertIn("Emitido por", html)
         self.assertIn("Administrador Principal", html)
@@ -603,6 +607,7 @@ class CotizadorCalculosTest(unittest.TestCase):
 
         cotizacion = self._cotizacion(cotizacion_id)
         self.assertEqual(cotizacion.forma_pago, "30 dias")
+        self.assertEqual(cotizacion.cliente_contacto, "Martin Moreno")
         self.assertEqual(cotizacion.condiciones_cotizacion_lista, condiciones)
         self.assertEqual(cotizacion.observacion_cliente, "Solicitud de presupuesto n 4587 - Lic municipal 221304")
 
@@ -619,6 +624,7 @@ class CotizadorCalculosTest(unittest.TestCase):
             wb = load_workbook(BytesIO(generar_excel_cotizacion(cotizacion_db)), data_only=True)
 
         ws = wb.active
+        self.assertEqual(self._valor_por_etiqueta(ws, "Contacto cliente"), "Martin Moreno")
         self.assertEqual(self._valor_por_etiqueta(ws, "Forma de pago"), "30 dias")
         self.assertEqual(
             self._valor_por_etiqueta(ws, "Condicion de la cotizacion"),
@@ -653,6 +659,51 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Lucas Santacruz", html)
         self.assertNotIn("Administrador Principal", html)
+
+    def test_vista_llave_en_mano_muestra_propuesta_memoria_y_condiciones(self):
+        condiciones = [
+            "Entrega y puesta en marcha a coordinar.",
+            "La oferta contempla materiales y mano de obra.",
+        ]
+        cotizacion_id = self._crear_cotizacion(
+            cliente_contacto="Sra. Martin Moreno",
+            forma_pago="30 dias",
+            condicion_cotizacion=json.dumps(condiciones, ensure_ascii=False),
+            observacion_cliente="Se considera instalacion completa y pruebas en sitio.",
+            **{
+                "row_id[]": ["row-1", "row-2"],
+                "item_id[]": ["", ""],
+                "imagen_actual[]": ["", ""],
+                "desc[]": ["Camara bullet 4MP", "NVR 16 canales"],
+                "detalle[]": ["Incluye soporte y conexion.", "Grabacion central y configuracion inicial."],
+                "cant[]": ["4", "1"],
+                "costo[]": ["70", "220"],
+                "iva_compra[]": ["21", "21"],
+                "extra[]": ["5", "5"],
+                "margen[]": ["60", "60"],
+                "descuento[]": ["0", "0"],
+                "carga_fiscal[]": ["0", "0"],
+                "iva_item[]": ["21", "21"],
+            },
+        )
+
+        response = self.client.get(f"/cotizacion/{cotizacion_id}/llave-en-mano")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Propuesta Comercial", html)
+        self.assertIn("Memoria Descriptiva", html)
+        self.assertIn("Propuesta Económica.", html)
+        self.assertIn("Sra. Martin Moreno", html)
+        self.assertIn("Forma de pago: 30 dias.", html)
+        self.assertIn("Se considera instalacion completa y pruebas en sitio.", html)
+        self.assertIn("Camara bullet 4MP", html)
+        self.assertIn("NVR 16 canales", html)
+        self.assertIn("Los precios expresados incluyen IVA.", html)
+        self.assertIn("Nota: La factura se pesificara considerando el TC BNA Ventas Divisa", html)
+        self.assertNotIn("Familia:", html)
+        self.assertNotIn("cotizador@cuencotech.com", html)
+        self.assertIn("Llave en mano", self.client.get("/historial").get_data(as_text=True))
 
     def test_responsable_inscrito_ve_subtotal_neto_e_iva(self):
         cotizacion_id = self._crear_cotizacion(
