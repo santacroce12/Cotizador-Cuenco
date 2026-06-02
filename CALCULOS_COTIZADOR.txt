@@ -1,0 +1,304 @@
+CALCULOS DEL COTIZADOR - GUIA DE REVISION
+=========================================
+
+Este archivo describe la logica actual del sistema.
+Las formulas estan tomadas de la logica real del cotizador.
+
+
+1) CAMPOS DE ENTRADA POR ITEM
+-----------------------------
+
+Producto o servicio
+- Solo descriptivo.
+- No participa en calculos.
+
+Descripcion
+- Solo descriptivo.
+- No participa en calculos.
+
+Cant.
+- Cantidad del item.
+- El sistema fuerza entero.
+- Si se ingresa decimal, se trunca hacia abajo.
+- Minimo: 1
+
+Costo Neto U.
+- Costo unitario neto del proveedor.
+- NO incluye IVA compra.
+
+IVA Compra %
+- IVA que cobra el proveedor.
+- Se usa solo como credito fiscal interno.
+- NO entra en la base de venta.
+
+Otros %
+- Costos adicionales sobre el costo neto.
+- Ejemplos: flete, comision, gastos operativos, financiacion simple.
+
+Margen %
+- Margen comercial sobre: Costo Neto U. + Otros.
+
+Desc. %
+- Descuento comercial sobre el precio ya marcado con margen.
+
+Carga F. %
+- Carga fiscal interna.
+- Ejemplos: IIBB, Ganancias, sellos, impuesto al cheque, retenciones, etc.
+- NO incluye IVA.
+
+IVA
+- IVA de venta del item.
+- Valores permitidos hoy: 21 / 10.5 / 0
+
+
+2) CALCULOS POR ITEM
+--------------------
+
+2.1. Base de costo por item
+
+costo_base_total_fila
+= cantidad * costo_unitario
+
+monto_iva_compra_fila
+= costo_base_total_fila * (iva_compra_pct / 100)
+
+monto_extra_fila
+= costo_base_total_fila * (otros_pct / 100)
+
+costo_real_unitario
+= costo_unitario * (1 + otros_pct / 100)
+
+IMPORTANTE:
+- El IVA compra NO se suma al costo para vender.
+- El IVA compra queda separado como credito fiscal interno.
+
+
+2.2. Precio de venta del item
+
+precio_lista_unitario
+= costo_real_unitario * (1 + margen_pct / 100)
+
+precio_venta_unitario_neto
+= precio_lista_unitario * (1 - descuento_pct / 100)
+
+descuento_total_fila
+= (cantidad * precio_lista_unitario) - (cantidad * precio_venta_unitario_neto)
+
+subtotal_neto_fila
+= cantidad * precio_venta_unitario_neto
+
+monto_carga_fiscal_fila
+= subtotal_neto_fila * (carga_fiscal_pct / 100)
+
+monto_iva_venta_fila
+= subtotal_neto_fila * (iva_venta_pct / 100)
+
+venta_total_fila
+= subtotal_neto_fila + monto_iva_venta_fila
+
+
+2.3. Ganancia por item
+
+ganancia_neta_unitaria
+= precio_venta_unitario_neto
+ - costo_real_unitario
+ - (precio_venta_unitario_neto * carga_fiscal_pct / 100)
+
+NOTA:
+- Esta ganancia unitaria NO descuenta bonificacion de cierre.
+- La bonificacion de cierre se descuenta a nivel cotizacion, no por item.
+
+
+3) TOTALES INTERNOS DE LA COTIZACION
+------------------------------------
+
+subtotal_base_acumulado
+= suma de (cantidad * costo_unitario) de todos los items
+
+total_extras_acumulado
+= suma de monto_extra_fila de todos los items
+
+total_iva_compra_acumulado
+= suma de monto_iva_compra_fila de todos los items
+
+total_descuentos_acumulado
+= suma de descuento_total_fila de todos los items
+
+subtotal_venta_neto
+= suma de subtotal_neto_fila de todos los items
+
+total_carga_fiscal_acumulado
+= suma de monto_carga_fiscal_fila de todos los items
+
+iva_total_acumulado
+= suma de monto_iva_venta_fila de todos los items
+
+
+4) RESUMEN INTERNO FINAL
+------------------------
+
+Costo neto real (Base + Otros)
+= subtotal_base_acumulado + total_extras_acumulado
+
+IVA compra credito
+= total_iva_compra_acumulado
+
+IVA a pagar estimado
+= iva_total_acumulado - total_iva_compra_acumulado
+
+Descuento total
+= total_descuentos_acumulado
+
+Subtotal Venta Neto
+= subtotal_venta_neto
+
+Carga Fiscal Retenida
+= total_carga_fiscal_acumulado
+
+IVA TOTAL
+= iva_total_acumulado
+
+
+5) BONIFICACION DE CIERRE
+-------------------------
+
+bonificacion_cierre_solicitada
+= valor cargado manualmente en el campo "Bonificacion de cierre"
+
+total_antes_bonificacion
+= subtotal_venta_neto + iva_total_acumulado
+
+bonificacion_cierre_aplicada
+= minimo entre:
+  - bonificacion_cierre_solicitada
+  - total_antes_bonificacion
+
+IMPORTANTE:
+- La bonificacion de cierre SI baja el total final.
+- La bonificacion de cierre SI baja la ganancia neta global.
+- La bonificacion de cierre NO altera margenes ni descuentos por item.
+
+
+6) TOTALES FINALES
+------------------
+
+ganancia_neta_real
+= subtotal_venta_neto
+ - (subtotal_base_acumulado + total_extras_acumulado)
+ - total_carga_fiscal_acumulado
+ - bonificacion_cierre_aplicada
+
+total_final
+= total_antes_bonificacion - bonificacion_cierre_aplicada
+
+equivalente_moneda
+- Si la cotizacion esta en ARS:
+  equivalente = total_final / tipo_cambio
+
+- Si la cotizacion esta en USD:
+  equivalente = total_final * tipo_cambio
+
+
+7) COMO SE GUARDAN LOS DATOS
+----------------------------
+
+Por item:
+- precio_venta = precio_venta_unitario_neto
+- subtotal = subtotal_neto_fila + monto_iva_venta_fila
+
+Por cotizacion:
+- total_neto = subtotal_venta_neto
+- total_iva = iva_total_acumulado
+- total_final = total_antes_bonificacion - bonificacion_cierre_aplicada
+- total_carga_fiscal = total_carga_fiscal_acumulado
+- bonificacion_cierre_monto = bonificacion_cierre_aplicada
+
+
+8) REDONDEOS Y VALIDACIONES
+---------------------------
+
+- Cantidad se fuerza a entero >= 1
+- Valores numericos no pueden bajar del minimo configurado
+- Descuento % no puede superar 100
+- IVA de venta permitido: 21 / 10.5 / 0
+- Tipo de cambio valido: mayor a 0
+
+Redondeos al guardar:
+- precio_venta: 2 decimales
+- subtotal por item: 2 decimales
+- total_neto: 2 decimales
+- total_iva: 2 decimales
+- total_final: 2 decimales
+- total_carga_fiscal: 2 decimales
+- bonificacion_cierre_monto: 2 decimales
+- tipo_cambio: 4 decimales
+
+
+9) EJEMPLO RAPIDO
+-----------------
+
+Si cargas:
+- Cantidad = 1
+- Costo Neto U. = 100
+- IVA Compra % = 21
+- Otros % = 5
+- Margen % = 75
+- Desc. % = 0
+- Carga F. % = 0
+- IVA = 21
+
+Entonces:
+
+costo_real_unitario
+= 100 * (1 + 5/100)
+= 105.00
+
+precio_lista_unitario
+= 105 * (1 + 75/100)
+= 183.75
+
+precio_venta_unitario_neto
+= 183.75 * (1 - 0/100)
+= 183.75
+
+monto_iva_venta_fila
+= 183.75 * 21/100
+= 38.5875
+
+venta_total_fila
+= 183.75 + 38.5875
+= 222.3375
+
+ganancia_neta_unitaria
+= 183.75 - 105 - 0
+= 78.75
+
+IVA compra credito
+= 100 * 21/100
+= 21.00
+
+
+10) CAMPOS QUE NO CAMBIAN LOS CALCULOS
+--------------------------------------
+
+Estos campos no afectan las formulas:
+- Producto o servicio
+- Descripcion
+- Forma de pago
+- Condiciones comerciales
+- Observacion al cliente
+- Cliente
+- Familia
+- Estado
+
+
+11) REGLA CLAVE DEL SISTEMA
+---------------------------
+
+La regla mas importante hoy es esta:
+
+BASE DE VENTA = COSTO NETO + OTROS
+
+El IVA compra NO forma parte de la base de venta.
+Se trata por separado como credito fiscal interno.
+
