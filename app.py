@@ -17,6 +17,7 @@ import jwt
 import requests
 import urllib3
 from flask import Flask, Response, flash, g, jsonify, redirect, render_template, request, url_for
+from notion_service import notion_enabled, sync_cliente_to_notion, sync_cotizacion_to_notion
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -1240,6 +1241,36 @@ def registrar_auditoria(accion, tipo_entidad, entidad_id=None, entidad_ref=None,
         print(f"[auditoria] No se pudo registrar la accion '{accion}': {exc}")
 
 
+def _sync_cliente_to_notion_por_id(cliente_id):
+    try:
+        with app.app_context():
+            cliente = db.session.get(Cliente, cliente_id)
+            sync_cliente_to_notion(cliente)
+    except Exception as exc:
+        print(f"[notion] Error sincronizando cliente {cliente_id}: {exc}")
+
+
+def _sync_cotizacion_to_notion_por_id(cotizacion_id):
+    try:
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            sync_cotizacion_to_notion(cotizacion)
+    except Exception as exc:
+        print(f"[notion] Error sincronizando cotizacion {cotizacion_id}: {exc}")
+
+
+def disparar_sync_cliente_to_notion(cliente_id):
+    if not notion_enabled() or not cliente_id:
+        return
+    threading.Thread(target=_sync_cliente_to_notion_por_id, args=(cliente_id,), daemon=True).start()
+
+
+def disparar_sync_cotizacion_to_notion(cotizacion_id):
+    if not notion_enabled() or not cotizacion_id:
+        return
+    threading.Thread(target=_sync_cotizacion_to_notion_por_id, args=(cotizacion_id,), daemon=True).start()
+
+
 @app.errorhandler(RequestEntityTooLarge)
 def handle_request_entity_too_large(_error):
     flash("La carga total de archivos excede el maximo permitido para una sola cotizacion.", "danger")
@@ -2352,6 +2383,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
 
     db.session.add(cotizacion)
     db.session.commit()
+    disparar_sync_cotizacion_to_notion(cotizacion.id)
     numero_ref = cotizacion.numero_cotizacion or str(cotizacion.id)
     registrar_auditoria(
         "Creó cotización" if not es_edicion else "Modificó cotización",
@@ -2663,6 +2695,7 @@ def agregar_cliente():
     nuevo = Cliente(**payload)
     db.session.add(nuevo)
     db.session.commit()
+    disparar_sync_cliente_to_notion(nuevo.id)
     return jsonify(
         {
             "id": nuevo.id,
@@ -2693,6 +2726,7 @@ def actualizar_cliente(id):
 
     db.session.add(cliente)
     db.session.commit()
+    disparar_sync_cliente_to_notion(cliente.id)
     return jsonify(
         {
             "id": cliente.id,
@@ -2732,6 +2766,7 @@ def actualizar_estado_cotizacion(id):
 
     cotizacion.estado = estado
     db.session.commit()
+    disparar_sync_cotizacion_to_notion(cotizacion.id)
     registrar_auditoria(
         "Cambió estado de cotización",
         "Cotización",
