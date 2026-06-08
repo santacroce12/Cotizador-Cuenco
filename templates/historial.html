@@ -1,6 +1,58 @@
-{% extends "layout.html" %}
+﻿{% extends "layout.html" %}
 
 {% block content %}
+<style>
+    .historial-actions {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 0.55rem;
+        flex-wrap: wrap;
+    }
+
+    .historial-action-main {
+        display: inline-flex;
+        justify-content: flex-end;
+        gap: 0.55rem;
+        flex-wrap: wrap;
+    }
+
+    .historial-action-main .btn,
+    .historial-action-menu .btn {
+        min-height: 38px;
+        border-radius: 12px;
+        font-weight: 700;
+    }
+
+    .historial-action-menu .dropdown-menu {
+        min-width: 220px;
+        padding: 0.45rem;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 14px;
+        box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+    }
+
+    .historial-action-menu .dropdown-item {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        border-radius: 10px;
+        padding: 0.6rem 0.75rem;
+        font-weight: 600;
+    }
+
+    .historial-action-menu .dropdown-item i {
+        width: 1rem;
+        text-align: center;
+    }
+
+    @media (max-width: 991px) {
+        .historial-actions,
+        .historial-action-main {
+            justify-content: flex-start;
+        }
+    }
+</style>
 <div class="card p-4 page-surface">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="text-dark m-0"><i class="bi bi-clock-history"></i> Historial de Cotizaciones</h2>
@@ -181,7 +233,7 @@ function eliminarCotizacion(id, numeroCotizacion) {
     if (!historialPuedeEliminar) {
         return;
     }
-    const confirmado = window.confirm(`¿Estás seguro de querer borrar por completo la cotización #${numeroCotizacion}? Esta acción no se puede deshacer.`);
+    const confirmado = window.confirm(`Estas seguro de querer borrar por completo la cotizacion #${numeroCotizacion}? Esta accion no se puede deshacer.`);
     if (!confirmado) {
         return;
     }
@@ -203,18 +255,18 @@ function eliminarCotizacion(id, numeroCotizacion) {
                     alert("Solo un administrador puede borrar cotizaciones.");
                     return;
                 }
-                alert(data?.error || "No se pudo borrar la cotización.");
+                alert(data?.error || "No se pudo borrar la cotizacion.");
                 return;
             }
             aplicarFiltros(historialPage);
         })
         .catch(() => {
-            alert("No se pudo borrar la cotización.");
+            alert("No se pudo borrar la cotizacion.");
         });
 }
 
 function clonarCotizacion(id, numeroCotizacion) {
-    const confirmado = window.confirm(`Â¿Crear una copia de la cotizaciÃ³n #${numeroCotizacion} con fecha actual y estado En progreso?`);
+    const confirmado = window.confirm(`Crear una copia de la cotizacion #${numeroCotizacion} con fecha actual y estado En progreso?`);
     if (!confirmado) {
         return;
     }
@@ -232,7 +284,7 @@ function clonarCotizacion(id, numeroCotizacion) {
                     window.location.href = "{{ url_for('login') }}";
                     return;
                 }
-                alert(data?.error || "No se pudo duplicar la cotizaciÃ³n.");
+                alert(data?.error || "No se pudo duplicar la cotizacion.");
                 return;
             }
             const destino = data?.redirect_url || (data?.nueva_id ? `/cotizacion/${data.nueva_id}/editar` : "");
@@ -243,7 +295,7 @@ function clonarCotizacion(id, numeroCotizacion) {
             aplicarFiltros(historialPage);
         })
         .catch(() => {
-            alert("No se pudo duplicar la cotizaciÃ³n.");
+            alert("No se pudo duplicar la cotizacion.");
         });
 }
 
@@ -308,29 +360,51 @@ function aplicarFiltros(page = historialPage) {
                         </td>
                         <td class="text-end fw-bold">${tagMoneda}$ ${totalFormateado}</td>
                         <td class="text-end">
-                            <a href="/cotizacion/${c.id}/editar" class="btn btn-sm btn-edit-custom me-1">
-                                <i class="bi bi-pencil-square"></i> Editar
-                            </a>
-                            <button type="button" class="btn btn-sm btn-outline-warning me-1" onclick="clonarCotizacion(${c.id}, '${numeroCot}')" title="Duplicar cotizacion">
-                                <i class="bi bi-copy"></i>
-                            </button>
-                            <a href="/cotizacion/${c.id}" class="btn btn-sm btn-view-custom me-1">
-                                <i class="bi bi-eye"></i> Ver Online
-                            </a>
-                            <a href="/cotizacion/${c.id}/llave-en-mano" class="btn btn-sm btn-outline-dark me-1">
-                                <i class="bi bi-file-text"></i> Llave en mano
-                            </a>
-                            <a href="/cotizacion/${c.id}/xlsx" class="btn btn-sm btn-excel-custom me-1">
-                                <i class="bi bi-file-earmark-excel"></i> Excel
-                            </a>
-                            <a href="/cotizacion/${c.id}?download=1" class="btn btn-sm btn-pdf-custom">
-                                <i class="bi bi-file-earmark-pdf"></i> PDF
-                            </a>
-                            ${historialPuedeEliminar ? `
-                            <button type="button" class="btn btn-sm btn-delete-custom btn-delete-compact ms-1" onclick="eliminarCotizacion(${c.id}, '${numeroCot}')" title="Borrar cotización">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                            ` : ""}
+                            <div class="historial-actions">
+                                <div class="historial-action-main">
+                                    <a href="/cotizacion/${c.id}/editar" class="btn btn-sm btn-edit-custom">
+                                        <i class="bi bi-pencil-square"></i> Editar
+                                    </a>
+                                    <a href="/cotizacion/${c.id}" class="btn btn-sm btn-view-custom">
+                                        <i class="bi bi-eye"></i> Ver online
+                                    </a>
+                                </div>
+                                <div class="dropdown historial-action-menu">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Mas
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li>
+                                            <button type="button" class="dropdown-item" onclick="clonarCotizacion(${c.id}, '${numeroCot}')">
+                                                <i class="bi bi-copy text-warning"></i> Duplicar
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <a href="/cotizacion/${c.id}/llave-en-mano" class="dropdown-item">
+                                                <i class="bi bi-file-text"></i> Consolidada
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a href="/cotizacion/${c.id}/xlsx" class="dropdown-item">
+                                                <i class="bi bi-file-earmark-excel text-success"></i> Exportar Excel
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a href="/cotizacion/${c.id}?download=1" class="dropdown-item">
+                                                <i class="bi bi-file-earmark-pdf text-danger"></i> Descargar PDF
+                                            </a>
+                                        </li>
+                                        ${historialPuedeEliminar ? `
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <button type="button" class="dropdown-item text-danger" onclick="eliminarCotizacion(${c.id}, '${numeroCot}')">
+                                                <i class="bi bi-trash"></i> Eliminar
+                                            </button>
+                                        </li>
+                                        ` : ""}
+                                    </ul>
+                                </div>
+                            </div>
                         </td>
                     </tr>
                 `;

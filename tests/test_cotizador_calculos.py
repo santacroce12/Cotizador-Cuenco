@@ -703,7 +703,7 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertIn("Nota: La factura se pesificara considerando el TC BNA Ventas Divisa", html)
         self.assertNotIn("Familia:", html)
         self.assertNotIn("cotizador@cuencotech.com", html)
-        self.assertIn("Llave en mano", self.client.get("/historial").get_data(as_text=True))
+        self.assertIn("Consolidada", self.client.get("/historial").get_data(as_text=True))
 
     def test_responsable_inscrito_ve_subtotal_neto_e_iva(self):
         cotizacion_id = self._crear_cotizacion(
