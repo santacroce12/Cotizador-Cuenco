@@ -6,6 +6,11 @@ local_settings.json
 .env
 .venv/
 venv/
+.mcp.json
+.playwright-mcp/
+.ftpquota
+tmp/
+cotizador-fixed-desktop.png
 static/uploads/productos/
 data/*
 !data/.gitkeep

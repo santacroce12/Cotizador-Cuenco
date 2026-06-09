@@ -58,12 +58,12 @@ NOMBRE_FANTASIA = "Cuenco Tech"
 RAZON_SOCIAL = "Cuenco Tech S.A."
 CUIT = "30-71831614-2"
 DOMICILIO = "Rafael Cubillos 2056, M5500 Godoy Cruz, Mendoza"
-DEFAULT_FOLLOWUP_EMAIL = "cotizador@cuencotech.com"
-DEFAULT_SMTP_HOST = "a0021139.ferozo.com"
+DEFAULT_FOLLOWUP_EMAIL = "equipo@example.com"
+DEFAULT_SMTP_HOST = "smtp.example.com"
 DEFAULT_SMTP_PORT = 465
-DEFAULT_SMTP_USERNAME = "cotizador@cuencotech.com"
-DEFAULT_SMTP_FROM = "cotizador@cuencotech.com"
-DEFAULT_APP_BASE_URL = "http://192.168.0.200:9000"
+DEFAULT_SMTP_USERNAME = "usuario@example.com"
+DEFAULT_SMTP_FROM = "usuario@example.com"
+DEFAULT_APP_BASE_URL = "http://localhost:9000"
 DASHBOARD_FIXED_CURRENCY = "USD"
 LOCAL_SETTINGS_PATH = resolver_ruta_configurada(os.getenv("LOCAL_SETTINGS_PATH"), Path(app.root_path) / "local_settings.json")
 

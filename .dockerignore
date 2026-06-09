@@ -1,5 +1,8 @@
 .git
 .gitignore
+.mcp.json
+.playwright-mcp/
+.ftpquota
 __pycache__/
 *.py[cod]
 .venv/
@@ -13,7 +16,7 @@ storage/uploads/productos/
 .codex/
 .agents/
 .aidesigner/
-.mcp.json
+tmp/
 DONWEB_DEPLOY.md
 GUIA_COTIZOCUENCO_PC_LOCAL.md
 tests/

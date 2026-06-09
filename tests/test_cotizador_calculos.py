@@ -563,14 +563,14 @@ class CotizadorCalculosTest(unittest.TestCase):
         cotizacion_id = self._crear_cotizacion()
         cotizacion = self._cotizacion(cotizacion_id)
 
-        with patch.dict(os.environ, {"APP_BASE_URL": "http://192.168.0.200:9000"}):
+        with patch.dict(os.environ, {"APP_BASE_URL": "http://localhost:9000"}):
             self.assertEqual(
                 construir_link_cotizacion(cotizacion, editar=False),
-                f"http://192.168.0.200:9000/cotizacion/{cotizacion_id}",
+                f"http://localhost:9000/cotizacion/{cotizacion_id}",
             )
             self.assertEqual(
                 construir_link_cotizacion(cotizacion, editar=True),
-                f"http://192.168.0.200:9000/cotizacion/{cotizacion_id}/editar",
+                f"http://localhost:9000/cotizacion/{cotizacion_id}/editar",
             )
 
     def test_cliente_exento_no_ve_iva_detallado_pero_el_sistema_lo_calcula(self):
@@ -702,7 +702,7 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertIn("Los precios expresados incluyen IVA.", html)
         self.assertIn("Nota: La factura se pesificara considerando el TC BNA Ventas Divisa", html)
         self.assertNotIn("Familia:", html)
-        self.assertNotIn("cotizador@cuencotech.com", html)
+        self.assertNotIn("usuario@example.com", html)
         self.assertIn("Consolidada", self.client.get("/historial").get_data(as_text=True))
 
     def test_responsable_inscrito_ve_subtotal_neto_e_iva(self):

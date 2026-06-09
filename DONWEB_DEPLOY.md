@@ -63,15 +63,15 @@ Ejemplo:
 {
   "APP_SECRET_KEY": "una-clave-larga-y-aleatoria",
   "ADMIN_SETUP_TOKEN": "otra-clave-larga-solo-para-el-alta-inicial",
-  "SMTP_HOST": "a0021139.ferozo.com",
+  "SMTP_HOST": "smtp.example.com",
   "SMTP_PORT": 465,
   "SMTP_USE_SSL": true,
   "SMTP_USE_TLS": false,
-  "SMTP_USERNAME": "cotizador@cuencotech.com",
+  "SMTP_USERNAME": "usuario@example.com",
   "SMTP_PASSWORD": "TU_PASSWORD_REAL",
-  "SMTP_FROM": "cotizador@cuencotech.com",
-  "APP_BASE_URL": "https://cuencotech.com",
-  "FOLLOWUP_DEFAULT_TO_EMAIL": "jsantacroce@cuencotech.com"
+  "SMTP_FROM": "usuario@example.com",
+  "APP_BASE_URL": "https://cotizador.example.com",
+  "FOLLOWUP_DEFAULT_TO_EMAIL": "equipo@example.com"
 }
 ```
 
