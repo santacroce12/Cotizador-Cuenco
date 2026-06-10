@@ -1,5 +1,6 @@
 import json
 import os
+import notion_service
 import requests
 import tempfile
 import unittest
@@ -801,6 +802,158 @@ class CotizadorCalculosTest(unittest.TestCase):
         html = self.client.get(f"/cotizacion/{cotizacion_id}").get_data(as_text=True)
         self.assertIn("Bonificacion de cierre:", html)
         self.assertIn("- $ 50.00", html)
+
+    def test_sync_cotizacion_a_notion_crea_presupuesto_y_oportunidad_sin_trabajo_si_no_esta_aceptada(self):
+        cotizacion_id = self._crear_cotizacion()
+
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "NOTION_ENABLED": "true",
+                    "NOTION_PRESUPUESTOS_DB_ID": "pres-db",
+                    "NOTION_TRABAJOS_DB_ID": "trab-db",
+                },
+                clear=False,
+            ):
+                with patch.object(notion_service, "sync_cliente_to_notion", return_value="cliente-page"), patch.object(
+                    notion_service, "buscar_page_por_propiedad", return_value=None
+                ), patch.object(
+                    notion_service, "notion_create_page", return_value={"id": "pres-page"}
+                ) as create_page, patch.object(
+                    notion_service, "sync_seguimiento_comercial_from_cotizacion", return_value="seg-page"
+                ) as sync_seguimiento, patch.object(
+                    notion_service, "sync_trabajo_from_cotizacion", return_value="trab-page"
+                ) as sync_trabajo:
+                    result = notion_service.sync_cotizacion_to_notion(cotizacion)
+
+        self.assertEqual(result, "pres-page")
+        self.assertEqual(create_page.call_args.args[0], "pres-db")
+        sync_seguimiento.assert_called_once_with(
+            cotizacion,
+            cliente_page_id="cliente-page",
+            presupuesto_page_id="pres-page",
+        )
+        sync_trabajo.assert_not_called()
+
+    def test_sync_cotizacion_a_notion_crea_trabajo_si_esta_aceptada(self):
+        cotizacion_id = self._crear_cotizacion()
+
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            cotizacion.estado = "Aceptada"
+            db.session.commit()
+
+            with patch.dict(
+                os.environ,
+                {
+                    "NOTION_ENABLED": "true",
+                    "NOTION_PRESUPUESTOS_DB_ID": "pres-db",
+                    "NOTION_TRABAJOS_DB_ID": "trab-db",
+                },
+                clear=False,
+            ):
+                with patch.object(notion_service, "sync_cliente_to_notion", return_value="cliente-page"), patch.object(
+                    notion_service, "buscar_page_por_propiedad", return_value=None
+                ), patch.object(
+                    notion_service, "notion_create_page", return_value={"id": "pres-page"}
+                ), patch.object(
+                    notion_service, "sync_seguimiento_comercial_from_cotizacion", return_value="seg-page"
+                ), patch.object(
+                    notion_service, "sync_trabajo_from_cotizacion", return_value="trab-page"
+                ) as sync_trabajo:
+                    result = notion_service.sync_cotizacion_to_notion(cotizacion)
+
+        self.assertEqual(result, "pres-page")
+        sync_trabajo.assert_called_once_with(cotizacion, "cliente-page")
+
+    def test_sync_seguimiento_comercial_mapea_estado_y_aviso(self):
+        cotizacion_id = self._crear_cotizacion(observacion_cliente="Cliente con necesidad de aprobacion rapida.")
+
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            cotizacion.estado = "Aceptada"
+            db.session.commit()
+
+            with patch.dict(
+                os.environ,
+                {
+                    "NOTION_ENABLED": "true",
+                    "NOTION_SEGUIMIENTO_DB_ID": "seg-db",
+                    "APP_BASE_URL": "http://localhost:9000",
+                },
+                clear=False,
+            ):
+                with patch.object(notion_service, "sync_cliente_to_notion", return_value="cliente-page"), patch.object(
+                    notion_service, "buscar_page_por_propiedad", return_value=None
+                ), patch.object(
+                    notion_service, "notion_create_page", return_value={"id": "seg-page"}
+                ) as create_page:
+                    result = notion_service.sync_seguimiento_comercial_from_cotizacion(
+                        cotizacion,
+                        presupuesto_page_id="pres-page",
+                        aviso_cotizador=True,
+                    )
+
+        self.assertEqual(result, "seg-page")
+        self.assertEqual(create_page.call_args.args[0], "seg-db")
+        properties = create_page.call_args.args[1]
+        self.assertEqual(properties["Estado"]["select"]["name"], "Ganado")
+        self.assertEqual(properties["Etapa comercial"]["select"]["name"], "Ganado")
+        self.assertEqual(properties["Estado cotizador"]["select"]["name"], "Aceptada")
+        self.assertEqual(properties["Presupuesto"]["relation"][0]["id"], "pres-page")
+        self.assertEqual(properties["Cliente"]["relation"][0]["id"], "cliente-page")
+        self.assertEqual(properties["Avisos recibidos"]["number"], 1.0)
+        self.assertIn("Ultimo aviso cotizador", properties)
+        self.assertIn(
+            f"/cotizacion/{cotizacion_id}",
+            properties["Link cotizador"]["url"],
+        )
+        self.assertIn(
+            "Coordinar pase a trabajo operativo / ejecucion.",
+            properties["Proxima accion"]["rich_text"][0]["text"]["content"],
+        )
+
+    def test_recordatorio_dispara_sync_de_seguimiento_comercial(self):
+        cotizacion_id = self._crear_cotizacion()
+
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            cotizacion.seguimiento_activo = True
+            cotizacion.seguimiento_email = "seguimiento@cuencotech.com"
+            cotizacion.seguimiento_cada_dias = 7
+            cotizacion.seguimiento_proximo_envio = cotizador_app.datetime.utcnow() - cotizador_app.timedelta(days=1)
+            db.session.commit()
+
+        with patch.object(cotizador_app, "enviar_mail_recordatorio", return_value=True), patch.object(
+            cotizador_app, "disparar_sync_seguimiento_comercial_to_notion"
+        ) as disparar_sync:
+            with app.app_context():
+                cotizador_app.procesar_recordatorios_vencidos()
+
+        disparar_sync.assert_called_once_with(cotizacion_id, aviso_cotizador=True)
+
+    def test_sync_trabajo_desde_cotizacion_ignora_estados_no_aceptados(self):
+        cotizacion_id = self._crear_cotizacion()
+
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "NOTION_ENABLED": "true",
+                    "NOTION_TRABAJOS_DB_ID": "trab-db",
+                },
+                clear=False,
+            ):
+                with patch.object(notion_service, "notion_create_page") as create_page:
+                    result = notion_service.sync_trabajo_from_cotizacion(cotizacion, "cliente-page")
+
+        self.assertIsNone(result)
+        create_page.assert_not_called()
 
     def test_caso_2_tipo_cambio_guardado_no_se_pisa_con_bna_actual(self):
         cotizacion_id = self._crear_cotizacion()

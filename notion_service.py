@@ -180,6 +180,49 @@ def map_familia_a_notion(familia: str) -> str:
     return familia if familia in permitidas else "Otro"
 
 
+def map_estado_cotizador(valor: str) -> str:
+    valor = (valor or "").strip().lower()
+
+    if valor == "aceptada":
+        return "Aceptada"
+
+    if valor == "rechazada":
+        return "Rechazada"
+
+    if valor == "en progreso":
+        return "En progreso"
+
+    return "En progreso"
+
+
+def map_etapa_comercial_desde_estado(valor: str) -> str:
+    valor = (valor or "").strip().lower()
+
+    if valor == "aceptada":
+        return "Ganado"
+
+    if valor == "rechazada":
+        return "Perdido"
+
+    return "Cotizado"
+
+
+def map_estado_seguimiento_desde_estado(valor: str) -> str:
+    valor = (valor or "").strip().lower()
+
+    if valor == "aceptada":
+        return "Ganado"
+
+    if valor == "rechazada":
+        return "Perdido"
+
+    return "Pendiente"
+
+
+def cotizacion_esta_aceptada(cotizacion) -> bool:
+    return ((getattr(cotizacion, "estado", "") or "").strip().lower() == "aceptada")
+
+
 def construir_link_cotizador(cotizacion_id: int) -> str:
     base_url = (os.getenv("APP_BASE_URL") or "").strip().rstrip("/")
     if not base_url:
@@ -225,6 +268,92 @@ def sync_cliente_to_notion(cliente) -> Optional[str]:
         result = notion_update_page(page_id, properties)
     else:
         result = notion_create_page(database_id, properties)
+
+    if not result:
+        return page_id
+
+    return result.get("id") or page_id
+
+
+def sync_seguimiento_comercial_from_cotizacion(
+    cotizacion,
+    cliente_page_id: Optional[str] = None,
+    presupuesto_page_id: Optional[str] = None,
+    aviso_cotizador: bool = False,
+) -> Optional[str]:
+    if not notion_enabled() or not cotizacion:
+        return None
+
+    seguimiento_db_id = os.getenv("NOTION_SEGUIMIENTO_DB_ID", "").strip()
+    if not seguimiento_db_id:
+        print("[notion] NOTION_SEGUIMIENTO_DB_ID no configurado")
+        return None
+
+    if not cliente_page_id and getattr(cotizacion, "cliente_ref", None):
+        cliente_page_id = sync_cliente_to_notion(cotizacion.cliente_ref)
+
+    id_cotizacion = str(cotizacion.id)
+    numero = cotizacion.numero_cotizacion or f"COT-{cotizacion.id}"
+    link = construir_link_cotizador(cotizacion.id)
+
+    page_id = buscar_page_por_propiedad(seguimiento_db_id, "Numero cotizacion", numero)
+
+    estado_cotizador = map_estado_cotizador(cotizacion.estado)
+    etapa = map_etapa_comercial_desde_estado(cotizacion.estado)
+    estado_seguimiento = map_estado_seguimiento_desde_estado(cotizacion.estado)
+
+    fecha_base = cotizacion.fecha or datetime.utcnow()
+    proximo_seguimiento = fecha_base + timedelta(days=7)
+
+    if estado_cotizador == "Aceptada":
+        proxima_accion = "Coordinar pase a trabajo operativo / ejecucion."
+        probabilidad = 100
+    elif estado_cotizador == "Rechazada":
+        proxima_accion = "Registrar motivo de perdida y evaluar alternativa futura."
+        probabilidad = 0
+    else:
+        proxima_accion = "Contactar al cliente para consultar estado de aprobacion."
+        probabilidad = 50
+
+    titulo = f"{numero} - {cotizacion.cliente or 'Cliente'}"
+
+    properties = {
+        "Seguimiento": title_prop(titulo),
+        "Cliente": relation_prop(cliente_page_id),
+        "Presupuesto": relation_prop(presupuesto_page_id),
+        "Estado": select_prop(estado_seguimiento),
+        "Etapa comercial": select_prop(etapa),
+        "Tipo de oportunidad": select_prop("Cotizacion"),
+        "Estado cotizador": select_prop(estado_cotizador),
+        "Numero cotizacion": text_prop(numero),
+        "Link cotizador": url_prop(link),
+        "Monto estimado": number_prop(cotizacion.total_final or 0),
+        "Moneda": select_prop((cotizacion.moneda or "ARS").upper()),
+        "Probabilidad": number_prop(probabilidad),
+        "Prioridad": select_prop("Media"),
+        "Responsable": text_prop("Comercial"),
+        "Canal": select_prop("WhatsApp"),
+        "Proximo seguimiento": date_prop(proximo_seguimiento),
+        "Proxima accion": text_prop(proxima_accion),
+        "Dolor / necesidad": text_prop(cotizacion.observacion_cliente or ""),
+        "Objecion principal": text_prop("Pendiente de relevar por comercial."),
+        "Resumen comercial": text_prop(
+            f"Cotizacion {numero} para {cotizacion.cliente or ''}. "
+            f"Estado en cotizador: {estado_cotizador}. "
+            f"Familia: {cotizacion.familia or ''}. "
+            f"Total: {(cotizacion.moneda or 'ARS').upper()} {cotizacion.total_final or 0:,.2f}."
+        ),
+        "Origen": select_prop("Cotizador"),
+    }
+
+    if aviso_cotizador:
+        properties["Ultimo aviso cotizador"] = date_prop()
+        properties["Avisos recibidos"] = number_prop(1)
+
+    if page_id:
+        result = notion_update_page(page_id, properties)
+    else:
+        result = notion_create_page(seguimiento_db_id, properties)
 
     if not result:
         return page_id
@@ -282,7 +411,13 @@ def sync_cotizacion_to_notion(cotizacion) -> Optional[str]:
 
     presupuesto_page_id = (result or {}).get("id") or page_id
 
-    if trabajos_db_id:
+    sync_seguimiento_comercial_from_cotizacion(
+        cotizacion,
+        cliente_page_id=cliente_page_id,
+        presupuesto_page_id=presupuesto_page_id,
+    )
+
+    if trabajos_db_id and cotizacion_esta_aceptada(cotizacion):
         sync_trabajo_from_cotizacion(cotizacion, cliente_page_id)
 
     return presupuesto_page_id
@@ -290,7 +425,7 @@ def sync_cotizacion_to_notion(cotizacion) -> Optional[str]:
 
 def sync_trabajo_from_cotizacion(cotizacion, cliente_page_id: Optional[str] = None) -> Optional[str]:
     trabajos_db_id = os.getenv("NOTION_TRABAJOS_DB_ID", "").strip()
-    if not trabajos_db_id:
+    if not trabajos_db_id or not cotizacion or not cotizacion_esta_aceptada(cotizacion):
         return None
 
     id_cotizacion = str(cotizacion.id)
@@ -299,21 +434,13 @@ def sync_trabajo_from_cotizacion(cotizacion, cliente_page_id: Optional[str] = No
 
     page_id = buscar_page_por_propiedad(trabajos_db_id, "ID Cotizacion", id_cotizacion)
 
-    estado_cot = (cotizacion.estado or "").strip().lower()
-    if estado_cot == "aceptada":
-        estado_trabajo = "Aprobado"
-    elif estado_cot == "rechazada":
-        estado_trabajo = "Cancelado"
-    else:
-        estado_trabajo = "Presupuestado"
-
     properties = {
         "Trabajo": title_prop(f"{numero} - {cotizacion.cliente or 'Cliente'}"),
         "Cliente": relation_prop(cliente_page_id),
         "ID Cotizacion": text_prop(id_cotizacion),
         "Numero Cotizacion": text_prop(numero),
         "Tipo de servicio": select_prop("Otro"),
-        "Estado": select_prop(estado_trabajo),
+        "Estado": select_prop("Aprobado"),
         "Prioridad": select_prop("Media"),
         "Responsable": text_prop("Cotizador Cuenco"),
         "Fecha inicio": date_prop(cotizacion.fecha),
