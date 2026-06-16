@@ -2,11 +2,15 @@
 
 {% block content %}
 <style>
-    .invoice-box { max-width: 800px; margin: auto; padding: 30px; border: 1px solid #eee; background: #fff; }
+    .invoice-box { max-width: 920px; margin: auto; padding: 30px; border: 1px solid #eee; background: #fff; }
     .quote-items-table {
         border: 1px solid #c3cfdb;
         table-layout: fixed;
         width: 100%;
+    }
+    .quote-items-wrap {
+        border-radius: 10px;
+        overflow-x: auto;
     }
     .product-img {
         width: 56px;
@@ -35,10 +39,19 @@
         background: #edf3f9;
         border-color: #c3cfdb;
         color: #223247;
+        padding: 0.72rem 0.58rem;
+        vertical-align: top;
+    }
+    .quote-items-table tbody td.col-product {
+        font-size: 0.89rem;
+        font-weight: 600;
+        line-height: 1.28;
+        color: #1d2d40;
     }
     .quote-items-table tbody td.col-detail {
-        font-size: 0.84rem;
-        line-height: 1.35;
+        font-size: 0.8rem;
+        line-height: 1.26;
+        padding: 0.72rem 0.68rem;
     }
     .quote-items-table thead th.col-price-unit,
     .quote-items-table thead th.col-sale-total {
@@ -59,6 +72,17 @@
     }
     .quote-items-table tbody tr:nth-child(even) td {
         background: #e6edf5;
+    }
+    .quote-detail-text {
+        width: 100%;
+        margin: 0;
+        color: #273b52;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+    .quote-detail-placeholder {
+        color: #72859a;
+        font-style: italic;
     }
     .table td { border-bottom: 1px solid #c3cfdb; }
     .quote-totals-card {
@@ -131,15 +155,65 @@
         letter-spacing: -0.02em;
     }
     .fw-bold { font-weight: bold; }
+    @page {
+        size: A4;
+        margin: 0;
+    }
+    @media (max-width: 991.98px) {
+        .invoice-box {
+            padding: 24px 18px;
+        }
+        .quote-items-table {
+            min-width: 760px;
+        }
+    }
     @media print {
         .no-print, .btn, .container.no-print, nav.navbar { display: none !important; }
-        body { background: white !important; }
-        .invoice-box { box-shadow: none !important; border: none !important; margin: 0 !important; width: 100% !important; }
+        html,
+        body {
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .invoice-box {
+            box-shadow: none !important;
+            border: none !important;
+            margin: 0 !important;
+            max-width: none !important;
+            width: 100% !important;
+            padding: 10mm !important;
+            box-sizing: border-box;
+        }
+        .quote-items-wrap {
+            overflow: visible !important;
+            border-radius: 0 !important;
+        }
+        .quote-items-table {
+            font-size: 0.74rem;
+            min-width: 0 !important;
+        }
         thead th {
             background-color: #dbe4ee !important;
             color: #111111 !important;
+            font-size: 0.66rem;
+            padding: 0.42rem 0.24rem !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+        }
+        .quote-items-table tbody td {
+            padding: 0.46rem 0.34rem;
+        }
+        .quote-items-table tbody td.col-product,
+        .quote-items-table tbody td.col-detail,
+        .quote-items-table tbody td.col-price-unit,
+        .quote-items-table tbody td.col-sale-total {
+            font-size: 0.7rem;
+            line-height: 1.2;
+        }
+        .product-img {
+            width: 42px;
+            height: 42px;
+            padding: 3px;
         }
     }
 </style>
@@ -147,7 +221,7 @@
 <div class="container no-print text-center my-4">
     <button onclick="window.print()" class="btn btn-pdf-custom btn-lg px-5">Guardar como PDF / Imprimir</button>
     <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-edit-custom btn-lg">Editar</a>
-    <a href="{{ url_for('ver_cotizacion_llave_en_mano', id=cot.id) }}" class="btn btn-outline-dark btn-lg">Llave en mano</a>
+    <a href="{{ url_for('ver_cotizacion_llave_en_mano', id=cot.id) }}" class="btn btn-outline-dark btn-lg">Consolidada</a>
     <a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="btn btn-excel-custom btn-lg">Exportar Excel</a>
     <a href="/historial" class="btn btn-outline-secondary btn-lg">Volver al Historial</a>
 </div>
@@ -164,9 +238,6 @@
         <div class="col-6 text-end">
             <h2 class="h4 quote-doc-number">PRESUPUESTO #{{ cot.numero_cotizacion or ("%04d" | format(cot.id)) }}</h2>
             <p class="fw-bold mb-1">Moneda: {{ "Pesos Argentinos" if cot.moneda == "ARS" else "Dolares Estadounidenses" }}</p>
-            {% if cot.tipo_cambio_usado %}
-            <p class="text-muted small mb-1">Tipo de cambio usado: 1 USD = $ {{ "{:,.4f}".format(cot.tipo_cambio_usado) }} ARS</p>
-            {% endif %}
             <p class="mb-0">Fecha: {{ cot.fecha.strftime('%d/%m/%Y') }}</p>
         </div>
     </div>
@@ -198,22 +269,23 @@
         {% endif %}
     </div>
     {% endif %}
-    <table class="table mt-4 quote-items-table">
+    <div class="table-responsive quote-items-wrap mt-4">
+    <table class="table quote-items-table mb-0">
         <colgroup>
-            <col style="width: 12%;">
+            <col style="width: 8%;">
             {% if mostrar_descuento %}
-            <col style="width: 22%;">
             <col style="width: 18%;">
-            <col style="width: 9%;">
-            <col style="width: 10%;">
+            <col style="width: 30%;">
+            <col style="width: 8%;">
+            <col style="width: 8%;">
             <col style="width: 13%;">
-            <col style="width: 16%;">
+            <col style="width: 15%;">
             {% else %}
-            <col style="width: 24%;">
-            <col style="width: 20%;">
-            <col style="width: 11%;">
-            <col style="width: 16%;">
-            <col style="width: 17%;">
+            <col style="width: 21%;">
+            <col style="width: 35%;">
+            <col style="width: 8%;">
+            <col style="width: 13%;">
+            <col style="width: 15%;">
             {% endif %}
         </colgroup>
         <thead style="background-color: #000; color: #fff;">
@@ -239,6 +311,7 @@
                     {% set item_img_src = url_for('static', filename=item.imagen_url) %}
                 {% endif %}
             {% endif %}
+            {% set detail_text = (item.detalle or "")|trim %}
             <tr>
                 <td class="text-center">
                     <img
@@ -249,8 +322,14 @@
                         onerror="this.onerror=null;this.src='{{ url_for('static', filename='placeholder_product.png') }}';"
                     >
                 </td>
-                <td>{{ item.descripcion }}</td>
-                <td class="col-detail">{{ item.detalle or "-" }}</td>
+                <td class="col-product">{{ item.descripcion }}</td>
+                <td class="col-detail">
+                    {% if detail_text %}
+                    <div class="quote-detail-text">{{ detail_text }}</div>
+                    {% else %}
+                    <span class="quote-detail-placeholder">Sin detalle adicional</span>
+                    {% endif %}
+                </td>
                 <td class="text-center">{{ (item.cantidad or 0)|int }}</td>
                 {% if mostrar_descuento %}
                 <td class="text-center">
@@ -272,6 +351,7 @@
             {% endfor %}
         </tbody>
     </table>
+    </div>
     <div class="row justify-content-end">
         <div class="col-5">
             <div class="p-3 quote-totals-card">

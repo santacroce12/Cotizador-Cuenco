@@ -26,7 +26,6 @@ cp .env.example .env
 Completar como mínimo:
 
 - `APP_SECRET_KEY`
-- `ADMIN_SETUP_TOKEN`
 - `APP_BASE_URL`
 - `SMTP_PASSWORD`
 
@@ -96,8 +95,8 @@ Respaldar al menos:
 
 ## 9. Primer acceso
 
-Si la base está vacía, entrá a:
+Entrar a:
 
-- `/setup-admin`
+- `/login`
 
-Ahí se crea el primer administrador usando `ADMIN_SETUP_TOKEN`.
+El sistema usa el login normal con usuario y contraseña.

@@ -46,7 +46,6 @@ Usa `local_settings.example.json` como base y cargale los valores reales de prod
 Campos minimos recomendados:
 
 - `APP_SECRET_KEY`
-- `ADMIN_SETUP_TOKEN`
 - `APP_BASE_URL`
 - `SMTP_HOST`
 - `SMTP_PORT`
@@ -62,7 +61,6 @@ Ejemplo:
 ```json
 {
   "APP_SECRET_KEY": "una-clave-larga-y-aleatoria",
-  "ADMIN_SETUP_TOKEN": "otra-clave-larga-solo-para-el-alta-inicial",
   "SMTP_HOST": "smtp.example.com",
   "SMTP_PORT": 465,
   "SMTP_USE_SSL": true,
@@ -97,9 +95,8 @@ Si el proceso web no puede escribir, vas a tener errores al:
 ## 6. Primer inicio
 
 1. Reiniciar la aplicacion desde el panel.
-2. Entrar a `/setup-admin`.
-3. Crear el primer usuario usando `ADMIN_SETUP_TOKEN`.
-4. Ese primer usuario queda como administrador automaticamente.
+2. Entrar a `/login`.
+3. Usar una cuenta administradora existente.
 
 ## 7. Si sigue apareciendo `403 Forbidden`
 
@@ -115,7 +112,6 @@ Eso normalmente significa una de estas cosas:
 Una vez publicada, estas URLs deberian responder:
 
 - `/login`
-- `/setup-admin` si no hay usuarios
 - `/`
 - `/historial`
 - `/dashboard`

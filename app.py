@@ -17,7 +17,6 @@ import jwt
 import requests
 import urllib3
 from flask import Flask, Response, flash, g, jsonify, redirect, render_template, request, url_for
-from notion_service import notion_enabled, sync_cliente_to_notion, sync_cotizacion_to_notion
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -195,7 +194,7 @@ class Cotizacion(db.Model):
     tipo_cambio_usado = db.Column(db.Float)
     condicion_iva = db.Column(db.String(50))
     condicion_cotizacion = db.Column(db.Text)
-    forma_pago = db.Column(db.String(50))
+    forma_pago = db.Column(db.String(120))
     observacion_cliente = db.Column(db.Text)
     carga_fiscal_pct = db.Column(db.Float, default=0.0)
     carga_fiscal_monto = db.Column(db.Float, default=0.0)
@@ -569,8 +568,10 @@ def normalizar_iva_venta(valor, default=21.0):
 
 
 def normalizar_forma_pago(valor):
-    valor = (valor or "").strip()
-    return valor if valor in FORMAS_PAGO_COTIZACION else "A convenir"
+    valor = re.sub(r"\s+", " ", (valor or "").strip())
+    if not valor:
+        return "A convenir"
+    return valor[:120]
 
 
 def construir_desglose_iva_cotizacion(cotizacion):
@@ -803,6 +804,26 @@ def obtener_usuario_desde_token(token):
     return db.session.get(Usuario, data.get("user_id"))
 
 
+def obtener_integracion_api_key():
+    return str(
+        os.getenv("INTEGRACION_API_KEY")
+        or LOCAL_SETTINGS.get("INTEGRACION_API_KEY")
+        or ""
+    ).strip()
+
+
+def autenticacion_integracion_valida():
+    api_key = obtener_integracion_api_key()
+    if not api_key:
+        return False
+
+    header_key = (request.headers.get("X-API-Key") or "").strip()
+    auth_header = (request.headers.get("Authorization") or "").strip()
+    bearer_key = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+
+    return bool(header_key and header_key == api_key) or bool(bearer_key and bearer_key == api_key)
+
+
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -822,6 +843,24 @@ def token_required(f):
             return redirect(url_for("login", next=request.path))
         g.current_user = current_user
         return f(*args, **kwargs)
+
+    return decorated
+
+
+def integration_token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.cookies.get("x-access-token")
+        current_user = obtener_usuario_desde_token(token)
+        if current_user:
+            g.current_user = current_user
+            return f(*args, **kwargs)
+
+        if autenticacion_integracion_valida():
+            g.integration_request = True
+            return f(*args, **kwargs)
+
+        return jsonify({"error": "auth_required"}), 401
 
     return decorated
 
@@ -863,6 +902,9 @@ with app.app_context():
         if "already exists" not in str(exc).lower():
             raise
         db.session.rollback()
+    for tabla_obsoleta in ("actividad_crm", "oportunidad_crm"):
+        db.session.execute(db.text(f"DROP TABLE IF EXISTS {tabla_obsoleta}"))
+    db.session.commit()
     columnas_item = [col[1] for col in db.session.execute(db.text("PRAGMA table_info(item_cotizacion)")).fetchall()]
     if "detalle" not in columnas_item:
         db.session.execute(db.text("ALTER TABLE item_cotizacion ADD COLUMN detalle TEXT"))
@@ -1203,14 +1245,6 @@ def auth_cookie_kwargs():
     }
 
 
-def no_hay_usuarios():
-    return Usuario.query.count() == 0
-
-
-def obtener_admin_setup_token():
-    return str(os.getenv("ADMIN_SETUP_TOKEN") or LOCAL_SETTINGS.get("ADMIN_SETUP_TOKEN") or "").strip()
-
-
 def buscar_usuario_por_username(username):
     username = (username or "").strip()
     if not username:
@@ -1239,36 +1273,6 @@ def registrar_auditoria(accion, tipo_entidad, entidad_id=None, entidad_ref=None,
     except Exception as exc:
         db.session.rollback()
         print(f"[auditoria] No se pudo registrar la accion '{accion}': {exc}")
-
-
-def _sync_cliente_to_notion_por_id(cliente_id):
-    try:
-        with app.app_context():
-            cliente = db.session.get(Cliente, cliente_id)
-            sync_cliente_to_notion(cliente)
-    except Exception as exc:
-        print(f"[notion] Error sincronizando cliente {cliente_id}: {exc}")
-
-
-def _sync_cotizacion_to_notion_por_id(cotizacion_id):
-    try:
-        with app.app_context():
-            cotizacion = db.session.get(Cotizacion, cotizacion_id)
-            sync_cotizacion_to_notion(cotizacion)
-    except Exception as exc:
-        print(f"[notion] Error sincronizando cotizacion {cotizacion_id}: {exc}")
-
-
-def disparar_sync_cliente_to_notion(cliente_id):
-    if not notion_enabled() or not cliente_id:
-        return
-    threading.Thread(target=_sync_cliente_to_notion_por_id, args=(cliente_id,), daemon=True).start()
-
-
-def disparar_sync_cotizacion_to_notion(cotizacion_id):
-    if not notion_enabled() or not cotizacion_id:
-        return
-    threading.Thread(target=_sync_cotizacion_to_notion_por_id, args=(cotizacion_id,), daemon=True).start()
 
 
 @app.errorhandler(RequestEntityTooLarge)
@@ -1408,6 +1412,58 @@ def validar_payload_cliente(data, cliente_actual=None):
         "condicion_iva": (data.get("condicion_iva") or "Consumidor Final").strip() or "Consumidor Final",
     }
     return payload, None
+
+
+def serializar_cliente(cliente):
+    return {
+        "id": cliente.id,
+        "nombre": cliente.nombre,
+        "razon_social": cliente.razon_social,
+        "cuit": cliente.cuit,
+        "domicilio": cliente.domicilio,
+        "sector": cliente.sector,
+        "subsector": cliente.subsector,
+        "email": cliente.email,
+        "telefono": cliente.telefono,
+        "condicion_iva": cliente.condicion_iva,
+        "cotizaciones_count": len(cliente.cotizaciones or []),
+    }
+
+
+def serializar_item_cotizacion(item):
+    return {
+        "id": item.id,
+        "descripcion": item.descripcion,
+        "detalle": item.detalle,
+        "cantidad": item.cantidad,
+        "precio_venta": item.precio_venta,
+        "subtotal": item.subtotal,
+        "iva_item": item.iva_item,
+    }
+
+
+def serializar_cotizacion(cotizacion, incluir_items=False):
+    payload = {
+        "id": cotizacion.id,
+        "numero_cotizacion": cotizacion.numero_cotizacion or str(cotizacion.id).zfill(4),
+        "estado": normalizar_estado_cotizacion(cotizacion.estado) or "En progreso",
+        "cliente": cotizacion.cliente,
+        "cliente_id": cotizacion.cliente_id,
+        "cliente_nombre": (cotizacion.cliente_ref.nombre if cotizacion.cliente_ref else cotizacion.cliente) or "Sin Cliente",
+        "cliente_cuit": cotizacion.cliente_cuit or (cotizacion.cliente_ref.cuit if cotizacion.cliente_ref else None),
+        "familia": cotizacion.familia or "",
+        "fecha": cotizacion.fecha.isoformat() if cotizacion.fecha else None,
+        "moneda": cotizacion.moneda or "ARS",
+        "total_neto": cotizacion.total_neto or 0.0,
+        "total_iva": cotizacion.total_iva or 0.0,
+        "total_final": cotizacion.total_final or 0.0,
+        "condicion_iva": cotizacion.condicion_iva,
+        "forma_pago": cotizacion.forma_pago,
+        "observacion_cliente": cotizacion.observacion_cliente,
+    }
+    if incluir_items:
+        payload["items"] = [serializar_item_cotizacion(item) for item in cotizacion.items]
+    return payload
 
 
 def parsear_entero_positivo(valor, default=None):
@@ -2383,7 +2439,6 @@ def persistir_cotizacion_desde_form(cotizacion=None):
 
     db.session.add(cotizacion)
     db.session.commit()
-    disparar_sync_cotizacion_to_notion(cotizacion.id)
     numero_ref = cotizacion.numero_cotizacion or str(cotizacion.id)
     registrar_auditoria(
         "Creó cotización" if not es_edicion else "Modificó cotización",
@@ -2415,57 +2470,8 @@ def api_tipo_cambio_oficial():
     return jsonify(payload), status
 
 
-@app.route("/setup-admin", methods=["GET", "POST"])
-def setup_admin():
-    if not no_hay_usuarios():
-        return redirect(url_for("login"))
-
-    error = None
-    setup_token_configurado = bool(obtener_admin_setup_token())
-    if request.method == "POST":
-        setup_token = (request.form.get("setup_token") or "").strip()
-        username = (request.form.get("username") or "").strip()
-        nombre_completo = (request.form.get("nombre_completo") or "").strip()
-        password = request.form.get("password") or ""
-        password_confirm = request.form.get("password_confirm") or ""
-        admin_setup_token = obtener_admin_setup_token()
-
-        if not admin_setup_token:
-            error = "El alta inicial esta deshabilitada hasta configurar ADMIN_SETUP_TOKEN."
-        elif setup_token != admin_setup_token:
-            error = "La clave de instalacion es invalida."
-        elif not username or not password:
-            error = "Usuario y contraseña son obligatorios."
-        elif buscar_usuario_por_username(username):
-            error = "Ese usuario ya existe."
-        elif password != password_confirm:
-            error = "Las contraseñas no coinciden."
-        elif len(password) < 8:
-            error = "La contraseña debe tener al menos 8 caracteres."
-        else:
-            nuevo = Usuario(username=username, nombre_completo=nombre_completo or None, is_admin=True)
-            nuevo.set_password(password)
-            db.session.add(nuevo)
-            db.session.commit()
-            registrar_auditoria(
-                "Creo usuario inicial",
-                "Usuario",
-                entidad_id=nuevo.id,
-                entidad_ref=nuevo.username,
-                detalle="Alta inicial del cotizador como administrador.",
-                usuario=nuevo,
-                username=nuevo.username,
-            )
-            return redirect(url_for("login"))
-
-    return render_template("setup_admin.html", error=error, setup_token_configurado=setup_token_configurado)
-
-
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if no_hay_usuarios():
-        return redirect(url_for("setup_admin"))
-
     token = request.cookies.get("x-access-token")
     if token and obtener_usuario_desde_token(token):
         return redirect(url_for("index"))
@@ -2695,7 +2701,6 @@ def agregar_cliente():
     nuevo = Cliente(**payload)
     db.session.add(nuevo)
     db.session.commit()
-    disparar_sync_cliente_to_notion(nuevo.id)
     return jsonify(
         {
             "id": nuevo.id,
@@ -2726,7 +2731,6 @@ def actualizar_cliente(id):
 
     db.session.add(cliente)
     db.session.commit()
-    disparar_sync_cliente_to_notion(cliente.id)
     return jsonify(
         {
             "id": cliente.id,
@@ -2741,6 +2745,130 @@ def actualizar_cliente(id):
             "condicion_iva": cliente.condicion_iva,
         }
     ), 200
+
+
+@app.route("/api/integracion/clientes", methods=["GET"])
+@integration_token_required
+def listar_clientes_integracion():
+    q = (request.args.get("q") or "").strip()
+    limit = min(parsear_entero_positivo(request.args.get("limit"), default=50) or 50, 200)
+
+    query = Cliente.query
+    if q:
+        patron = f"%{q}%"
+        query = query.filter(
+            or_(
+                Cliente.nombre.ilike(patron),
+                Cliente.razon_social.ilike(patron),
+                Cliente.cuit.ilike(patron),
+                Cliente.email.ilike(patron),
+                Cliente.telefono.ilike(patron),
+            )
+        )
+
+    items = query.order_by(func.lower(Cliente.nombre).asc()).limit(limit).all()
+    return jsonify({"items": [serializar_cliente(cliente) for cliente in items]})
+
+
+@app.route("/api/integracion/clientes", methods=["POST"])
+@integration_token_required
+def agregar_cliente_integracion():
+    data = request.get_json(silent=True) or {}
+    payload, error = validar_payload_cliente(data)
+    if error:
+        return jsonify({"error": error}), 400
+
+    nuevo = Cliente(**payload)
+    db.session.add(nuevo)
+    db.session.commit()
+    return jsonify(serializar_cliente(nuevo)), 201
+
+
+@app.route("/api/integracion/buscar")
+@integration_token_required
+def buscar_integracion():
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify({"error": "q_required"}), 400
+
+    patron = f"%{q}%"
+    clientes = (
+        Cliente.query.filter(
+            or_(
+                Cliente.nombre.ilike(patron),
+                Cliente.razon_social.ilike(patron),
+                Cliente.cuit.ilike(patron),
+                Cliente.email.ilike(patron),
+                Cliente.telefono.ilike(patron),
+            )
+        )
+        .order_by(func.lower(Cliente.nombre).asc())
+        .limit(10)
+        .all()
+    )
+    cotizaciones = (
+        Cotizacion.query.outerjoin(Cliente, Cotizacion.cliente_id == Cliente.id)
+        .filter(
+            or_(
+                Cotizacion.numero_cotizacion.ilike(patron),
+                Cotizacion.cliente.ilike(patron),
+                Cotizacion.cliente_razon_social.ilike(patron),
+                Cotizacion.cliente_cuit.ilike(patron),
+                Cliente.nombre.ilike(patron),
+                Cliente.razon_social.ilike(patron),
+                Cliente.cuit.ilike(patron),
+            )
+        )
+        .order_by(Cotizacion.fecha.desc(), Cotizacion.id.desc())
+        .limit(10)
+        .all()
+    )
+
+    return jsonify(
+        {
+            "query": q,
+            "clientes": [serializar_cliente(cliente) for cliente in clientes],
+            "cotizaciones": [serializar_cotizacion(cotizacion) for cotizacion in cotizaciones],
+        }
+    )
+
+
+@app.route("/api/integracion/cotizaciones")
+@integration_token_required
+def listar_cotizaciones_integracion():
+    q = (request.args.get("q") or "").strip()
+    estado = normalizar_estado_cotizacion(request.args.get("estado"))
+    cliente_id = parsear_entero_positivo(request.args.get("cliente_id"))
+    limit = min(parsear_entero_positivo(request.args.get("limit"), default=50) or 50, 200)
+
+    query = Cotizacion.query.outerjoin(Cliente, Cotizacion.cliente_id == Cliente.id)
+    if q:
+        patron = f"%{q}%"
+        query = query.filter(
+            or_(
+                Cotizacion.numero_cotizacion.ilike(patron),
+                Cotizacion.cliente.ilike(patron),
+                Cotizacion.cliente_razon_social.ilike(patron),
+                Cotizacion.cliente_cuit.ilike(patron),
+                Cliente.nombre.ilike(patron),
+                Cliente.razon_social.ilike(patron),
+                Cliente.cuit.ilike(patron),
+            )
+        )
+    if estado:
+        query = query.filter(Cotizacion.estado == estado)
+    if cliente_id:
+        query = query.filter(Cotizacion.cliente_id == cliente_id)
+
+    items = query.order_by(Cotizacion.fecha.desc(), Cotizacion.id.desc()).limit(limit).all()
+    return jsonify({"items": [serializar_cotizacion(cotizacion) for cotizacion in items]})
+
+
+@app.route("/api/integracion/cotizaciones/<int:id>")
+@integration_token_required
+def detalle_cotizacion_integracion(id):
+    cotizacion = Cotizacion.query.get_or_404(id)
+    return jsonify(serializar_cotizacion(cotizacion, incluir_items=True))
 
 
 @app.before_request
@@ -2766,7 +2894,6 @@ def actualizar_estado_cotizacion(id):
 
     cotizacion.estado = estado
     db.session.commit()
-    disparar_sync_cotizacion_to_notion(cotizacion.id)
     registrar_auditoria(
         "Cambió estado de cotización",
         "Cotización",

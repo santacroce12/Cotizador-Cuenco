@@ -167,6 +167,22 @@
         padding-right: 2.2rem;
     }
 
+    .cotizador-decimal-input {
+        font-variant-numeric: tabular-nums;
+    }
+
+    .forma-pago-grid {
+        display: grid;
+        grid-template-columns: minmax(180px, 0.75fr) minmax(260px, 1.2fr) minmax(180px, 0.75fr);
+        gap: 0.85rem;
+        align-items: end;
+    }
+
+    .forma-pago-field {
+        display: grid;
+        gap: 0.35rem;
+    }
+
     .cotizador-item-pill {
         min-height: 76px;
         border-radius: 14px;
@@ -340,6 +356,10 @@
         }
 
         .cotizador-item-content {
+            grid-template-columns: 1fr;
+        }
+
+        .forma-pago-grid {
             grid-template-columns: 1fr;
         }
 
@@ -576,14 +596,50 @@
             </div>
             <div class="card-body">
                 <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold small text-muted text-uppercase">Forma de pago</label>
-                        <select name="forma_pago" id="forma_pago" class="form-select">
-                            {% set forma_pago_actual = cotizacion.forma_pago if cotizacion and cotizacion.forma_pago else 'A convenir' %}
+                    <div class="col-12">
+                        {% set forma_pago_actual = cotizacion.forma_pago if cotizacion and cotizacion.forma_pago else 'A convenir' %}
+                        {% set forma_pago_es_anticipo = forma_pago_actual.lower().startswith('anticipo') %}
+                        {% set forma_pago_es_predefinida = forma_pago_actual in formas_pago_cotizacion %}
+                        <input type="hidden" name="forma_pago" id="forma_pago" value="{{ forma_pago_actual }}" data-default-personalizado="{% if not cotizacion %}1{% else %}0{% endif %}">
+                        <div class="forma-pago-grid">
+                            <div class="forma-pago-field">
+                                <label class="form-label fw-bold small text-muted text-uppercase mb-0">Forma de pago</label>
+                                <select id="forma_pago_tipo" class="form-select" onchange="actualizarFormaPagoUI()">
+                                    <option value="Personalizado" {% if not cotizacion or (not forma_pago_es_predefinida and not forma_pago_es_anticipo) %}selected{% endif %}>Personalizado</option>
+                                    <option value="Anticipo" {% if forma_pago_es_anticipo %}selected{% endif %}>Anticipo</option>
                             {% for forma in formas_pago_cotizacion %}
-                            <option value="{{ forma }}" {% if forma_pago_actual == forma %}selected{% endif %}>{{ forma }}</option>
+                                    <option value="{{ forma }}" {% if cotizacion and forma_pago_actual == forma %}selected{% endif %}>{{ forma }}</option>
                             {% endfor %}
-                        </select>
+                                </select>
+                            </div>
+                            <div class="forma-pago-field" id="forma_pago_personalizada_wrap">
+                                <label class="form-label fw-bold small text-muted text-uppercase mb-0">Detalle personalizado</label>
+                                <input
+                                    type="text"
+                                    id="forma_pago_personalizada"
+                                    class="form-control"
+                                    value="{% if not cotizacion or (not forma_pago_es_predefinida and not forma_pago_es_anticipo) %}{{ forma_pago_actual }}{% endif %}"
+                                    placeholder="Ej: A convenir, transferencia, 30/60 dias..."
+                                    oninput="sincronizarFormaPago()"
+                                >
+                            </div>
+                            <div class="forma-pago-field d-none" id="forma_pago_anticipo_wrap">
+                                <label class="form-label fw-bold small text-muted text-uppercase mb-0">% anticipo</label>
+                                <div class="input-group">
+                                    <input
+                                        type="text"
+                                        id="forma_pago_anticipo_pct"
+                                        class="form-control cotizador-decimal-input text-end"
+                                        inputmode="decimal"
+                                        autocomplete="off"
+                                        placeholder="0 a 100"
+                                        onfocus="seleccionarContenidoInput(this)"
+                                        oninput="validarPorcentaje(this); sincronizarFormaPago()"
+                                    >
+                                    <span class="input-group-text">%</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-md-8">
                         <label class="form-label fw-bold small text-muted text-uppercase">Condiciones comerciales</label>
@@ -601,14 +657,16 @@
                         <div class="input-group">
                             <span class="input-group-text">$</span>
                             <input
-                                type="number"
+                                type="text"
                                 name="bonificacion_cierre_monto"
                                 id="bonificacion_cierre_monto"
-                                class="form-control"
+                                class="form-control cotizador-decimal-input"
+                                inputmode="decimal"
+                                autocomplete="off"
                                 min="0"
-                                step="0.01"
-                                placeholder="0.00"
+                                placeholder="Monto"
                                 value="{{ '%.2f'|format(cotizacion.bonificacion_cierre_monto or 0) if cotizacion and (cotizacion.bonificacion_cierre_monto or 0) > 0 else '' }}"
+                                onfocus="seleccionarContenidoInput(this)"
                                 oninput="validarPositivo(this); calcularTodo()"
                             >
                         </div>
@@ -823,6 +881,7 @@ const placeholderProductUrl = "{{ url_for('static', filename='placeholder_produc
 const itemsPrecargados = {{ items_precargados|default([], true)|tojson }};
 const tipoCambioUrl = "{{ url_for('api_tipo_cambio_oficial') }}";
 const tipoCambioGuardado = {{ tipo_cambio_guardado|tojson }};
+const formasPagoPredefinidas = {{ formas_pago_cotizacion|tojson }};
 const cotizadorDraftKey = "cuencotech:cotizacion:draft:{{ 'edit:' ~ cotizacion.id if modo_edicion else 'new' }}";
 const cotizadorPendingDraftKey = "cuencotech:cotizacion:pending-draft-key";
 let draftSaveTimer = null;
@@ -1071,6 +1130,11 @@ function aplicarBorradorCotizacion(draft) {
     setValue("#condicion_iva", draft.condicion_iva);
     setValue("#input_cliente_contacto", draft.cliente_contacto);
     setValue("#forma_pago", draft.forma_pago);
+    const formaPagoInput = document.getElementById("forma_pago");
+    if (formaPagoInput) {
+        formaPagoInput.dataset.defaultPersonalizado = "0";
+    }
+    inicializarFormaPagoDesdeValor();
     setValue("#condicion_cotizacion", formatearCondicionesCotizacionParaTextarea(draft.condicion_cotizacion));
     setValue("#observacion_cliente", draft.observacion_cliente);
     setValue("#bonificacion_cierre_monto", draft.bonificacion_cierre_monto);
@@ -1659,6 +1723,123 @@ function parseNumero(valor, defaultValue = 0) {
     return Number.isFinite(numero) ? numero : defaultValue;
 }
 
+function seleccionarContenidoInput(input) {
+    window.requestAnimationFrame(() => input.select());
+}
+
+function tieneDato(data, key) {
+    return Object.prototype.hasOwnProperty.call(data, key);
+}
+
+function valorCampoNumerico(data, key, fallback = "", mostrarCero = false) {
+    if (!tieneDato(data, key) || data[key] === null || data[key] === undefined) {
+        return fallback;
+    }
+    const raw = String(data[key]).trim();
+    if (!raw) {
+        return "";
+    }
+    const numero = parseNumero(raw, NaN);
+    if (!Number.isFinite(numero)) {
+        return "";
+    }
+    if (!mostrarCero && Math.abs(numero) < 0.000001) {
+        return "";
+    }
+    return raw;
+}
+
+function extraerPorcentajeAnticipo(texto) {
+    const match = String(texto || "").match(/anticipo\s+([0-9]+(?:[\.,][0-9]+)?)\s*%/i);
+    if (!match) {
+        return "";
+    }
+    const numero = Math.min(100, Math.max(0, parseNumero(match[1], 0)));
+    return Number.isInteger(numero) ? String(numero) : String(numero);
+}
+
+function sincronizarFormaPago() {
+    const hidden = document.getElementById("forma_pago");
+    const tipo = document.getElementById("forma_pago_tipo")?.value || "Personalizado";
+    const personalizada = document.getElementById("forma_pago_personalizada");
+    const anticipo = document.getElementById("forma_pago_anticipo_pct");
+    if (!hidden) {
+        return;
+    }
+
+    if (tipo === "Anticipo") {
+        const porcentaje = String(anticipo?.value || "").trim();
+        hidden.value = porcentaje ? `Anticipo ${porcentaje.replace(",", ".")}%` : "Anticipo";
+    } else if (tipo === "Personalizado") {
+        hidden.value = (personalizada?.value || "").trim() || "A convenir";
+    } else {
+        hidden.value = tipo;
+    }
+    programarGuardarBorradorCotizacion();
+}
+
+function actualizarFormaPagoUI() {
+    const tipo = document.getElementById("forma_pago_tipo")?.value || "Personalizado";
+    const personalizadaWrap = document.getElementById("forma_pago_personalizada_wrap");
+    const anticipoWrap = document.getElementById("forma_pago_anticipo_wrap");
+    if (personalizadaWrap) {
+        personalizadaWrap.classList.toggle("d-none", tipo !== "Personalizado");
+    }
+    if (anticipoWrap) {
+        anticipoWrap.classList.toggle("d-none", tipo !== "Anticipo");
+    }
+    sincronizarFormaPago();
+}
+
+function inicializarFormaPagoDesdeValor() {
+    const hidden = document.getElementById("forma_pago");
+    const tipo = document.getElementById("forma_pago_tipo");
+    const personalizada = document.getElementById("forma_pago_personalizada");
+    const anticipo = document.getElementById("forma_pago_anticipo_pct");
+    const valor = (hidden?.value || "").trim() || "A convenir";
+    if (!tipo) {
+        return;
+    }
+
+    const porcentajeAnticipo = extraerPorcentajeAnticipo(valor);
+    if (hidden?.dataset.defaultPersonalizado === "1") {
+        tipo.value = "Personalizado";
+        if (personalizada) {
+            personalizada.value = valor;
+        }
+    } else if (/^anticipo\b/i.test(valor)) {
+        tipo.value = "Anticipo";
+        if (anticipo) {
+            anticipo.value = porcentajeAnticipo;
+        }
+    } else if (formasPagoPredefinidas.includes(valor)) {
+        tipo.value = valor;
+    } else {
+        tipo.value = "Personalizado";
+        if (personalizada) {
+            personalizada.value = valor;
+        }
+    }
+    actualizarFormaPagoUI();
+}
+
+function validarFormaPagoAntesDeEnviar() {
+    sincronizarFormaPago();
+    const tipo = document.getElementById("forma_pago_tipo")?.value || "Personalizado";
+    const anticipo = document.getElementById("forma_pago_anticipo_pct");
+    if (tipo !== "Anticipo") {
+        return true;
+    }
+    const raw = String(anticipo?.value || "").trim();
+    const numero = parseNumero(raw, NaN);
+    if (!raw || !Number.isFinite(numero) || numero < 0 || numero > 100) {
+        alert("Carga un porcentaje de anticipo entre 0 y 100.");
+        anticipo?.focus();
+        return false;
+    }
+    return true;
+}
+
 function normalizarIvaVenta(valor) {
     const numero = parseNumero(valor, 21);
     return [21, 10.5, 0].includes(numero) ? numero : 21;
@@ -1678,12 +1859,12 @@ function agregarFila(data = {}) {
     const descripcion = data.descripcion || "";
     const detalle = data.detalle || "";
     const cantidad = Math.max(1, parseInt(data.cantidad ?? 1, 10) || 1);
-    const costoUnitario = data.costo_unitario ?? 0;
-    const ivaCompra = data.iva_compra_pct ?? 21;
-    const costoExtra = data.costo_extra ?? 5;
-    const margen = data.margen ?? 75;
-    const descuento = data.descuento_pct ?? 0;
-    const cargaFiscal = data.carga_fiscal ?? 0;
+    const costoUnitario = valorCampoNumerico(data, "costo_unitario");
+    const ivaCompra = valorCampoNumerico(data, "iva_compra_pct", "21", true);
+    const costoExtra = valorCampoNumerico(data, "costo_extra", "5", true);
+    const margen = valorCampoNumerico(data, "margen", "75", true);
+    const descuento = valorCampoNumerico(data, "descuento_pct");
+    const cargaFiscal = valorCampoNumerico(data, "carga_fiscal");
     const ivaItem = normalizarIvaVenta(data.iva_item ?? 21);
     const imagenActual = data.imagen_url || "";
     const previewUrl = data.preview_url || placeholderProductUrl;
@@ -1728,31 +1909,31 @@ function agregarFila(data = {}) {
                 <div class="cotizador-item-metrics">
                     <div class="cotizador-field">
                         <label class="cotizador-field-label">Cant.</label>
-                        <input type="number" name="cant[]" class="form-control cotizador-input cotizador-number-no-spin text-center" value="${cantidad}" min="1" step="1" inputmode="numeric" oninput="validarCantidadEntera(this); calcularTodo()">
+                        <input type="text" name="cant[]" class="form-control cotizador-input cotizador-number-no-spin text-center" value="${cantidad}" min="1" inputmode="numeric" autocomplete="off" onfocus="seleccionarContenidoInput(this)" oninput="validarCantidadEntera(this); calcularTodo()" onblur="normalizarCantidadEntera(this); calcularTodo()">
                     </div>
                     <div class="cotizador-field">
                         <label class="cotizador-field-label">Costo Neto U.</label>
-                        <input type="number" name="costo[]" class="form-control cotizador-input cotizador-number-no-spin text-end" value="${costoUnitario}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()">
+                        <input type="text" name="costo[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end" value="${costoUnitario}" min="0" inputmode="decimal" autocomplete="off" placeholder="Costo" onfocus="seleccionarContenidoInput(this)" oninput="validarPositivo(this); calcularTodo()">
                     </div>
                     <div class="cotizador-field">
                         <label class="cotizador-field-label">IVA Compra %</label>
-                        <input type="number" name="iva_compra[]" class="form-control cotizador-input cotizador-number-no-spin text-end" value="${ivaCompra}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()" title="IVA del proveedor. Se usa como credito fiscal interno.">
+                        <input type="text" name="iva_compra[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end" value="${ivaCompra}" min="0" inputmode="decimal" autocomplete="off" placeholder="%" onfocus="seleccionarContenidoInput(this)" oninput="validarPositivo(this); calcularTodo()" title="IVA del proveedor. Se usa como credito fiscal interno.">
                     </div>
                     <div class="cotizador-field">
                         <label class="cotizador-field-label">Otros %</label>
-                        <input type="number" name="extra[]" class="form-control cotizador-input cotizador-number-no-spin text-end" value="${costoExtra}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()">
+                        <input type="text" name="extra[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end" value="${costoExtra}" min="0" inputmode="decimal" autocomplete="off" placeholder="%" onfocus="seleccionarContenidoInput(this)" oninput="validarPositivo(this); calcularTodo()">
                     </div>
                     <div class="cotizador-field">
                         <label class="cotizador-field-label">Margen %</label>
-                        <input type="number" name="margen[]" class="form-control cotizador-input cotizador-number-no-spin text-end" value="${margen}" min="0" step="0.01" oninput="validarPositivo(this); calcularTodo()">
+                        <input type="text" name="margen[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end" value="${margen}" min="0" inputmode="decimal" autocomplete="off" placeholder="%" onfocus="seleccionarContenidoInput(this)" oninput="validarPositivo(this); calcularTodo()">
                     </div>
                     <div class="cotizador-field">
                         <label class="cotizador-field-label">Desc. %</label>
-                        <input type="number" name="descuento[]" class="form-control cotizador-input cotizador-number-no-spin text-end" value="${descuento}" min="0" max="100" step="0.01" oninput="validarPorcentaje(this); calcularTodo()">
+                        <input type="text" name="descuento[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end" value="${descuento}" min="0" max="100" inputmode="decimal" autocomplete="off" placeholder="%" onfocus="seleccionarContenidoInput(this)" oninput="validarPorcentaje(this); calcularTodo()">
                     </div>
                     <div class="cotizador-field">
                         <label class="cotizador-field-label text-danger">Carga F. %</label>
-                        <input type="number" name="carga_fiscal[]" class="form-control cotizador-input cotizador-number-no-spin text-end text-danger fw-bold" value="${cargaFiscal}" min="0" step="0.1" oninput="validarPositivo(this); calcularTodo()">
+                        <input type="text" name="carga_fiscal[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end text-danger fw-bold" value="${cargaFiscal}" min="0" inputmode="decimal" autocomplete="off" placeholder="%" onfocus="seleccionarContenidoInput(this)" oninput="validarPositivo(this); calcularTodo()">
                     </div>
                     <div class="cotizador-field">
                         <label class="cotizador-field-label">IVA</label>
@@ -1936,12 +2117,23 @@ function validarPorcentaje(input) {
 }
 
 function validarCantidadEntera(input) {
-    const valor = Number(String(input.value || "").replace(",", "."));
+    const texto = String(input.value || "").trim();
+    if (!texto) {
+        return;
+    }
+    const valor = Number(texto.replace(",", "."));
     if (!Number.isFinite(valor)) {
-        input.value = 1;
         return;
     }
     input.value = Math.max(1, Math.trunc(valor));
+}
+
+function normalizarCantidadEntera(input) {
+    if (!String(input.value || "").trim()) {
+        input.value = "1";
+        return;
+    }
+    validarCantidadEntera(input);
 }
 
 function renderTipoCambioEstado(data, errorMessage = "") {
@@ -2134,6 +2326,10 @@ document.getElementById("form-cotizador")?.addEventListener("submit", function (
         event.preventDefault();
         return;
     }
+    if (!validarFormaPagoAntesDeEnviar()) {
+        event.preventDefault();
+        return;
+    }
     sincronizarClienteSeleccionado();
     marcarBorradorComoPendienteDeEnvio();
 });
@@ -2141,6 +2337,7 @@ document.getElementById("form-cotizador")?.addEventListener("submit", function (
 window.onload = function () {
     moverModalClienteAlBody();
     inicializarAyudasCalculo();
+    inicializarFormaPagoDesdeValor();
     initClienteSelect();
     actualizarEstiloEstadoForm(document.getElementById("estado_cotizacion"));
     toggleSeguimientoFields();
