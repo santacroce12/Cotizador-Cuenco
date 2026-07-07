@@ -50,6 +50,31 @@
             background: #eef3f8;
             border-color: #c3cfdb;
             color: #223247;
+            min-width: 0;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .items-table {
+            table-layout: fixed;
+            width: 100%;
+        }
+
+        .items-table .money-cell,
+        .items-table .qty-cell {
+            white-space: nowrap;
+            word-break: normal;
+            overflow-wrap: normal;
+        }
+
+        .item-product-cell {
+            min-width: 0;
+        }
+
+        .item-product-cell span {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .items-table tbody tr:nth-child(even) td {
@@ -160,19 +185,19 @@
                                     {% endif %}
                                 {% endif %}
                                 <tr>
-                                    <td>
+                                    <td class="item-product-cell">
                                         <div class="d-flex align-items-center gap-2">
                                             <img src="{{ item_img_src }}" alt="{{ item.descripcion }}" class="product-img" onerror="this.onerror=null;this.src='{{ url_for('static', filename='placeholder_product.png') }}';">
                                             <span>{{ item.descripcion }}</span>
                                         </div>
                                     </td>
                                     <td>{{ item.detalle or "-" }}</td>
-                                    <td class="text-center">{{ (item.cantidad or 0)|int }}</td>
-                                    <td class="text-end">${{ '%.2f'|format(item.costo_unitario) }}</td>
-                                    <td class="text-end">{{ '%.2f'|format(item.margen * 100) }}%</td>
-                                    <td class="text-end">${{ '%.2f'|format(item.precio_venta) }}</td>
-                                    <td class="text-end">${{ '%.2f'|format(item.precio_venta_total) }}</td>
-                                    <td class="text-end">${{ '%.2f'|format(item.subtotal) }}</td>
+                                    <td class="text-center qty-cell">{{ (item.cantidad or 0)|int }}</td>
+                                    <td class="text-end money-cell">${{ '%.2f'|format(item.costo_unitario) }}</td>
+                                    <td class="text-end money-cell">{{ '%.2f'|format(item.margen * 100) }}%</td>
+                                    <td class="text-end money-cell">${{ '%.2f'|format(item.precio_venta) }}</td>
+                                    <td class="text-end money-cell">${{ '%.2f'|format(item.precio_venta_total) }}</td>
+                                    <td class="text-end money-cell">${{ '%.2f'|format(item.subtotal) }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

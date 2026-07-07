@@ -1249,6 +1249,9 @@ def buscar_usuario_por_username(username):
     username = (username or "").strip()
     if not username:
         return None
+    exacto = Usuario.query.filter(Usuario.username == username).first()
+    if exacto:
+        return exacto
     return Usuario.query.filter(func.lower(Usuario.username) == username.lower()).first()
 
 

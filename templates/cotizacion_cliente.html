@@ -10,7 +10,7 @@
     }
     .quote-items-wrap {
         border-radius: 10px;
-        overflow-x: auto;
+        overflow-x: hidden;
     }
     .product-img {
         width: 56px;
@@ -41,12 +41,17 @@
         color: #223247;
         padding: 0.72rem 0.58rem;
         vertical-align: top;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        word-break: break-word;
     }
     .quote-items-table tbody td.col-product {
         font-size: 0.89rem;
         font-weight: 600;
         line-height: 1.28;
         color: #1d2d40;
+        overflow-wrap: anywhere;
+        word-break: break-word;
     }
     .quote-items-table tbody td.col-detail {
         font-size: 0.8rem;
@@ -61,6 +66,9 @@
     .quote-items-table tbody td.col-price-unit,
     .quote-items-table tbody td.col-sale-total {
         padding-right: 0.85rem !important;
+        white-space: nowrap;
+        word-break: normal;
+        overflow-wrap: normal;
     }
     .quote-items-table thead th.col-sale-total,
     .quote-items-table tbody td.col-sale-total {
@@ -155,6 +163,16 @@
         letter-spacing: -0.02em;
     }
     .fw-bold { font-weight: bold; }
+    .col-image {
+        width: 8%;
+    }
+    .col-qty,
+    .col-discount {
+        text-align: center !important;
+        white-space: nowrap;
+        word-break: normal;
+        overflow-wrap: normal;
+    }
     @page {
         size: A4;
         margin: 0;
@@ -164,7 +182,7 @@
             padding: 24px 18px;
         }
         .quote-items-table {
-            min-width: 760px;
+            min-width: 0;
         }
     }
     @media print {
@@ -204,11 +222,16 @@
             padding: 0.46rem 0.34rem;
         }
         .quote-items-table tbody td.col-product,
-        .quote-items-table tbody td.col-detail,
-        .quote-items-table tbody td.col-price-unit,
-        .quote-items-table tbody td.col-sale-total {
+        .quote-items-table tbody td.col-detail {
             font-size: 0.7rem;
             line-height: 1.2;
+        }
+        .quote-items-table tbody td.col-price-unit,
+        .quote-items-table tbody td.col-sale-total,
+        .quote-items-table tbody td.col-qty,
+        .quote-items-table tbody td.col-discount {
+            font-size: 0.66rem;
+            line-height: 1.15;
         }
         .product-img {
             width: 42px;
@@ -313,7 +336,7 @@
             {% endif %}
             {% set detail_text = (item.detalle or "")|trim %}
             <tr>
-                <td class="text-center">
+                <td class="text-center col-image">
                     <img
                         src="{{ item_img_src }}"
                         alt="{{ item.descripcion }}"
@@ -330,9 +353,9 @@
                     <span class="quote-detail-placeholder">Sin detalle adicional</span>
                     {% endif %}
                 </td>
-                <td class="text-center">{{ (item.cantidad or 0)|int }}</td>
+                <td class="text-center col-qty">{{ (item.cantidad or 0)|int }}</td>
                 {% if mostrar_descuento %}
-                <td class="text-center">
+                <td class="text-center col-discount">
                     {% if (item.descuento_pct or 0) > 0 %}
                         {{ ('%.2f'|format(item.descuento_pct or 0)).replace('.00', '') }}%
                     {% else %}

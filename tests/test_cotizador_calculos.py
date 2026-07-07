@@ -106,6 +106,22 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertNotIn("ADMIN_SETUP_TOKEN", html)
         self.assertNotIn("Clave de instal", html)
 
+    def test_login_prioriza_usuario_con_mayusculas_exactas(self):
+        with app.app_context():
+            usuario = Usuario(username="Admin", nombre_completo="Administrador Alternativo", is_admin=True)
+            usuario.set_password("otra-clave")
+            db.session.add(usuario)
+            db.session.commit()
+
+        self.client.get("/logout")
+        response = self.client.post(
+            "/login",
+            data={"username": "admin", "password": "admin123"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers.get("Location"), "/")
+
     def _form_cotizacion(self, **overrides):
         data = {
             "cliente_id": str(self.cliente_exento_id),
