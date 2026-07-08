@@ -28,6 +28,16 @@
         overflow: visible !important;
     }
 
+    .historial-table {
+        overflow: visible !important;
+    }
+
+    .historial-table tbody,
+    .historial-table tr,
+    .historial-table td {
+        overflow: visible !important;
+    }
+
     .historial-action-menu {
         position: relative;
     }
@@ -113,7 +123,7 @@
     </div>
 
     <div class="table-responsive table-grid-outline historial-table-wrap">
-        <table class="table table-custom align-middle">
+        <table class="table table-custom align-middle historial-table">
             <thead class="historial-header">
                 <tr>
                     <th>Nro</th>
@@ -354,10 +364,11 @@ function aplicarFiltros(page = historialPage) {
                 return;
             }
 
-            data.items.forEach((c) => {
+            data.items.forEach((c, index) => {
                 const numeroCot = c.numero_cotizacion || String(c.id).padStart(4, "0");
                 const estado = c.estado || "En progreso";
                 const estadoClass = claseEstado(estado);
+                const menuDirectionClass = index >= Math.max(data.items.length - 2, 0) ? "dropup" : "dropdown";
                 const moneda = (c.moneda || "ARS").toUpperCase();
                 const icono = moneda === "USD" ? "bi-currency-dollar text-success" : "bi-cash-stack text-primary";
                 const tagMoneda = moneda === "USD"
@@ -388,7 +399,7 @@ function aplicarFiltros(page = historialPage) {
                                         <i class="bi bi-eye"></i> Ver online
                                     </a>
                                 </div>
-                                <div class="dropdown historial-action-menu">
+                                <div class="${menuDirectionClass} historial-action-menu">
                                     <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false">
                                         Más
                                     </button>
