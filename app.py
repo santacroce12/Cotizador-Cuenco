@@ -1634,6 +1634,20 @@ def procesar_recordatorios_vencidos():
             continue
         if not cotizacion.seguimiento_email:
             continue
+        bloqueo_hasta = ahora + timedelta(minutes=10)
+        filas_bloqueadas = Cotizacion.query.filter(
+            Cotizacion.id == cotizacion.id,
+            Cotizacion.seguimiento_activo.is_(True),
+            Cotizacion.seguimiento_proximo_envio.isnot(None),
+            Cotizacion.seguimiento_proximo_envio <= ahora,
+        ).update(
+            {Cotizacion.seguimiento_proximo_envio: bloqueo_hasta},
+            synchronize_session=False,
+        )
+        db.session.commit()
+        if filas_bloqueadas != 1:
+            continue
+        cotizacion = db.session.get(Cotizacion, cotizacion.id)
         try:
             enviado = enviar_mail_recordatorio(cotizacion)
         except Exception as exc:

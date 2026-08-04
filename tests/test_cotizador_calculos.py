@@ -891,6 +891,24 @@ class CotizadorCalculosTest(unittest.TestCase):
             self.assertIsNotNone(cotizacion.seguimiento_ultimo_envio)
             self.assertGreater(cotizacion.seguimiento_proximo_envio, cotizacion.seguimiento_ultimo_envio)
 
+    def test_recordatorio_no_se_envia_dos_veces_si_otro_worker_lo_tomo(self):
+        cotizacion_id = self._crear_cotizacion()
+
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            cotizacion.seguimiento_activo = True
+            cotizacion.seguimiento_email = "seguimiento@cuencotech.com"
+            cotizacion.seguimiento_cada_dias = 7
+            cotizacion.seguimiento_proximo_envio = cotizador_app.datetime.utcnow() - cotizador_app.timedelta(days=1)
+            db.session.commit()
+
+        with patch.object(cotizador_app, "enviar_mail_recordatorio", return_value=True) as enviar_mock:
+            with app.app_context():
+                cotizador_app.procesar_recordatorios_vencidos()
+                cotizador_app.procesar_recordatorios_vencidos()
+
+        self.assertEqual(enviar_mock.call_count, 1)
+
     def test_caso_2_tipo_cambio_guardado_no_se_pisa_con_bna_actual(self):
         cotizacion_id = self._crear_cotizacion()
 
