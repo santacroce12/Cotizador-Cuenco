@@ -5,7 +5,6 @@ import re
 import smtplib
 import threading
 import time
-from collections import defaultdict
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from functools import wraps
@@ -16,13 +15,26 @@ from pathlib import Path
 import jwt
 import requests
 import urllib3
-from flask import Flask, Response, flash, g, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    Response,
+    flash,
+    g,
+    has_app_context,
+    has_request_context,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from PIL import Image, ImageOps, UnidentifiedImageError
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import func, or_
+from sqlalchemy import case, event, func, literal, or_, union_all
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import contains_eager
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -166,14 +178,18 @@ _reminder_worker_started = False
 NUMERO_COTIZACION_PREFIX = "CT"
 BNA_PERSONAS_URL = "https://www.bna.com.ar/Personas"
 BNA_TC_CACHE_SECONDS = 30 * 60
+BNA_REQUEST_TIMEOUT_SECONDS = 3
 BNA_USD_SOURCE = str(os.getenv("BNA_USD_SOURCE") or LOCAL_SETTINGS.get("BNA_USD_SOURCE") or "billetes_venta").strip().lower()
 _bna_exchange_rate_lock = threading.Lock()
 _bna_exchange_rate_cache = {"fetched_at": None, "payload": None}
+_bna_refresh_lock = threading.Lock()
+_bna_refresh_in_progress = False
+_bna_refresh_last_error = None
 
 
 class Cotizacion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    numero_cotizacion = db.Column(db.String(20))
+    numero_cotizacion = db.Column(db.String(20), unique=True)
     estado = db.Column(db.String(20), default="En progreso")
     seguimiento_activo = db.Column(db.Boolean, default=False)
     seguimiento_email = db.Column(db.String(150))
@@ -313,6 +329,21 @@ class Auditoria(db.Model):
     usuario = db.relationship("Usuario", backref="auditorias", lazy=True)
 
 
+class TipoCambioBnaCache(db.Model):
+    __tablename__ = "tipo_cambio_bna_cache"
+
+    id = db.Column(db.Integer, primary_key=True)
+    payload_json = db.Column(db.Text, nullable=False)
+    actualizado_en = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class SecuenciaCotizacion(db.Model):
+    __tablename__ = "secuencia_cotizacion"
+
+    anio = db.Column(db.Integer, primary_key=True)
+    ultimo_numero = db.Column(db.Integer, nullable=False, default=0)
+
+
 def parsear_numero_bna(valor):
     texto = re.sub(r"[^0-9,.\-]", "", str(valor or "").strip())
     if not texto:
@@ -367,7 +398,7 @@ def descargar_html_bna():
             "User-Agent": "Mozilla/5.0 (Cotizador Cuenco Tech)",
             "Accept-Language": "es-AR,es;q=0.9",
         },
-        "timeout": 15,
+        "timeout": BNA_REQUEST_TIMEOUT_SECONDS,
     }
     modo_ssl = obtener_modo_ssl_bna()
 
@@ -429,28 +460,81 @@ def extraer_tipo_cambio_bna(html):
     }
 
 
-def obtener_tipo_cambio_oficial_bna(force=False):
-    ahora = time.time()
+def _payload_tipo_cambio_en_memoria():
     with _bna_exchange_rate_lock:
         cache = _bna_exchange_rate_cache.get("payload")
-        fetched_at = _bna_exchange_rate_cache.get("fetched_at")
-        if not force and cache and fetched_at and (ahora - fetched_at) < BNA_TC_CACHE_SECONDS:
-            return cache
+        return dict(cache) if isinstance(cache, dict) else None
+
+
+def _actualizar_payload_tipo_cambio_en_memoria(payload, actualizado_en=None):
+    if not isinstance(payload, dict):
+        return
+    with _bna_exchange_rate_lock:
+        _bna_exchange_rate_cache["payload"] = dict(payload)
+        _bna_exchange_rate_cache["fetched_at"] = (actualizado_en or datetime.utcnow()).timestamp()
+
+
+def obtener_tipo_cambio_bna_cache():
+    payload = _payload_tipo_cambio_en_memoria()
+    if payload:
+        return payload
+    if not has_app_context():
+        return None
+
+    cache_persistente = db.session.get(TipoCambioBnaCache, 1)
+    if not cache_persistente:
+        return None
+    try:
+        payload = json.loads(cache_persistente.payload_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+
+    actualizado_en = cache_persistente.actualizado_en or datetime.utcnow()
+    payload["fetched_at"] = actualizado_en.isoformat(timespec="seconds") + "Z"
+    payload["stale"] = (datetime.utcnow() - actualizado_en).total_seconds() >= BNA_TC_CACHE_SECONDS
+    _actualizar_payload_tipo_cambio_en_memoria(payload, actualizado_en)
+    return dict(payload)
+
+
+def guardar_tipo_cambio_bna_cache(payload):
+    actualizado_en = datetime.utcnow()
+    payload_guardado = dict(payload)
+    payload_guardado["fetched_at"] = actualizado_en.isoformat(timespec="seconds") + "Z"
+    payload_guardado["stale"] = False
+    payload_guardado.pop("error", None)
+
+    if not has_app_context():
+        _actualizar_payload_tipo_cambio_en_memoria(payload_guardado, actualizado_en)
+        return dict(payload_guardado)
+
+    cache_persistente = db.session.get(TipoCambioBnaCache, 1)
+    if not cache_persistente:
+        cache_persistente = TipoCambioBnaCache(id=1, payload_json="{}", actualizado_en=actualizado_en)
+    cache_persistente.payload_json = json.dumps(payload_guardado, ensure_ascii=False)
+    cache_persistente.actualizado_en = actualizado_en
+    db.session.add(cache_persistente)
+    db.session.commit()
+    _actualizar_payload_tipo_cambio_en_memoria(payload_guardado, actualizado_en)
+    return dict(payload_guardado)
+
+
+def obtener_tipo_cambio_oficial_bna(force=False):
+    cache = obtener_tipo_cambio_bna_cache()
+    # Las respuestas web nunca esperan a BNA si ya conocemos una cotizacion,
+    # incluso si vencio. El worker de fondo se encarga de refrescarla.
+    if not force and cache:
+        return cache
 
     try:
         html, ssl_insecure = descargar_html_bna()
         payload = extraer_tipo_cambio_bna(html)
-        payload["fetched_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
-        payload["stale"] = False
         payload["ssl_insecure"] = ssl_insecure
-        with _bna_exchange_rate_lock:
-            _bna_exchange_rate_cache["payload"] = payload
-            _bna_exchange_rate_cache["fetched_at"] = ahora
-        return payload
+        return guardar_tipo_cambio_bna_cache(payload)
     except (requests.RequestException, TimeoutError, ValueError) as exc:
         mensaje_error = describir_error_tipo_cambio_bna(exc)
-        with _bna_exchange_rate_lock:
-            cache = _bna_exchange_rate_cache.get("payload")
+        cache = obtener_tipo_cambio_bna_cache()
         if cache:
             payload = dict(cache)
             payload["stale"] = True
@@ -471,6 +555,44 @@ def obtener_tipo_cambio_oficial_bna(force=False):
             "stale": False,
             "ssl_insecure": False,
         }
+
+
+def _actualizar_tipo_cambio_bna_en_segundo_plano(force=False):
+    global _bna_refresh_in_progress, _bna_refresh_last_error
+    try:
+        with app.app_context():
+            payload = obtener_tipo_cambio_oficial_bna(force=True)
+            with _bna_refresh_lock:
+                _bna_refresh_last_error = payload.get("error") if not payload.get("ok") else None
+    except Exception as exc:
+        with _bna_refresh_lock:
+            _bna_refresh_last_error = str(exc)
+    finally:
+        with _bna_refresh_lock:
+            _bna_refresh_in_progress = False
+
+
+def solicitar_actualizacion_tipo_cambio_bna(force=False):
+    global _bna_refresh_in_progress
+    cache = obtener_tipo_cambio_bna_cache()
+    if not force and cache and not cache.get("stale"):
+        return False
+    with _bna_refresh_lock:
+        if _bna_refresh_in_progress:
+            return False
+        _bna_refresh_in_progress = True
+    threading.Thread(
+        target=_actualizar_tipo_cambio_bna_en_segundo_plano,
+        kwargs={"force": force},
+        name="cotizador-bna-refresh",
+        daemon=True,
+    ).start()
+    return True
+
+
+def estado_actualizacion_tipo_cambio_bna():
+    with _bna_refresh_lock:
+        return _bna_refresh_in_progress, _bna_refresh_last_error
 
 
 def normalizar_tipo_cambio_valor(valor):
@@ -715,7 +837,10 @@ def construir_contexto_llave_en_mano(cotizacion):
 
 
 def construir_contexto_tipo_cambio_cotizador(cotizacion=None):
-    payload = obtener_tipo_cambio_oficial_bna()
+    # Renderizar el cotizador no debe depender de una llamada de red al BNA.
+    # Si hay un valor en cache lo mostramos, pero la consulta se hace luego de
+    # forma asincronica desde el navegador (o al presionar actualizar).
+    payload = obtener_tipo_cambio_bna_cache()
     guardado = normalizar_tipo_cambio_valor(cotizacion.tipo_cambio_usado if cotizacion else None)
     actual = normalizar_tipo_cambio_valor(payload.get("rate") if isinstance(payload, dict) else None)
     inicial = guardado or actual or ""
@@ -766,8 +891,8 @@ def construir_contexto_tipo_cambio_cotizador(cotizacion=None):
         "guardado": None,
         "actual": None,
         "inicial": inicial,
-        "estado_texto": "No se pudo consultar el BNA en este momento.",
-        "estado_error": True,
+        "estado_texto": "El tipo de cambio se cargara desde BNA al abrir el cotizador.",
+        "estado_error": False,
     }
 
 def formatear_numero_cotizacion(anio, secuencia):
@@ -1058,7 +1183,21 @@ with app.app_context():
             hubo_cambios_numeracion = True
     if hubo_cambios_numeracion:
         db.session.commit()
+    for anio, ultimo_numero in secuencias_por_anio.items():
+        db.session.execute(
+            db.text(
+                """
+                INSERT INTO secuencia_cotizacion (anio, ultimo_numero)
+                VALUES (:anio, :ultimo_numero)
+                ON CONFLICT(anio) DO UPDATE SET
+                    ultimo_numero = MAX(ultimo_numero, excluded.ultimo_numero)
+                """
+            ),
+            {"anio": anio, "ultimo_numero": ultimo_numero},
+        )
+    db.session.commit()
     for sql in (
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_cotizacion_numero ON cotizacion (numero_cotizacion)",
         "CREATE INDEX IF NOT EXISTS ix_cotizacion_fecha_id ON cotizacion (fecha DESC, id DESC)",
         "CREATE INDEX IF NOT EXISTS ix_cotizacion_estado_fecha ON cotizacion (estado, fecha DESC)",
         "CREATE INDEX IF NOT EXISTS ix_cotizacion_moneda_fecha ON cotizacion (moneda, fecha DESC)",
@@ -1171,20 +1310,19 @@ def clonar_imagen_local(ruta):
 
 def generar_numero_cotizacion(fecha_referencia=None):
     fecha_base = fecha_referencia or datetime.utcnow()
-    inicio_anio = datetime(fecha_base.year, 1, 1)
-    inicio_anio_siguiente = datetime(fecha_base.year + 1, 1, 1)
-    ultima_secuencia = 0
-    for (numero_raw,) in db.session.query(Cotizacion.numero_cotizacion).filter(
-        Cotizacion.fecha >= inicio_anio,
-        Cotizacion.fecha < inicio_anio_siguiente,
-    ).all():
-        numero_parseado = parsear_numero_cotizacion(numero_raw)
-        if not numero_parseado:
-            continue
-        anio, secuencia = numero_parseado
-        if anio == fecha_base.year and secuencia > ultima_secuencia:
-            ultima_secuencia = secuencia
-    return formatear_numero_cotizacion(fecha_base.year, ultima_secuencia + 1)
+    secuencia = db.session.execute(
+        db.text(
+            """
+            INSERT INTO secuencia_cotizacion (anio, ultimo_numero)
+            VALUES (:anio, 1)
+            ON CONFLICT(anio) DO UPDATE SET
+                ultimo_numero = ultimo_numero + 1
+            RETURNING ultimo_numero
+            """
+        ),
+        {"anio": fecha_base.year},
+    ).scalar_one()
+    return formatear_numero_cotizacion(fecha_base.year, secuencia)
 
 
 def obtener_config_smtp():
@@ -1260,22 +1398,67 @@ def registrar_auditoria(accion, tipo_entidad, entidad_id=None, entidad_ref=None,
     username_final = username or (usuario_actual.username if usuario_actual else "sistema")
     usuario_id = usuario_actual.id if usuario_actual else None
 
-    try:
-        db.session.add(
-            Auditoria(
-                usuario_id=usuario_id,
-                username=username_final,
-                accion=(accion or "").strip(),
-                tipo_entidad=(tipo_entidad or "").strip(),
-                entidad_id=entidad_id,
-                entidad_ref=(entidad_ref or "").strip() or None,
-                detalle=(detalle or "").strip() or None,
-            )
-        )
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        print(f"[auditoria] No se pudo registrar la accion '{accion}': {exc}")
+    registro = Auditoria(
+        usuario_id=usuario_id,
+        username=username_final,
+        accion=(accion or "").strip(),
+        tipo_entidad=(tipo_entidad or "").strip(),
+        entidad_id=entidad_id,
+        entidad_ref=(entidad_ref or "").strip() or None,
+        detalle=(detalle or "").strip() or None,
+    )
+    db.session.add(registro)
+    return registro
+
+
+def _antes_de_consulta_sql(_conn, _cursor, _statement, _parameters, context, _executemany):
+    context._cotizador_query_started_at = time.perf_counter()
+
+
+def _despues_de_consulta_sql(_conn, _cursor, _statement, _parameters, context, _executemany):
+    inicio = getattr(context, "_cotizador_query_started_at", None)
+    if inicio is None or not has_request_context():
+        return
+    duracion_ms = (time.perf_counter() - inicio) * 1000.0
+    g.request_sql_query_count = getattr(g, "request_sql_query_count", 0) + 1
+    g.request_sql_duration_ms = getattr(g, "request_sql_duration_ms", 0.0) + duracion_ms
+
+
+with app.app_context():
+    if not event.contains(db.engine, "before_cursor_execute", _antes_de_consulta_sql):
+        event.listen(db.engine, "before_cursor_execute", _antes_de_consulta_sql)
+    if not event.contains(db.engine, "after_cursor_execute", _despues_de_consulta_sql):
+        event.listen(db.engine, "after_cursor_execute", _despues_de_consulta_sql)
+
+
+@app.before_request
+def iniciar_metricas_request():
+    g.request_started_at = time.perf_counter()
+    g.request_sql_query_count = 0
+    g.request_sql_duration_ms = 0.0
+
+
+@app.after_request
+def publicar_metricas_request(response):
+    inicio = getattr(g, "request_started_at", None)
+    if inicio is None:
+        return response
+    duracion_ms = (time.perf_counter() - inicio) * 1000.0
+    consultas = int(getattr(g, "request_sql_query_count", 0))
+    sql_ms = float(getattr(g, "request_sql_duration_ms", 0.0))
+    response.headers["X-Response-Time-Ms"] = f"{duracion_ms:.2f}"
+    response.headers["X-SQL-Query-Count"] = str(consultas)
+    response.headers["Server-Timing"] = f'app;dur={duracion_ms:.2f}, sql;dur={sql_ms:.2f};desc="{consultas} queries"'
+    app.logger.info(
+        "request_metrics endpoint=%s method=%s status=%s duration_ms=%.2f sql_queries=%d sql_ms=%.2f",
+        request.endpoint or "unknown",
+        request.method,
+        response.status_code,
+        duracion_ms,
+        consultas,
+        sql_ms,
+    )
+    return response
 
 
 @app.errorhandler(RequestEntityTooLarge)
@@ -1634,6 +1817,20 @@ def procesar_recordatorios_vencidos():
             continue
         if not cotizacion.seguimiento_email:
             continue
+        bloqueo_hasta = ahora + timedelta(minutes=10)
+        filas_bloqueadas = Cotizacion.query.filter(
+            Cotizacion.id == cotizacion.id,
+            Cotizacion.seguimiento_activo.is_(True),
+            Cotizacion.seguimiento_proximo_envio.isnot(None),
+            Cotizacion.seguimiento_proximo_envio <= ahora,
+        ).update(
+            {Cotizacion.seguimiento_proximo_envio: bloqueo_hasta},
+            synchronize_session=False,
+        )
+        db.session.commit()
+        if filas_bloqueadas != 1:
+            continue
+        cotizacion = db.session.get(Cotizacion, cotizacion.id)
         try:
             enviado = enviar_mail_recordatorio(cotizacion)
         except Exception as exc:
@@ -1657,6 +1854,7 @@ def worker_recordatorios():
         try:
             with app.app_context():
                 procesar_recordatorios_vencidos()
+                solicitar_actualizacion_tipo_cambio_bna()
         except Exception as exc:
             print(f"[seguimiento] Worker error: {exc}")
         time.sleep(REMINDER_POLL_SECONDS)
@@ -1978,7 +2176,47 @@ def calcular_variacion_porcentual(actual, anterior):
     return round(((actual - anterior) / anterior) * 100.0, 1)
 
 
-def construir_series_dashboard(cotizaciones, desde_date, hasta_date):
+def construir_resumen_dashboard_sql(query):
+    fila = (
+        query.order_by(None)
+        .with_entities(
+            func.count(Cotizacion.id).label("total"),
+            func.coalesce(
+                func.sum(case((Cotizacion.estado == "Aceptada", 1), else_=0)),
+                0,
+            ).label("aceptadas"),
+            func.coalesce(
+                func.sum(case((Cotizacion.estado == "Rechazada", 1), else_=0)),
+                0,
+            ).label("rechazadas"),
+            func.coalesce(
+                func.sum(case((Cotizacion.estado == "En progreso", 1), else_=0)),
+                0,
+            ).label("en_progreso"),
+            func.coalesce(func.sum(Cotizacion.total_final), 0.0).label("total_importe"),
+            func.coalesce(
+                func.sum(case((Cotizacion.estado == "En progreso", Cotizacion.total_final), else_=0.0)),
+                0.0,
+            ).label("importe_pipeline"),
+            func.coalesce(
+                func.sum(case((Cotizacion.estado == "Aceptada", Cotizacion.total_final), else_=0.0)),
+                0.0,
+            ).label("importe_aceptado"),
+        )
+        .one()
+    )
+    return {
+        "total": int(fila.total or 0),
+        "aceptadas": int(fila.aceptadas or 0),
+        "rechazadas": int(fila.rechazadas or 0),
+        "en_progreso": int(fila.en_progreso or 0),
+        "total_importe": round(float(fila.total_importe or 0.0), 2),
+        "importe_pipeline": round(float(fila.importe_pipeline or 0.0), 2),
+        "importe_aceptado": round(float(fila.importe_aceptado or 0.0), 2),
+    }
+
+
+def construir_series_dashboard_sql(query, desde_date, hasta_date):
     total_dias = max((hasta_date - desde_date).days + 1, 1)
     usar_semanas = total_dias > 62
     labels = []
@@ -1997,8 +2235,59 @@ def construir_series_dashboard(cotizaciones, desde_date, hasta_date):
             buckets.append({"start": cursor, "end": cursor, "creadas": 0, "cerradas": 0, "aceptadas": 0})
             cursor += timedelta(days=1)
 
-    for cotizacion in cotizaciones:
-        fecha_cot = (cotizacion.fecha or datetime.utcnow()).date()
+    fecha_sql = func.date(Cotizacion.fecha)
+    filas = (
+        query.order_by(None)
+        .with_entities(
+            fecha_sql.label("fecha"),
+            func.count(Cotizacion.id).label("creadas"),
+            func.coalesce(
+                func.sum(case((Cotizacion.estado.in_(("Aceptada", "Rechazada")), 1), else_=0)),
+                0,
+            ).label("cerradas"),
+            func.coalesce(
+                func.sum(case((Cotizacion.estado == "Aceptada", 1), else_=0)),
+                0,
+            ).label("aceptadas"),
+            func.coalesce(
+                func.sum(case((Cotizacion.estado == "Rechazada", 1), else_=0)),
+                0,
+            ).label("rechazadas"),
+            func.coalesce(
+                func.sum(case((Cotizacion.estado == "En progreso", 1), else_=0)),
+                0,
+            ).label("en_progreso"),
+            func.coalesce(func.sum(Cotizacion.total_final), 0.0).label("total_importe"),
+            func.coalesce(
+                func.sum(case((Cotizacion.estado == "En progreso", Cotizacion.total_final), else_=0.0)),
+                0.0,
+            ).label("importe_pipeline"),
+            func.coalesce(
+                func.sum(case((Cotizacion.estado == "Aceptada", Cotizacion.total_final), else_=0.0)),
+                0.0,
+            ).label("importe_aceptado"),
+        )
+        .group_by(fecha_sql)
+        .all()
+    )
+
+    resumen = {
+        "total": 0,
+        "aceptadas": 0,
+        "rechazadas": 0,
+        "en_progreso": 0,
+        "total_importe": 0.0,
+        "importe_pipeline": 0.0,
+        "importe_aceptado": 0.0,
+    }
+    for fila in filas:
+        fecha_cot = fila.fecha
+        if isinstance(fecha_cot, str):
+            fecha_cot = parsear_fecha_iso(fecha_cot)
+        elif isinstance(fecha_cot, datetime):
+            fecha_cot = fecha_cot.date()
+        if fecha_cot is None:
+            continue
         if fecha_cot < desde_date or fecha_cot > hasta_date:
             continue
         if usar_semanas:
@@ -2009,12 +2298,19 @@ def construir_series_dashboard(cotizaciones, desde_date, hasta_date):
             continue
 
         bucket = buckets[index]
-        estado = normalizar_estado_cotizacion(cotizacion.estado) or "En progreso"
-        bucket["creadas"] += 1
-        if estado in ("Aceptada", "Rechazada"):
-            bucket["cerradas"] += 1
-        if estado == "Aceptada":
-            bucket["aceptadas"] += 1
+        bucket["creadas"] += int(fila.creadas or 0)
+        bucket["cerradas"] += int(fila.cerradas or 0)
+        bucket["aceptadas"] += int(fila.aceptadas or 0)
+        resumen["total"] += int(fila.creadas or 0)
+        resumen["aceptadas"] += int(fila.aceptadas or 0)
+        resumen["rechazadas"] += int(fila.rechazadas or 0)
+        resumen["en_progreso"] += int(fila.en_progreso or 0)
+        resumen["total_importe"] += float(fila.total_importe or 0.0)
+        resumen["importe_pipeline"] += float(fila.importe_pipeline or 0.0)
+        resumen["importe_aceptado"] += float(fila.importe_aceptado or 0.0)
+
+    for clave in ("total_importe", "importe_pipeline", "importe_aceptado"):
+        resumen[clave] = round(resumen[clave], 2)
 
     return {
         "labels": labels,
@@ -2022,81 +2318,118 @@ def construir_series_dashboard(cotizaciones, desde_date, hasta_date):
         "cerradas": [bucket["cerradas"] for bucket in buckets],
         "aceptadas": [bucket["aceptadas"] for bucket in buckets],
         "granularidad": "Semanal" if usar_semanas else "Diaria",
+        "resumen": resumen,
     }
 
 
-def construir_top_clientes_dashboard(cotizaciones, limite=5):
-    acumulado = defaultdict(lambda: {"cantidad": 0, "total": 0.0, "aceptadas": 0, "total_ars": 0.0, "total_usd": 0.0})
-    for cotizacion in cotizaciones:
-        nombre = (cotizacion.cliente_ref.nombre if cotizacion.cliente_ref else cotizacion.cliente) or "Sin cliente"
-        estado = normalizar_estado_cotizacion(cotizacion.estado) or "En progreso"
-        moneda = (cotizacion.moneda or "ARS").upper()
-        total_final = cotizacion.total_final or 0.0
-        acumulado[nombre]["cantidad"] += 1
-        acumulado[nombre]["total"] += total_final
-        if moneda == "USD":
-            acumulado[nombre]["total_usd"] += total_final
-        else:
-            acumulado[nombre]["total_ars"] += total_final
-        if estado == "Aceptada":
-            acumulado[nombre]["aceptadas"] += 1
-
-    ranking = []
-    for nombre, data in acumulado.items():
-        ranking.append(
-            {
-                "nombre": nombre,
-                "cantidad": data["cantidad"],
-                "aceptadas": data["aceptadas"],
-                "total": round(data["total"], 2),
-                "total_ars": round(data["total_ars"], 2),
-                "total_usd": round(data["total_usd"], 2),
-            }
+def _consulta_agrupacion_dashboard_sql(query, nombre_sql, grupo=None):
+    cantidad_sql = func.count(Cotizacion.id)
+    total_sql = func.coalesce(func.sum(Cotizacion.total_final), 0.0)
+    columnas = []
+    if grupo is not None:
+        columnas.append(literal(grupo).label("grupo"))
+    columnas.extend(
+        (
+            nombre_sql.label("nombre"),
+            cantidad_sql.label("cantidad"),
+            func.coalesce(
+                func.sum(case((Cotizacion.estado == "Aceptada", 1), else_=0)),
+                0,
+            ).label("aceptadas"),
+            total_sql.label("total"),
+            func.coalesce(
+                func.sum(case((Cotizacion.moneda == "ARS", Cotizacion.total_final), else_=0.0)),
+                0.0,
+            ).label("total_ars"),
+            func.coalesce(
+                func.sum(case((Cotizacion.moneda == "USD", Cotizacion.total_final), else_=0.0)),
+                0.0,
+            ).label("total_usd"),
         )
-
-    ranking.sort(key=lambda item: (-item["cantidad"], -item["total"], item["nombre"].lower()))
-    return ranking[:limite]
-
-
-def construir_desglose_dashboard(cotizaciones, key_fn, default_label="Sin definir", limite=None):
-    acumulado = defaultdict(
-        lambda: {"cantidad": 0, "aceptadas": 0, "total": 0.0, "total_ars": 0.0, "total_usd": 0.0}
     )
-    total_cotizaciones = len(cotizaciones)
+    return query.order_by(None).with_entities(*columnas).group_by(nombre_sql)
 
-    for cotizacion in cotizaciones:
-        nombre = (key_fn(cotizacion) or "").strip() or default_label
-        estado = normalizar_estado_cotizacion(cotizacion.estado) or "En progreso"
-        moneda = (cotizacion.moneda or "ARS").upper()
-        total_final = cotizacion.total_final or 0.0
-        acumulado[nombre]["cantidad"] += 1
-        acumulado[nombre]["total"] += total_final
-        if moneda == "USD":
-            acumulado[nombre]["total_usd"] += total_final
-        else:
-            acumulado[nombre]["total_ars"] += total_final
-        if estado == "Aceptada":
-            acumulado[nombre]["aceptadas"] += 1
 
-    desglose = []
-    for nombre, data in acumulado.items():
-        cantidad = data["cantidad"]
-        desglose.append(
-            {
-                "nombre": nombre,
-                "cantidad": cantidad,
-                "aceptadas": data["aceptadas"],
-                "total": round(data["total"], 2),
-                "total_ars": round(data["total_ars"], 2),
-                "total_usd": round(data["total_usd"], 2),
-                "porcentaje": round((cantidad / total_cotizaciones) * 100.0, 1) if total_cotizaciones else 0.0,
-            }
-        )
-
-    desglose.sort(key=lambda item: (-item["cantidad"], -item["total"], item["nombre"].lower()))
+def _agrupar_dashboard_sql(query, nombre_sql, limite=None):
+    consulta = _consulta_agrupacion_dashboard_sql(query, nombre_sql)
+    cantidad_sql = func.count(Cotizacion.id)
+    total_sql = func.coalesce(func.sum(Cotizacion.total_final), 0.0)
+    consulta = consulta.order_by(cantidad_sql.desc(), total_sql.desc(), func.lower(nombre_sql).asc())
     if limite:
-        return desglose[:limite]
-    return desglose
+        consulta = consulta.limit(limite)
+    return consulta.all()
+
+
+def _serializar_agrupacion_dashboard(filas, total_cotizaciones=None):
+    resultado = []
+    for fila in filas:
+        cantidad = int(fila.cantidad or 0)
+        item = {
+            "nombre": fila.nombre,
+            "cantidad": cantidad,
+            "aceptadas": int(fila.aceptadas or 0),
+            "total": round(float(fila.total or 0.0), 2),
+            "total_ars": round(float(fila.total_ars or 0.0), 2),
+            "total_usd": round(float(fila.total_usd or 0.0), 2),
+        }
+        if total_cotizaciones is not None:
+            item["porcentaje"] = (
+                round((cantidad / total_cotizaciones) * 100.0, 1) if total_cotizaciones else 0.0
+            )
+        resultado.append(item)
+    return resultado
+
+
+def construir_top_clientes_dashboard_sql(query, limite=5):
+    nombre_cliente_sql = case(
+        (
+            Cliente.id.isnot(None),
+            func.coalesce(func.nullif(func.trim(Cliente.nombre), ""), "Sin cliente"),
+        ),
+        else_=func.coalesce(func.nullif(func.trim(Cotizacion.cliente), ""), "Sin cliente"),
+    )
+    return _serializar_agrupacion_dashboard(
+        _agrupar_dashboard_sql(query, nombre_cliente_sql, limite=limite)
+    )
+
+
+def construir_desglose_dashboard_sql(query, campo_sql, total_cotizaciones, default_label="Sin definir", limite=None):
+    nombre_sql = func.coalesce(func.nullif(func.trim(campo_sql), ""), default_label)
+    return _serializar_agrupacion_dashboard(
+        _agrupar_dashboard_sql(query, nombre_sql, limite=limite),
+        total_cotizaciones=total_cotizaciones,
+    )
+
+
+def construir_agrupaciones_dashboard_sql(query, total_cotizaciones):
+    nombre_cliente_sql = case(
+        (
+            Cliente.id.isnot(None),
+            func.coalesce(func.nullif(func.trim(Cliente.nombre), ""), "Sin cliente"),
+        ),
+        else_=func.coalesce(func.nullif(func.trim(Cotizacion.cliente), ""), "Sin cliente"),
+    )
+    especificaciones = (
+        ("clientes", nombre_cliente_sql, None, 5),
+        ("familias", func.coalesce(func.nullif(func.trim(Cotizacion.familia), ""), "Sin familia"), total_cotizaciones, 6),
+        ("sectores", func.coalesce(func.nullif(func.trim(Cliente.sector), ""), "Sin sector"), total_cotizaciones, None),
+        ("subsectores", func.coalesce(func.nullif(func.trim(Cliente.subsector), ""), "Sin subsector"), total_cotizaciones, 8),
+    )
+    consultas = [
+        _consulta_agrupacion_dashboard_sql(query, nombre_sql, grupo=grupo).statement
+        for grupo, nombre_sql, _, _ in especificaciones
+    ]
+    filas = db.session.execute(union_all(*consultas)).all()
+    filas_por_grupo = {grupo: [] for grupo, _, _, _ in especificaciones}
+    for fila in filas:
+        filas_por_grupo[fila.grupo].append(fila)
+
+    resultado = {}
+    for grupo, _, total_grupo, limite in especificaciones:
+        items = _serializar_agrupacion_dashboard(filas_por_grupo[grupo], total_cotizaciones=total_grupo)
+        items.sort(key=lambda item: (-item["cantidad"], -item["total"], item["nombre"].lower()))
+        resultado[grupo] = items[:limite] if limite else items
+    return resultado
 
 
 def aplicar_filtro_estado_dashboard(query, estado):
@@ -2205,6 +2538,7 @@ def construir_contexto_dashboard_operativo(query_periodo, filtros):
     if filtros.get("op_familia"):
         query_tabla = query_tabla.filter(Cotizacion.familia == filtros["op_familia"])
     query_tabla = aplicar_filtro_estado_dashboard(query_tabla, filtros["estado"])
+    query_tabla = query_tabla.options(contains_eager(Cotizacion.cliente_ref))
     paginacion = paginar_query(
         query_tabla.order_by(Cotizacion.fecha.desc(), Cotizacion.id.desc()),
         page=filtros.get("op_page", 1),
@@ -2267,7 +2601,6 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         fecha_creacion = datetime.utcnow()
         cotizacion = Cotizacion(
             fecha=fecha_creacion,
-            numero_cotizacion=generar_numero_cotizacion(fecha_creacion),
             estado="En progreso",
             nombre_fantasia=NOMBRE_FANTASIA,
             razon_social=RAZON_SOCIAL,
@@ -2286,7 +2619,6 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         )
     else:
         estado_anterior = normalizar_estado_cotizacion(cotizacion.estado) or "En progreso"
-        cotizacion.numero_cotizacion = cotizacion.numero_cotizacion or generar_numero_cotizacion(cotizacion.fecha)
         cotizacion.estado = normalizar_estado_cotizacion(cotizacion.estado) or "En progreso"
         estado_form = normalizar_estado_cotizacion(request.form.get("estado"))
         if estado_form:
@@ -2440,8 +2772,10 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     cotizacion.total_carga_fiscal = round(carga_fiscal_total_acum, 2)
     cotizacion.bonificacion_cierre_monto = round(bonificacion_cierre_aplicada, 2)
 
+    if not cotizacion.numero_cotizacion:
+        cotizacion.numero_cotizacion = generar_numero_cotizacion(cotizacion.fecha)
     db.session.add(cotizacion)
-    db.session.commit()
+    db.session.flush()
     numero_ref = cotizacion.numero_cotizacion or str(cotizacion.id)
     registrar_auditoria(
         "Creó cotización" if not es_edicion else "Modificó cotización",
@@ -2461,6 +2795,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
             entidad_ref=numero_ref,
             detalle=f"Estado anterior: {estado_anterior}. Estado nuevo: {cotizacion.estado}.",
         )
+    db.session.commit()
     return cotizacion, None
 
 
@@ -2468,9 +2803,16 @@ def persistir_cotizacion_desde_form(cotizacion=None):
 @token_required
 def api_tipo_cambio_oficial():
     force = str(request.args.get("refresh") or "").strip().lower() in ("1", "true", "yes")
-    payload = obtener_tipo_cambio_oficial_bna(force=force)
-    status = 200 if payload.get("ok") else 502
-    return jsonify(payload), status
+    solicitar_actualizacion_tipo_cambio_bna(force=force)
+    payload = obtener_tipo_cambio_bna_cache()
+    refrescando, ultimo_error = estado_actualizacion_tipo_cambio_bna()
+
+    if payload:
+        payload["refreshing"] = refrescando
+        return jsonify(payload)
+    if refrescando:
+        return jsonify({"ok": True, "pending": True, "refreshing": True, "rate": None}), 202
+    return jsonify({"ok": False, "error": ultimo_error or "No hay un tipo de cambio disponible todavia."}), 502
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -2530,7 +2872,7 @@ def usuarios_page():
             nuevo = Usuario(username=username, nombre_completo=nombre_completo or None, is_admin=is_admin)
             nuevo.set_password(password)
             db.session.add(nuevo)
-            db.session.commit()
+            db.session.flush()
             registrar_auditoria(
                 "Creo usuario",
                 "Usuario",
@@ -2538,6 +2880,7 @@ def usuarios_page():
                 entidad_ref=nuevo.username,
                 detalle=f"Rol asignado: {'Administrador' if nuevo.is_admin else 'Operador'}.",
             )
+            db.session.commit()
             flash(f"Usuario {nuevo.username} creado correctamente.", "success")
             return redirect(url_for("usuarios_page"))
 
@@ -2557,10 +2900,9 @@ def usuarios_page():
 @token_required
 @admin_required
 def actualizar_nombre_usuario(id):
-    usuario = Usuario.query.get_or_404(id)
+    usuario = db.get_or_404(Usuario, id)
     nombre_completo = (request.form.get("nombre_completo") or "").strip()
     usuario.nombre_completo = nombre_completo or None
-    db.session.commit()
     registrar_auditoria(
         "Actualizo nombre de usuario",
         "Usuario",
@@ -2568,6 +2910,7 @@ def actualizar_nombre_usuario(id):
         entidad_ref=usuario.username,
         detalle=f"Nombre visible para documentos: {usuario.nombre_para_documentos}.",
     )
+    db.session.commit()
     flash(f"Nombre visible de {usuario.username} actualizado.", "success")
     return redirect(url_for("usuarios_page"))
 
@@ -2585,13 +2928,13 @@ def familias_page():
         if familia_existente:
             if not familia_existente.activa:
                 familia_existente.activa = True
-                db.session.commit()
                 registrar_auditoria(
                     "Reactivó familia",
                     "Familia",
                     entidad_id=familia_existente.id,
                     entidad_ref=familia_existente.nombre,
                 )
+                db.session.commit()
                 flash(f"Familia {familia_existente.nombre} reactivada.", "success")
             else:
                 flash("Esa familia ya existe.", "warning")
@@ -2599,8 +2942,9 @@ def familias_page():
 
         nueva = FamiliaCotizacion(nombre=nombre, activa=True)
         db.session.add(nueva)
-        db.session.commit()
+        db.session.flush()
         registrar_auditoria("Creó familia", "Familia", entidad_id=nueva.id, entidad_ref=nueva.nombre)
+        db.session.commit()
         flash(f"Familia {nueva.nombre} creada correctamente.", "success")
         return redirect(url_for("familias_page"))
 
@@ -2612,7 +2956,7 @@ def familias_page():
 @app.route("/familias/<int:id>/editar", methods=["POST"])
 @token_required
 def editar_familia(id):
-    familia = FamiliaCotizacion.query.get_or_404(id)
+    familia = db.get_or_404(FamiliaCotizacion, id)
     nombre_anterior = familia.nombre
     nombre_nuevo = normalizar_nombre_familia(request.form.get("nombre"))
     activa = request.form.get("activa") == "1"
@@ -2633,7 +2977,6 @@ def editar_familia(id):
         actualizadas = Cotizacion.query.filter(Cotizacion.familia == nombre_anterior).update(
             {Cotizacion.familia: nombre_nuevo}, synchronize_session=False
         )
-    db.session.commit()
     registrar_auditoria(
         "Modificó familia",
         "Familia",
@@ -2641,6 +2984,7 @@ def editar_familia(id):
         entidad_ref=familia.nombre,
         detalle=f"Nombre anterior: {nombre_anterior}. Activa: {'si' if familia.activa else 'no'}. Cotizaciones actualizadas: {actualizadas}.",
     )
+    db.session.commit()
     flash("Familia actualizada correctamente.", "success")
     return redirect(url_for("familias_page"))
 
@@ -2648,12 +2992,11 @@ def editar_familia(id):
 @app.route("/familias/<int:id>/eliminar", methods=["POST"])
 @token_required
 def eliminar_familia(id):
-    familia = FamiliaCotizacion.query.get_or_404(id)
+    familia = db.get_or_404(FamiliaCotizacion, id)
     uso = Cotizacion.query.filter(Cotizacion.familia == familia.nombre).count()
     nombre_ref = familia.nombre
     if uso:
         familia.activa = False
-        db.session.commit()
         registrar_auditoria(
             "Desactivó familia",
             "Familia",
@@ -2661,11 +3004,12 @@ def eliminar_familia(id):
             entidad_ref=nombre_ref,
             detalle=f"No se borro fisicamente porque tiene {uso} cotizaciones asociadas.",
         )
+        db.session.commit()
         flash(f"Familia {nombre_ref} desactivada. Se mantiene en cotizaciones historicas.", "warning")
     else:
         db.session.delete(familia)
-        db.session.commit()
         registrar_auditoria("Eliminó familia", "Familia", entidad_id=id, entidad_ref=nombre_ref)
+        db.session.commit()
         flash(f"Familia {nombre_ref} eliminada.", "success")
     return redirect(url_for("familias_page"))
 
@@ -2682,14 +3026,15 @@ def agregar_familia_api():
     if familia:
         if not familia.activa:
             familia.activa = True
-            db.session.commit()
             registrar_auditoria("Reactivó familia", "Familia", entidad_id=familia.id, entidad_ref=familia.nombre)
+            db.session.commit()
         return jsonify({"id": familia.id, "nombre": familia.nombre, "activa": bool(familia.activa)}), 200
 
     familia = FamiliaCotizacion(nombre=nombre, activa=True)
     db.session.add(familia)
-    db.session.commit()
+    db.session.flush()
     registrar_auditoria("Creó familia", "Familia", entidad_id=familia.id, entidad_ref=familia.nombre)
+    db.session.commit()
     return jsonify({"id": familia.id, "nombre": familia.nombre, "activa": True}), 201
 
 
@@ -2723,7 +3068,7 @@ def agregar_cliente():
 @app.route("/api/clientes/<int:id>", methods=["PUT"])
 @token_required
 def actualizar_cliente(id):
-    cliente = Cliente.query.get_or_404(id)
+    cliente = db.get_or_404(Cliente, id)
     data = request.get_json(silent=True) or {}
     payload, error = validar_payload_cliente(data, cliente_actual=cliente)
     if error:
@@ -2870,7 +3215,7 @@ def listar_cotizaciones_integracion():
 @app.route("/api/integracion/cotizaciones/<int:id>")
 @integration_token_required
 def detalle_cotizacion_integracion(id):
-    cotizacion = Cotizacion.query.get_or_404(id)
+    cotizacion = db.get_or_404(Cotizacion, id)
     return jsonify(serializar_cotizacion(cotizacion, incluir_items=True))
 
 
@@ -2886,7 +3231,7 @@ def ensure_followup_worker():
 @app.route("/cotizacion/<int:id>/estado", methods=["POST"])
 @token_required
 def actualizar_estado_cotizacion(id):
-    cotizacion = Cotizacion.query.get_or_404(id)
+    cotizacion = db.get_or_404(Cotizacion, id)
     data = request.get_json(silent=True) or {}
     estado = normalizar_estado_cotizacion(data.get("estado"))
     if not estado:
@@ -2896,7 +3241,6 @@ def actualizar_estado_cotizacion(id):
         return jsonify({"id": cotizacion.id, "estado": cotizacion.estado}), 200
 
     cotizacion.estado = estado
-    db.session.commit()
     registrar_auditoria(
         "Cambió estado de cotización",
         "Cotización",
@@ -2904,6 +3248,7 @@ def actualizar_estado_cotizacion(id):
         entidad_ref=cotizacion.numero_cotizacion or str(cotizacion.id),
         detalle=f"Estado anterior: {estado_anterior}. Estado nuevo: {estado}.",
     )
+    db.session.commit()
     return jsonify({"id": cotizacion.id, "estado": cotizacion.estado}), 200
 
 
@@ -2922,7 +3267,7 @@ def index():
 @app.route("/cotizacion/<int:id>/editar", methods=["GET", "POST"])
 @token_required
 def editar_cotizacion(id):
-    cotizacion = Cotizacion.query.get_or_404(id)
+    cotizacion = db.get_or_404(Cotizacion, id)
     if request.method == "POST":
         _, redirect_response = persistir_cotizacion_desde_form(cotizacion)
         if redirect_response:
@@ -2956,24 +3301,18 @@ def dashboard_page():
     hasta_date = filtros["hasta_date"]
 
     query_periodo = construir_query_dashboard_periodo(filtros)
-    cotizaciones_periodo = query_periodo.order_by(Cotizacion.fecha.desc(), Cotizacion.id.desc()).all()
     contexto_operativo = construir_contexto_dashboard_operativo(query_periodo, filtros)
-    cotizaciones = contexto_operativo["cotizaciones"]
 
-    total = len(cotizaciones_periodo)
-    aceptadas = sum(1 for cot in cotizaciones_periodo if normalizar_estado_cotizacion(cot.estado) == "Aceptada")
-    rechazadas = sum(1 for cot in cotizaciones_periodo if normalizar_estado_cotizacion(cot.estado) == "Rechazada")
-    en_progreso = sum(1 for cot in cotizaciones_periodo if normalizar_estado_cotizacion(cot.estado) == "En progreso")
+    series = construir_series_dashboard_sql(query_periodo, desde_date, hasta_date)
+    agregado_periodo = series.pop("resumen")
+    total = agregado_periodo["total"]
+    aceptadas = agregado_periodo["aceptadas"]
+    rechazadas = agregado_periodo["rechazadas"]
+    en_progreso = agregado_periodo["en_progreso"]
     cerradas = aceptadas + rechazadas
-    total_importe = round(sum((cot.total_final or 0.0) for cot in cotizaciones_periodo), 2)
-    importe_pipeline = round(
-        sum((cot.total_final or 0.0) for cot in cotizaciones_periodo if normalizar_estado_cotizacion(cot.estado) == "En progreso"),
-        2,
-    )
-    importe_aceptado = round(
-        sum((cot.total_final or 0.0) for cot in cotizaciones_periodo if normalizar_estado_cotizacion(cot.estado) == "Aceptada"),
-        2,
-    )
+    total_importe = agregado_periodo["total_importe"]
+    importe_pipeline = agregado_periodo["importe_pipeline"]
+    importe_aceptado = agregado_periodo["importe_aceptado"]
     ticket_promedio = round(total_importe / total, 2) if total else 0.0
     tasa_cierre = round((cerradas / total) * 100.0, 1) if total else 0.0
     tasa_aceptacion = round((aceptadas / total) * 100.0, 1) if total else 0.0
@@ -2986,9 +3325,9 @@ def dashboard_page():
     query_previo = aplicar_filtros_segmentacion_dashboard(
         query_previo, familia=familia, sector=sector, subsector=subsector, moneda=moneda
     )
-    cotizaciones_previas = query_previo.all()
-    total_previo = len(cotizaciones_previas)
-    aceptadas_previas = sum(1 for cot in cotizaciones_previas if normalizar_estado_cotizacion(cot.estado) == "Aceptada")
+    agregado_previo = construir_resumen_dashboard_sql(query_previo)
+    total_previo = agregado_previo["total"]
+    aceptadas_previas = agregado_previo["aceptadas"]
 
     resumen = {
         "total": total,
@@ -3007,22 +3346,11 @@ def dashboard_page():
         "delta_aceptadas": calcular_variacion_porcentual(aceptadas, aceptadas_previas),
     }
 
-    series = construir_series_dashboard(cotizaciones_periodo, desde_date, hasta_date)
-    top_clientes = construir_top_clientes_dashboard(cotizaciones_periodo)
-    familias_breakdown = construir_desglose_dashboard(
-        cotizaciones_periodo, lambda cot: cot.familia, default_label="Sin familia", limite=6
-    )
-    sectores_breakdown = construir_desglose_dashboard(
-        cotizaciones_periodo,
-        lambda cot: cot.cliente_ref.sector if cot.cliente_ref else "",
-        default_label="Sin sector",
-    )
-    subsectores_breakdown = construir_desglose_dashboard(
-        cotizaciones_periodo,
-        lambda cot: cot.cliente_ref.subsector if cot.cliente_ref else "",
-        default_label="Sin subsector",
-        limite=8,
-    )
+    agrupaciones = construir_agrupaciones_dashboard_sql(query_periodo, total)
+    top_clientes = agrupaciones["clientes"]
+    familias_breakdown = agrupaciones["familias"]
+    sectores_breakdown = agrupaciones["sectores"]
+    subsectores_breakdown = agrupaciones["subsectores"]
     estado_foco_label = "Vista general del periodo"
     filtros_activos = []
     if familia:
@@ -3142,6 +3470,7 @@ def filtrar_historial():
     query = aplicar_filtro_fecha_cotizaciones(query, desde, hasta)
     if moneda in ("ARS", "USD"):
         query = query.filter(Cotizacion.moneda == moneda)
+    query = query.options(contains_eager(Cotizacion.cliente_ref))
 
     paginacion = paginar_query(query.order_by(Cotizacion.id.desc()), page=page, per_page=HISTORIAL_PER_PAGE)
     cotizaciones = paginacion["items"]
@@ -3174,21 +3503,21 @@ def filtrar_historial():
 @app.route("/cotizacion/<int:id>")
 @token_required
 def ver_cotizacion(id):
-    cot = Cotizacion.query.get_or_404(id)
+    cot = db.get_or_404(Cotizacion, id)
     return render_template("cotizacion_cliente.html", **construir_contexto_documento_cotizacion(cot))
 
 
 @app.route("/cotizacion/<int:id>/llave-en-mano")
 @token_required
 def ver_cotizacion_llave_en_mano(id):
-    cot = Cotizacion.query.get_or_404(id)
+    cot = db.get_or_404(Cotizacion, id)
     return render_template("cotizacion_llave_en_mano.html", **construir_contexto_llave_en_mano(cot))
 
 
 @app.route("/cotizacion/<int:id>/xlsx")
 @token_required
 def exportar_cotizacion_xlsx(id):
-    cotizacion = Cotizacion.query.get_or_404(id)
+    cotizacion = db.get_or_404(Cotizacion, id)
     contenido = generar_excel_cotizacion(cotizacion)
     nombre_base = (cotizacion.numero_cotizacion or f"cotizacion-{cotizacion.id}").replace("/", "-").replace("\\", "-")
     return Response(
@@ -3201,7 +3530,7 @@ def exportar_cotizacion_xlsx(id):
 @app.route("/cotizacion/clonar/<int:id>", methods=["POST"])
 @token_required
 def clonar_cotizacion(id):
-    cot_original = Cotizacion.query.get_or_404(id)
+    cot_original = db.get_or_404(Cotizacion, id)
     fecha_clon = datetime.utcnow()
     numero_nuevo = generar_numero_cotizacion(fecha_clon)
     imagenes_clonadas = []
@@ -3266,6 +3595,17 @@ def clonar_cotizacion(id):
                 )
             )
 
+        registrar_auditoria(
+            "Clono cotizacion",
+            "Cotizacion",
+            entidad_id=nueva_cotizacion.id,
+            entidad_ref=nueva_cotizacion.numero_cotizacion or str(nueva_cotizacion.id),
+            detalle=(
+                f"Origen: {cot_original.numero_cotizacion or cot_original.id}. "
+                f"Cliente: {nueva_cotizacion.cliente or 'Sin cliente'}. "
+                f"Nuevo total: {nueva_cotizacion.moneda or 'ARS'} {nueva_cotizacion.total_final or 0.0:,.2f}."
+            ),
+        )
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -3273,17 +3613,6 @@ def clonar_cotizacion(id):
             eliminar_imagen_local(ruta)
         raise
 
-    registrar_auditoria(
-        "Clono cotizacion",
-        "Cotizacion",
-        entidad_id=nueva_cotizacion.id,
-        entidad_ref=nueva_cotizacion.numero_cotizacion or str(nueva_cotizacion.id),
-        detalle=(
-            f"Origen: {cot_original.numero_cotizacion or cot_original.id}. "
-            f"Cliente: {nueva_cotizacion.cliente or 'Sin cliente'}. "
-            f"Nuevo total: {nueva_cotizacion.moneda or 'ARS'} {nueva_cotizacion.total_final or 0.0:,.2f}."
-        ),
-    )
     return jsonify(
         {
             "ok": True,
@@ -3298,7 +3627,7 @@ def clonar_cotizacion(id):
 @token_required
 @admin_required
 def eliminar_cotizacion(id):
-    cotizacion = Cotizacion.query.get_or_404(id)
+    cotizacion = db.get_or_404(Cotizacion, id)
     numero_ref = cotizacion.numero_cotizacion or str(cotizacion.id)
     cliente_ref = cotizacion.cliente or "Sin cliente"
     familia_ref = cotizacion.familia or "Sin familia"
@@ -3310,8 +3639,6 @@ def eliminar_cotizacion(id):
         eliminar_imagen_local(item.imagen_url)
 
     db.session.delete(cotizacion)
-    db.session.commit()
-
     registrar_auditoria(
         "Eliminó cotización",
         "Cotización",
@@ -3319,6 +3646,7 @@ def eliminar_cotizacion(id):
         entidad_ref=numero_ref,
         detalle=f"Cliente: {cliente_ref}. Familia: {familia_ref}. Estado: {estado_ref}. Total: {moneda_ref} {total_ref:,.2f}.",
     )
+    db.session.commit()
 
     return jsonify({"ok": True, "id": id, "numero_cotizacion": numero_ref}), 200
 

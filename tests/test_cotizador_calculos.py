@@ -2,7 +2,9 @@ import json
 import os
 import requests
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
@@ -45,6 +47,9 @@ class CotizadorCalculosTest(unittest.TestCase):
         with cotizador_app._bna_exchange_rate_lock:
             cotizador_app._bna_exchange_rate_cache["payload"] = None
             cotizador_app._bna_exchange_rate_cache["fetched_at"] = None
+        with cotizador_app._bna_refresh_lock:
+            cotizador_app._bna_refresh_in_progress = False
+            cotizador_app._bna_refresh_last_error = None
         with app.app_context():
             db.session.remove()
             db.drop_all()
@@ -293,6 +298,208 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("function normalizarMensajeErrorTipoCambio", html)
         self.assertIn("No se pudo validar la conexion segura con el BNA.", html)
+
+    def test_renderizar_cotizador_no_consulta_bna(self):
+        with patch.object(cotizador_app, "obtener_tipo_cambio_oficial_bna") as obtener_bna:
+            response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        obtener_bna.assert_not_called()
+        self.assertIn("El tipo de cambio se cargara desde BNA al abrir el cotizador.", response.get_data(as_text=True))
+
+    def test_endpoint_publica_metricas_de_duracion_y_consultas_sql(self):
+        with patch.object(app.logger, "info") as logger_info:
+            response = self.client.get("/historial")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(float(response.headers["X-Response-Time-Ms"]), 0.0)
+        self.assertGreaterEqual(int(response.headers["X-SQL-Query-Count"]), 1)
+        server_timing = response.headers["Server-Timing"]
+        self.assertIn("app;dur=", server_timing)
+        self.assertIn("sql;dur=", server_timing)
+        self.assertIn("queries", server_timing)
+        self.assertTrue(
+            any(
+                llamada.args and llamada.args[0].startswith("request_metrics endpoint=")
+                for llamada in logger_info.call_args_list
+            )
+        )
+
+    def test_cotizacion_y_auditoria_se_confirman_en_una_sola_transaccion(self):
+        commits = []
+
+        def registrar_commit(_connection):
+            commits.append(1)
+
+        with app.app_context():
+            engine = db.engine
+            cotizador_app.event.listen(engine, "commit", registrar_commit)
+        try:
+            response = self.client.post(
+                "/",
+                data=self._form_cotizacion(),
+                follow_redirects=False,
+            )
+        finally:
+            cotizador_app.event.remove(engine, "commit", registrar_commit)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(commits), 1)
+        with app.app_context():
+            cotizacion = Cotizacion.query.order_by(Cotizacion.id.desc()).first()
+            auditorias = cotizador_app.Auditoria.query.filter_by(
+                tipo_entidad="Cotización",
+                entidad_id=cotizacion.id,
+            ).all()
+            self.assertEqual(len(auditorias), 1)
+
+    def test_filtrar_historial_evita_consultas_n_mas_uno_de_clientes(self):
+        with app.app_context():
+            ahora = cotizador_app.datetime.utcnow()
+            db.session.add_all(
+                [
+                    Cotizacion(
+                        numero_cotizacion=f"CT-TEST-{indice:03d}",
+                        estado="En progreso",
+                        cliente=f"Cliente {indice}",
+                        cliente_id=self.cliente_exento_id,
+                        familia="SEGURIDAD URBANA",
+                        fecha=ahora,
+                        moneda="USD",
+                        total_final=float(indice),
+                    )
+                    for indice in range(25)
+                ]
+            )
+            db.session.commit()
+
+        response = self.client.get("/filtrar_historial?page=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.get_json()["items"]), cotizador_app.HISTORIAL_PER_PAGE)
+        self.assertLessEqual(int(response.headers["X-SQL-Query-Count"]), 4)
+        self.assertTrue(
+            all(
+                item["cliente_nombre"] == "Municipalidad de Lujan"
+                for item in response.get_json()["items"]
+            )
+        )
+
+    def test_guardados_concurrentes_generan_numeros_unicos(self):
+        workers = 6
+        barrera = threading.Barrier(workers)
+        with app.app_context():
+            usuario = Usuario.query.filter_by(username="admin").one()
+            token = cotizador_app.generar_token_usuario(usuario)
+
+        def guardar_cotizacion(_indice):
+            cliente = app.test_client()
+            cliente.set_cookie("x-access-token", token)
+            barrera.wait()
+            respuesta = cliente.post(
+                "/",
+                data=self._form_cotizacion(),
+                follow_redirects=False,
+            )
+            return respuesta.status_code
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            estados = list(pool.map(guardar_cotizacion, range(workers)))
+
+        self.assertEqual(estados, [302] * workers)
+        with app.app_context():
+            numeros = [fila[0] for fila in db.session.query(Cotizacion.numero_cotizacion).all()]
+            auditorias = cotizador_app.Auditoria.query.filter_by(tipo_entidad="Cotización").count()
+        self.assertEqual(len(numeros), workers)
+        self.assertEqual(len(set(numeros)), workers)
+        self.assertEqual(auditorias, workers)
+
+    def test_tipo_cambio_bna_cache_persiste_entre_memorias(self):
+        payload = {
+            "ok": True,
+            "rate": 1450.0,
+            "buy_rate": 1400.0,
+            "label": "BNA billete vendedor",
+        }
+        with app.app_context():
+            cotizador_app.guardar_tipo_cambio_bna_cache(payload)
+            with cotizador_app._bna_exchange_rate_lock:
+                cotizador_app._bna_exchange_rate_cache["payload"] = None
+                cotizador_app._bna_exchange_rate_cache["fetched_at"] = None
+            recuperado = cotizador_app.obtener_tipo_cambio_bna_cache()
+
+        self.assertEqual(recuperado["rate"], 1450.0)
+        self.assertFalse(recuperado["stale"])
+
+    def test_renderizar_cotizador_recupera_cache_persistente_sin_consultar_bna(self):
+        payload = {"ok": True, "rate": 1450.0, "label": "BNA billete vendedor"}
+        with app.app_context():
+            cotizador_app.guardar_tipo_cambio_bna_cache(payload)
+            with cotizador_app._bna_exchange_rate_lock:
+                cotizador_app._bna_exchange_rate_cache["payload"] = None
+                cotizador_app._bna_exchange_rate_cache["fetched_at"] = None
+
+        with patch.object(cotizador_app, "obtener_tipo_cambio_oficial_bna") as obtener_bna:
+            response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('value="1450.0"', response.get_data(as_text=True))
+        obtener_bna.assert_not_called()
+
+    def test_api_tipo_cambio_responde_cache_y_dispara_actualizacion(self):
+        payload = {"ok": True, "rate": 1450.0, "label": "BNA billete vendedor"}
+        with app.app_context():
+            cotizador_app.guardar_tipo_cambio_bna_cache(payload)
+        with patch.object(cotizador_app, "solicitar_actualizacion_tipo_cambio_bna", return_value=True) as solicitar:
+            with patch.object(cotizador_app, "estado_actualizacion_tipo_cambio_bna", return_value=(True, None)):
+                response = self.client.get("/api/tipo-cambio/oficial?refresh=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["rate"], 1450.0)
+        self.assertTrue(response.get_json()["refreshing"])
+        solicitar.assert_called_once_with(force=True)
+
+    def test_actualizacion_bna_en_segundo_plano_fuerza_refresco(self):
+        payload = {"ok": True, "rate": 1450.0}
+        with patch.object(cotizador_app, "obtener_tipo_cambio_oficial_bna", return_value=payload) as obtener_bna:
+            cotizador_app._actualizar_tipo_cambio_bna_en_segundo_plano(force=False)
+
+        obtener_bna.assert_called_once_with(force=True)
+
+    def test_tipo_cambio_vencido_se_devuelve_sin_consultar_bna(self):
+        payload = {"ok": True, "rate": 1450.0, "label": "BNA billete vendedor"}
+        with app.app_context():
+            cotizador_app.guardar_tipo_cambio_bna_cache(payload)
+            cache_persistente = db.session.get(cotizador_app.TipoCambioBnaCache, 1)
+            cache_persistente.actualizado_en = cotizador_app.datetime.utcnow() - cotizador_app.timedelta(
+                seconds=cotizador_app.BNA_TC_CACHE_SECONDS + 1
+            )
+            db.session.commit()
+            with cotizador_app._bna_exchange_rate_lock:
+                cotizador_app._bna_exchange_rate_cache["payload"] = None
+                cotizador_app._bna_exchange_rate_cache["fetched_at"] = None
+            with patch.object(cotizador_app, "descargar_html_bna") as descargar_bna:
+                recuperado = cotizador_app.obtener_tipo_cambio_oficial_bna()
+
+        self.assertEqual(recuperado["rate"], 1450.0)
+        self.assertTrue(recuperado["stale"])
+        descargar_bna.assert_not_called()
+
+    def test_descarga_bna_usa_timeout_corto(self):
+        class FakeResponse:
+            text = "<html></html>"
+
+            def raise_for_status(self):
+                return None
+
+        with patch.dict(os.environ, {"BNA_SSL_MODE": "strict"}):
+            with patch.object(cotizador_app.requests, "get", return_value=FakeResponse()) as mock_get:
+                html, ssl_insecure = cotizador_app.descargar_html_bna()
+
+        self.assertEqual(html, "<html></html>")
+        self.assertFalse(ssl_insecure)
+        self.assertEqual(cotizador_app.BNA_REQUEST_TIMEOUT_SECONDS, 3)
+        self.assertEqual(mock_get.call_args.kwargs["timeout"], 3)
 
     def test_tipo_cambio_bna_reintenta_sin_validacion_ssl_en_modo_auto(self):
         payload_bna = {
@@ -600,6 +807,96 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertIn("Cliente USD", html)
         self.assertNotIn("Cliente ARS", html)
 
+    def test_dashboard_calcula_resumen_series_y_desgloses_con_sql(self):
+        with app.app_context():
+            db.session.add(FamiliaCotizacion(nombre="DATA CENTER", activa=True))
+            cliente = db.session.get(Cliente, self.cliente_exento_id)
+            cliente.sector = "Publico"
+            cliente.subsector = "Municipal"
+            db.session.commit()
+
+        cotizacion_aceptada_id = self._crear_cotizacion(familia="SEGURIDAD URBANA")
+        cotizacion_rechazada_id = self._crear_cotizacion(familia="DATA CENTER")
+        cotizacion_pipeline_id = self._crear_cotizacion(
+            cliente_id="",
+            cliente="Cliente sin ficha",
+            cliente_razon_social="Cliente sin ficha SA",
+            cliente_cuit="30-55555555-5",
+            familia="DATA CENTER",
+        )
+        fecha = cotizador_app.datetime.utcnow() - cotizador_app.timedelta(days=1)
+
+        with app.app_context():
+            cotizacion_aceptada = db.session.get(Cotizacion, cotizacion_aceptada_id)
+            cotizacion_aceptada.estado = "Aceptada"
+            cotizacion_aceptada.total_final = 100.0
+            cotizacion_aceptada.fecha = fecha
+
+            cotizacion_rechazada = db.session.get(Cotizacion, cotizacion_rechazada_id)
+            cotizacion_rechazada.estado = "Rechazada"
+            cotizacion_rechazada.total_final = 250.0
+            cotizacion_rechazada.fecha = fecha
+
+            cotizacion_pipeline = db.session.get(Cotizacion, cotizacion_pipeline_id)
+            cotizacion_pipeline.estado = "En progreso"
+            cotizacion_pipeline.total_final = 50.0
+            cotizacion_pipeline.fecha = fecha
+            db.session.commit()
+
+            desde_date = fecha.date() - cotizador_app.timedelta(days=1)
+            hasta_date = fecha.date() + cotizador_app.timedelta(days=1)
+            filtros = {
+                "desde": desde_date.isoformat(),
+                "hasta": hasta_date.isoformat(),
+                "cliente": "",
+                "familia": "",
+                "sector": "",
+                "subsector": "",
+                "moneda": "USD",
+            }
+            query = cotizador_app.construir_query_dashboard_periodo(filtros)
+            resumen = cotizador_app.construir_resumen_dashboard_sql(query)
+            series = cotizador_app.construir_series_dashboard_sql(query, desde_date, hasta_date)
+            clientes = cotizador_app.construir_top_clientes_dashboard_sql(query)
+            familias = cotizador_app.construir_desglose_dashboard_sql(
+                query,
+                Cotizacion.familia,
+                resumen["total"],
+                default_label="Sin familia",
+            )
+            sectores = cotizador_app.construir_desglose_dashboard_sql(
+                query,
+                Cliente.sector,
+                resumen["total"],
+                default_label="Sin sector",
+            )
+            agrupaciones = cotizador_app.construir_agrupaciones_dashboard_sql(query, resumen["total"])
+
+        self.assertEqual(resumen["total"], 3)
+        self.assertEqual(resumen["aceptadas"], 1)
+        self.assertEqual(resumen["rechazadas"], 1)
+        self.assertEqual(resumen["en_progreso"], 1)
+        self.assertEqual(resumen["total_importe"], 400.0)
+        self.assertEqual(resumen["importe_pipeline"], 50.0)
+        self.assertEqual(resumen["importe_aceptado"], 100.0)
+        self.assertEqual(sum(series["creadas"]), 3)
+        self.assertEqual(sum(series["cerradas"]), 2)
+        self.assertEqual(sum(series["aceptadas"]), 1)
+        self.assertEqual(series["resumen"], resumen)
+        self.assertEqual(clientes[0]["nombre"], "Municipalidad de Lujan")
+        self.assertEqual(clientes[0]["cantidad"], 2)
+        self.assertEqual(clientes[0]["total"], 350.0)
+        self.assertEqual(familias[0]["nombre"], "DATA CENTER")
+        self.assertEqual(familias[0]["cantidad"], 2)
+        self.assertEqual(familias[0]["porcentaje"], 66.7)
+        self.assertEqual(sectores[0]["nombre"], "Publico")
+        self.assertEqual(sectores[0]["cantidad"], 2)
+        self.assertEqual(sectores[1]["nombre"], "Sin sector")
+        self.assertEqual(sectores[1]["cantidad"], 1)
+        self.assertEqual(agrupaciones["clientes"], clientes)
+        self.assertEqual(agrupaciones["familias"], familias)
+        self.assertEqual(agrupaciones["sectores"], sectores)
+
     def test_links_de_recordatorio_usan_app_base_url_configurada(self):
         cotizacion_id = self._crear_cotizacion()
         cotizacion = self._cotizacion(cotizacion_id)
@@ -891,6 +1188,24 @@ class CotizadorCalculosTest(unittest.TestCase):
             self.assertIsNotNone(cotizacion.seguimiento_ultimo_envio)
             self.assertGreater(cotizacion.seguimiento_proximo_envio, cotizacion.seguimiento_ultimo_envio)
 
+    def test_recordatorio_no_se_envia_dos_veces_si_otro_worker_lo_tomo(self):
+        cotizacion_id = self._crear_cotizacion()
+
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            cotizacion.seguimiento_activo = True
+            cotizacion.seguimiento_email = "seguimiento@cuencotech.com"
+            cotizacion.seguimiento_cada_dias = 7
+            cotizacion.seguimiento_proximo_envio = cotizador_app.datetime.utcnow() - cotizador_app.timedelta(days=1)
+            db.session.commit()
+
+        with patch.object(cotizador_app, "enviar_mail_recordatorio", return_value=True) as enviar_mock:
+            with app.app_context():
+                cotizador_app.procesar_recordatorios_vencidos()
+                cotizador_app.procesar_recordatorios_vencidos()
+
+        self.assertEqual(enviar_mock.call_count, 1)
+
     def test_caso_2_tipo_cambio_guardado_no_se_pisa_con_bna_actual(self):
         cotizacion_id = self._crear_cotizacion()
 
@@ -906,7 +1221,7 @@ class CotizadorCalculosTest(unittest.TestCase):
             html = response_get.get_data(as_text=True)
             self.assertEqual(response_get.status_code, 200)
             self.assertIn("Tipo guardado en esta cotizacion: 1450.0000", html)
-            self.assertIn("BNA actual: 1500.0000", html)
+            self.assertIn("Usa actualizar para consultar el BNA actual.", html)
 
             data = self._form_cotizacion()
             data.pop("tipo_cambio")

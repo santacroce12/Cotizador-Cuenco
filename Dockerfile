@@ -25,4 +25,4 @@ RUN mkdir -p /app/data /app/static/uploads/productos
 
 EXPOSE 9000
 
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-9000} --workers ${GUNICORN_WORKERS:-3} --threads ${GUNICORN_THREADS:-2} --timeout ${GUNICORN_TIMEOUT:-120} wsgi:application"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-9000} --workers ${GUNICORN_WORKERS:-1} --threads ${GUNICORN_THREADS:-4} --timeout ${GUNICORN_TIMEOUT:-120} wsgi:application"]
