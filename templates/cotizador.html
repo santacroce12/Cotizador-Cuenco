@@ -2141,6 +2141,11 @@ function renderTipoCambioEstado(data, errorMessage = "") {
     if (!statusNode) {
         return;
     }
+    if (data && data.pending) {
+        statusNode.classList.remove("text-danger");
+        statusNode.textContent = "Actualizando tipo de cambio desde BNA...";
+        return;
+    }
     if (data && data.ok && Number.isFinite(Number(data.rate))) {
         statusNode.classList.remove("text-danger");
         let mensaje = `${data.label || "BNA oficial"}`;
@@ -2178,7 +2183,7 @@ function normalizarMensajeErrorTipoCambio(errorMessage = "") {
     return message;
 }
 
-async function actualizarTipoCambioOficial(force = false) {
+async function actualizarTipoCambioOficial(force = false, intentos = 0) {
     const input = document.getElementById("tipo_cambio");
     const refreshBtn = document.getElementById("btn-tipo-cambio-refresh");
     if (!input) {
@@ -2193,12 +2198,22 @@ async function actualizarTipoCambioOficial(force = false) {
             credentials: "same-origin",
         });
         const data = await response.json();
+        if (data.pending) {
+            renderTipoCambioEstado(data);
+            if (intentos < 15) {
+                window.setTimeout(() => actualizarTipoCambioOficial(false, intentos + 1), 1000);
+            }
+            return;
+        }
         if (!response.ok || !data.ok || !Number.isFinite(Number(data.rate))) {
             throw new Error(normalizarMensajeErrorTipoCambio(data.error || "No se pudo obtener el tipo de cambio oficial."));
         }
         input.value = Number(data.rate);
         renderTipoCambioEstado(data);
         calcularTodo();
+        if (data.refreshing && intentos < 15) {
+            window.setTimeout(() => actualizarTipoCambioOficial(false, intentos + 1), 1000);
+        }
     } catch (error) {
         renderTipoCambioEstado(null, normalizarMensajeErrorTipoCambio(error.message));
         calcularTodo();
