@@ -1,36 +1,167 @@
 {% extends "layout.html" %}
 
-{% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6 col-lg-4">
-        <div class="card p-4 page-surface">
-            <div class="text-center mb-4">
-                <h2 class="mb-2">Ingresar</h2>
-                <div class="text-muted">Acceso al cotizador</div>
+{% block title %}Ingresar{% endblock %}
+
+{% block head %}
+<style>
+    .login-shell { min-height: 100vh; display: flex; }
+
+    /* Panel de marca: degrade oscuro con el logo en blanco. */
+    .login-marca {
+        flex: 1 1 0;
+        position: relative;
+        overflow: hidden;
+        display: grid;
+        place-items: center;
+        padding: 3rem;
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #1e293b 100%);
+    }
+
+    /* Arcos suaves en los colores del logo (turquesa -> dorado). */
+    .login-marca::before,
+    .login-marca::after {
+        content: "";
+        position: absolute;
+        border-radius: 50%;
+        pointer-events: none;
+    }
+    .login-marca::before {
+        width: 140%;
+        aspect-ratio: 1;
+        left: -20%;
+        bottom: -95%;
+        background: radial-gradient(circle, transparent 54%, rgb(26 170 150 / 0.18) 54.3%, transparent 55%, transparent 60%, rgb(237 170 70 / 0.14) 60.3%, transparent 61%);
+    }
+    .login-marca::after {
+        width: 60%;
+        aspect-ratio: 1;
+        right: -18%;
+        top: -22%;
+        background: radial-gradient(circle, rgb(26 170 150 / 0.22), transparent 65%);
+        filter: blur(20px);
+    }
+
+    .login-marca-centro { position: relative; display: flex; align-items: center; gap: 1.25rem; }
+    .login-marca-icono { width: clamp(72px, 7vw, 104px); height: auto; filter: drop-shadow(0 10px 30px rgb(0 0 0 / 0.35)); }
+    .login-marca-nombre { font-size: clamp(3rem, 5.2vw, 4.75rem); }
+    .login-marca-nombre span:first-child { color: #ffffff; }
+    .login-marca-nombre span:last-child { color: #7aa7ff; }
+    .login-marca-empresa {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 2.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        color: rgb(255 255 255 / 0.7);
+        font-size: 0.875rem;
+    }
+    .login-marca-empresa img { height: 42px; width: auto; opacity: 0.9; }
+
+    .login-panel {
+        flex: 1 1 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        background: var(--background);
+    }
+
+    .login-form { width: 100%; max-width: 28rem; padding: 2rem; }
+    .login-logo { display: none; align-items: center; gap: 0.6rem; margin-bottom: 2rem; }
+    .login-logo img { width: 44px; height: 44px; }
+    .login-logo .marca-yocotizo { font-size: 2rem; }
+    .login-titulo { margin: 0 0 0.5rem; font-size: 1.875rem; font-weight: 700; letter-spacing: -0.025em; }
+    .login-sub { margin: 0 0 2rem; color: var(--muted-foreground); font-size: 0.9375rem; }
+
+    .login-form .form-label { margin-bottom: 0.5rem; color: var(--label); }
+    .login-form .form-control {
+        min-height: 3rem;
+        padding: 0.75rem 1rem;
+        border-radius: 0.75rem;
+        font-size: 0.9375rem;
+        border-color: var(--border-strong);
+    }
+    .login-form .form-control:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgb(59 130 246 / 0.25); }
+    .login-form .password-field .form-control { padding-right: 3rem; }
+    .login-form .password-toggle-btn { right: 0.6rem; width: 2rem; height: 2rem; border-radius: 999px; }
+
+    .login-boton {
+        width: 100%;
+        min-height: 3rem;
+        border: 0;
+        border-radius: 0.75rem;
+        background: #0a0a0a;
+        color: #ffffff;
+        font-weight: 500;
+        font-size: 0.9375rem;
+        transition: background-color 0.15s ease;
+    }
+    .login-boton:hover { background: #262626; }
+    .login-boton:focus-visible { outline: none; box-shadow: 0 0 0 3px rgb(59 130 246 / 0.35); }
+    [data-theme="dark"] .login-boton { background: #fafafa; color: #0a0a0a; }
+    [data-theme="dark"] .login-boton:hover { background: #e5e5e5; }
+
+    .login-ayuda { margin: 1.5rem 0 0; text-align: center; color: var(--muted-foreground); font-size: 0.8125rem; }
+
+    @media (max-width: 991.98px) {
+        .login-marca { display: none; }
+        .login-logo { display: flex; }
+        .login-form { padding: 1rem 0; }
+    }
+</style>
+{% endblock %}
+
+{% block auth_content %}
+<div class="login-shell">
+    <aside class="login-marca">
+        <div class="login-marca-centro">
+            <img class="login-marca-icono" src="{{ url_for('static', filename='yocotizo-icono.svg') }}" alt="">
+            <div class="login-marca-nombre marca-yocotizo" aria-label="YoCotizo"><span>yo</span><span>cotizo</span></div>
+        </div>
+        <div class="login-marca-empresa">
+            <img src="{{ url_for('static', filename='logo-cuencotech-blanco.png') }}" alt="Cuenco Tech">
+        </div>
+    </aside>
+
+    <main class="login-panel">
+        <div class="login-form">
+            <div class="login-logo">
+                <img src="{{ url_for('static', filename='yocotizo-icono.svg') }}" alt="">
+                <span class="marca-yocotizo" aria-label="YoCotizo"><span class="marca-yo">yo</span><span class="marca-cotizo">cotizo</span></span>
             </div>
 
+            <h1 class="login-titulo">Bienvenido</h1>
+            <p class="login-sub">Ingresá con tu usuario y contraseña.</p>
+
             {% if error %}
-            <div class="alert alert-danger" role="alert">{{ error }}</div>
+            <div class="alert alert-danger d-flex gap-2 align-items-start" role="alert">
+                <i class="bi bi-exclamation-circle mt-1"></i><span>{{ error }}</span>
+            </div>
             {% endif %}
 
-            <form method="POST" action="{{ url_for('login', next=request.args.get('next', '')) }}">
+            <form method="POST" action="{{ url_for('login', next=request.args.get('next', '')) }}" class="d-grid gap-4">
                 <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Usuario</label>
-                    <input type="text" name="username" class="form-control" autocomplete="username" required>
+                <div>
+                    <label class="form-label" for="username">Usuario</label>
+                    <input type="text" id="username" name="username" class="form-control" placeholder="Tu usuario" autocomplete="username" autofocus required>
                 </div>
-                <div class="mb-4">
-                    <label class="form-label fw-semibold">Contraseña</label>
+                <div>
+                    <label class="form-label" for="password">Contraseña</label>
                     <div class="password-field">
-                        <input type="password" name="password" class="form-control" autocomplete="current-password" required data-password-field>
+                        <input type="password" id="password" name="password" class="form-control" placeholder="Contraseña" autocomplete="current-password" required data-password-field>
                         <button type="button" class="password-toggle-btn" data-password-toggle aria-label="Mostrar contraseña" title="Mostrar contraseña" aria-pressed="false">
                             <i class="bi bi-eye"></i>
                         </button>
                     </div>
                 </div>
-                <button type="submit" class="btn btn-dark-custom w-100">Entrar</button>
+                <button type="submit" class="login-boton">Ingresar</button>
             </form>
+
+            <p class="login-ayuda">¿Olvidaste la contraseña? Pedile a un administrador que la cambie.</p>
         </div>
-    </div>
+    </main>
 </div>
 {% endblock %}

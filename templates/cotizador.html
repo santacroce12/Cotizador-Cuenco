@@ -1,417 +1,621 @@
 {% extends "layout.html" %}
 
+{% block title %}{{ "Editar " ~ (cotizacion.numero_cotizacion or "presupuesto") if modo_edicion else "Nuevo presupuesto" }}{% endblock %}
+
+{% block breadcrumb %}
+{% if modo_edicion %}
+<li class="breadcrumb-item"><a href="{{ url_for('historial_page') }}">Historial</a></li>
+<li class="breadcrumb-item active">{{ cotizacion.numero_cotizacion or "Editar" }}</li>
+{% else %}
+<li class="breadcrumb-item active">Nuevo presupuesto</li>
+{% endif %}
+{% endblock %}
+
+{% block header_actions %}
+{% if modo_edicion %}
+<a href="{{ url_for('ver_cotizacion', id=cotizacion.id) }}" class="btn btn-outline-dark btn-sm"><i class="bi bi-eye"></i>Ver</a>
+<a href="{{ url_for('exportar_cotizacion_pdf', id=cotizacion.id) }}" class="btn btn-outline-dark btn-sm"><i class="bi bi-file-earmark-pdf"></i>PDF</a>
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <style>
-    .cotizador-workspace {
-        width: 100%;
-        max-width: 100%;
-        margin-left: auto;
-        margin-right: auto;
-        overflow: hidden;
+    /* ---- Cotizador: tokens propios de esta pantalla ---- */
+    /* Tokens del cotizador = tokens shadcn (static/css/shadcn.css). */
+    .cz {
+        --cz-ink: var(--foreground);
+        --cz-text: var(--foreground);
+        --cz-muted: var(--muted-foreground);
+        --cz-line: var(--border);
+        --cz-line-strong: var(--input);
+        --cz-surface: var(--card);
+        --cz-soft: var(--muted);
+        --cz-accent: var(--foreground);
+        --cz-accent-soft: var(--accent);
+        --cz-ok: var(--success-text);
+        --cz-ok-soft: var(--success-soft);
+        --cz-warn: var(--warning);
+        --cz-danger: var(--danger);
+        color: var(--cz-text);
     }
 
-    .summary-help-label {
+    .cz-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .cz-title {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 600;
+        line-height: 2rem;
+        color: var(--cz-ink);
+        letter-spacing: -0.025em;
+    }
+
+    .cz-subtitle {
+        margin: 0.15rem 0 0;
+        color: var(--cz-muted);
+        font-size: 0.92rem;
+    }
+
+    .cz-header-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.6rem;
+    }
+
+    .cz-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.25rem 0.625rem;
+        border: 1px solid var(--cz-line);
+        border-radius: calc(var(--radius) - 2px);
+        background: var(--cz-surface);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--cz-text);
+        white-space: nowrap;
+    }
+
+    .cz-chip strong { color: var(--cz-ink); font-weight: 600; }
+    .cz-chip.is-usd { border-color: var(--success-border); background: var(--cz-ok-soft); color: var(--cz-ok); font-weight: 700; }
+    .cz-chip.is-legacy { border-color: var(--warning-border); background: var(--warning-soft); color: var(--cz-warn); font-weight: 700; }
+
+    .cz-header .estado-select { min-width: 150px; padding: 0.4rem 0.75rem; }
+
+    .cz-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        gap: 1.25rem;
+        align-items: start;
+    }
+
+    .cz-main { display: grid; gap: 1.25rem; min-width: 0; }
+
+    .cz-card {
+        background: var(--cz-surface);
+        border: 1px solid var(--cz-line);
+        border-radius: calc(var(--radius) + 4px);
+        box-shadow: var(--shadow-xs);
+    }
+
+    .cz-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.95rem 1.15rem;
+        border-bottom: 1px solid var(--cz-line);
+    }
+
+    .cz-card-title {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--cz-ink);
+    }
+
+    .cz-step {
+        width: 24px;
+        height: 24px;
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--muted);
+        border: 1px solid var(--border);
+        color: var(--foreground);
+        font-size: 0.75rem;
+        font-weight: 600;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 0.35rem;
+        flex: 0 0 auto;
     }
 
+    .cz-card-body { padding: 1.1rem 1.15rem 1.2rem; }
+
+    .cz .form-label {
+        margin-bottom: 0.35rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--cz-text);
+    }
+
+    .cz .form-control,
+    .cz .form-select {
+        border-radius: 10px;
+        padding: 0.5rem 0.7rem;
+        border-color: var(--cz-line-strong);
+        background-color: var(--background);
+        box-shadow: none;
+        font-size: 0.93rem;
+    }
+
+    .cz .form-control[readonly] { background: var(--cz-soft); color: var(--cz-muted); }
+    .cz .form-text { color: var(--cz-muted); font-size: 0.78rem; }
+    .cz .input-group-text { border-color: var(--cz-line-strong); background: var(--cz-soft); color: var(--cz-muted); border-radius: 10px; }
+
+    .cz .ts-wrapper.single .ts-control { border-color: var(--cz-line-strong); border-radius: 10px 0 0 10px; min-height: 40px; }
+
     .field-help-button {
-        width: 18px;
-        height: 18px;
+        width: 16px;
+        height: 16px;
         border-radius: 50%;
-        border: 1px solid rgba(148, 163, 184, 0.65);
-        background: rgba(255, 255, 255, 0.12);
-        color: inherit;
+        border: 1px solid var(--cz-line-strong);
+        background: transparent;
+        color: var(--cz-muted);
         display: inline-flex;
         align-items: center;
         justify-content: center;
         padding: 0;
-        font-size: 0.72rem;
-        font-weight: 800;
+        font-size: 0.66rem;
+        font-weight: 700;
         line-height: 1;
         cursor: help;
         flex: 0 0 auto;
+        vertical-align: middle;
     }
 
-    .field-help-button.dark {
-        background: rgba(15, 23, 42, 0.08);
-        color: #334155;
-    }
+    .field-help-button.dark { color: var(--cz-muted); }
+    .summary-help-label { display: inline-flex; align-items: center; gap: 0.35rem; }
 
-    .calc-help-panel {
-        border: 1px solid #c8d3df;
-        border-radius: 14px;
-        background: #f8fafc;
-        padding: 0.9rem 1rem;
-        color: #334155;
-    }
+    /* ---- Items ---- */
+    .cotizador-items-list { display: grid; gap: 1.25rem; }
 
-    .calc-help-title {
-        font-size: 0.78rem;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: #475569;
-        margin-bottom: 0.55rem;
-    }
-
-    .calc-help-grid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 0.55rem 0.85rem;
-        font-size: 0.82rem;
-        line-height: 1.35;
-    }
-
-    .calc-help-grid strong {
-        color: #0f172a;
-    }
-
-    .cotizador-items-list {
-        display: grid;
-        gap: 1rem;
-    }
-
+    /* Cada item es una tarjeta con encabezado gris propio, para distinguirlo
+       del siguiente aunque esten pegados. */
     .cotizador-item-card {
-        border: 1px solid #d2ddeb;
-        border-radius: 16px;
-        background: #ffffff;
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
-        padding: 0.95rem 1rem 1rem;
+        border: 1px solid var(--border-strong);
+        border-radius: calc(var(--radius) + 2px);
+        background: var(--cz-surface);
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .cotizador-item-card:focus-within {
+        border-color: var(--ring);
+        box-shadow: 0 0 0 3px rgb(161 161 161 / 0.25), var(--shadow-sm);
     }
 
     .cotizador-item-head {
-        display: grid;
-        grid-template-columns: 1fr auto;
+        display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: 0.75rem;
-        margin-bottom: 1rem;
-        width: 100%;
+        padding: 0.55rem 0.6rem 0.55rem 0.9rem;
+        background: var(--muted);
+        border-bottom: 1px solid var(--border);
+    }
+
+    .cotizador-item-title { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+
+    .cotizador-item-num {
+        flex: 0 0 auto;
+        min-width: 1.6rem;
+        height: 1.6rem;
+        padding: 0 0.35rem;
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--primary);
+        color: var(--primary-foreground);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
     }
 
     .cotizador-item-index {
-        font-size: 0.76rem;
-        font-weight: 800;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: #475569;
-        align-self: center;
+        flex: 0 0 auto;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--foreground);
     }
+
+    .cotizador-item-nombre {
+        min-width: 0;
+        font-size: 0.875rem;
+        color: var(--muted-foreground);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .cotizador-item-nombre.vacio { color: var(--muted-foreground); opacity: 0.7; font-style: italic; }
+
+    .cotizador-item-body { padding: 1rem; }
 
     .cotizador-item-layout {
         display: grid;
-        grid-template-columns: 94px minmax(0, 1fr);
-        gap: 1rem;
+        grid-template-columns: 76px minmax(0, 1fr);
+        gap: 0.9rem;
         align-items: start;
     }
 
-    .cotizador-item-content {
-        display: grid;
-        grid-template-columns: minmax(250px, 0.95fr) minmax(520px, 1.55fr) 220px;
-        gap: 1rem;
-        align-items: start;
-    }
+    .cotizador-item-content { display: grid; gap: 0.8rem; min-width: 0; }
 
     .cotizador-item-identity {
         display: grid;
-        grid-template-columns: 1fr;
-        gap: 0.9rem;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+        gap: 0.7rem;
     }
 
     .cotizador-item-metrics {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 0.9rem 1rem;
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+        gap: 0.55rem;
+    }
+
+    .cotizador-field { display: grid; gap: 0.25rem; min-width: 0; }
+
+    .cotizador-field-label {
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--label);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .cz .cotizador-input,
+    .cz .cotizador-select,
+    .cz .cotizador-textarea {
+        width: 100%;
+        min-height: 38px;
+        padding: 0.4rem 0.55rem;
+        font-size: 0.9rem;
+    }
+
+    .cz .cotizador-textarea { min-height: 38px; resize: vertical; }
+    .cotizador-decimal-input { font-variant-numeric: tabular-nums; }
+
+    .cz .select-iva,
+    .cz select[name="iva_item[]"] {
+        max-width: none;
+        border: 1px solid var(--cz-line-strong);
+        background-color: var(--background);
+        font-weight: 600;
+        text-align: left;
     }
 
     .cotizador-item-summary {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 0.85rem;
-        align-content: start;
-    }
-
-    .cotizador-field {
-        display: grid;
-        gap: 0.35rem;
-    }
-
-    .cotizador-field-label {
-        font-size: 0.72rem;
-        font-weight: 800;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
-        color: #475569;
-    }
-
-    .cotizador-input,
-    .cotizador-select,
-    .cotizador-textarea {
-        width: 100%;
-        min-height: 52px;
-        padding: 0.68rem 0.8rem;
-        font-size: 0.96rem;
-        border: 1px solid #bfd0e2;
-        border-radius: 14px;
-        background: #ffffff;
-    }
-
-    .cotizador-textarea {
-        min-height: 82px;
-        resize: vertical;
-    }
-
-    .cotizador-select {
-        padding-right: 2.2rem;
-    }
-
-    .cotizador-decimal-input {
-        font-variant-numeric: tabular-nums;
-    }
-
-    .forma-pago-grid {
-        display: grid;
-        grid-template-columns: minmax(180px, 0.75fr) minmax(260px, 1.2fr) minmax(180px, 0.75fr);
-        gap: 0.85rem;
-        align-items: end;
-    }
-
-    .forma-pago-field {
-        display: grid;
-        gap: 0.35rem;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.5rem 1.25rem;
+        padding-top: 0.65rem;
+        border-top: 1px dashed var(--cz-line);
     }
 
     .cotizador-item-pill {
-        min-height: 76px;
-        border-radius: 14px;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        justify-content: center;
-        gap: 0.35rem;
-        padding: 0.85rem 0.95rem;
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.45rem;
+        font-size: 0.82rem;
+        color: var(--cz-muted);
+    }
+
+    .cotizador-item-pill-label { font-weight: 600; }
+
+    .cz .cotizador-item-pill-value,
+    .cz .ganancia-badge {
+        background: none;
+        padding: 0;
+        border-radius: 0;
+        font-family: inherit;
+        font-size: 0.98rem;
         font-weight: 700;
-    }
-
-    .cotizador-item-pill-label {
-        font-size: 0.76rem;
-        font-weight: 800;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
-        opacity: 0.8;
-    }
-
-    .cotizador-item-pill-value {
-        font-size: 1.18rem;
+        font-variant-numeric: tabular-nums;
         white-space: nowrap;
-        align-self: flex-end;
     }
 
-    .cotizador-item-pill.ganancia {
-        background: #0f172a;
-        color: #22c55e;
-    }
-
-    .cotizador-item-pill.venta {
-        background: #1f2937;
-        color: #ffffff;
-    }
+    .cotizador-item-pill.ganancia .cotizador-item-pill-value { color: var(--cz-ok); }
+    .cotizador-item-pill.venta .cotizador-item-pill-value { color: var(--cz-ink); }
 
     .cotizador-number-no-spin::-webkit-outer-spin-button,
     .cotizador-number-no-spin::-webkit-inner-spin-button,
     #bonificacion_cierre_monto::-webkit-outer-spin-button,
-    #bonificacion_cierre_monto::-webkit-inner-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-    }
-
-    .cotizador-number-no-spin,
-    #bonificacion_cierre_monto {
-        -moz-appearance: textfield;
-        appearance: textfield;
-    }
+    #bonificacion_cierre_monto::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .cotizador-number-no-spin, #bonificacion_cierre_monto { -moz-appearance: textfield; appearance: textfield; }
 
     .item-delete-btn {
-        width: 34px;
-        height: 34px;
-        margin: 0 auto;
-        border-radius: 10px;
-        border: 1px solid #ef4444;
-        background: #fff1f2;
-        color: #dc2626;
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--cz-muted);
         display: inline-flex;
         align-items: center;
         justify-content: center;
         padding: 0;
-        transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
     }
 
     .item-delete-btn:hover,
-    .item-delete-btn:focus {
-        background: #fee2e2;
-        border-color: #dc2626;
-        color: #b91c1c;
-        transform: translateY(-1px);
+    .item-delete-btn:focus { background: var(--danger-soft); border-color: var(--danger-border); color: var(--cz-danger); }
+
+    .cz-add-item {
+        width: 100%;
+        margin-top: 0.85rem;
+        padding: 0.65rem;
+        border: 1px dashed var(--cz-line-strong);
+        border-radius: 12px;
+        background: var(--cz-soft);
+        color: var(--cz-accent);
+        font-weight: 600;
+        font-size: 0.92rem;
     }
 
-    .item-delete-btn i {
-        font-size: 0.95rem;
-        line-height: 1;
-    }
+    .cz-add-item:hover { background: var(--accent); border-color: var(--ring); }
 
-    .cotizador-table-shell {
-        padding: 18px;
-        max-width: 100%;
-    }
-
-    .image-upload-cell {
-        width: 88px;
-        min-width: 88px;
-        display: grid;
-        justify-items: center;
-    }
-
-    .image-upload-input {
-        display: none;
-    }
+    .image-upload-cell { display: grid; justify-items: center; }
+    .image-upload-input { display: none; }
 
     .image-upload-trigger {
-        width: 78px;
-        height: 78px;
-        border: 1px dashed #adb5bd;
+        width: 72px;
+        height: 72px;
+        border: 1px dashed var(--cz-line-strong);
         border-radius: 10px;
-        background: #f8f9fa;
+        background: var(--cz-soft);
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 4px;
+        gap: 2px;
         cursor: pointer;
-        transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
         overflow: hidden;
+        margin: 0;
     }
 
-    .image-upload-trigger:hover {
-        border-color: #0d6efd;
-        background: #eef4ff;
-        transform: translateY(-1px);
-    }
-
-    .image-upload-preview {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        display: none;
-    }
-
-    .image-upload-trigger.has-image .image-upload-preview {
-        display: block;
-    }
-
+    .image-upload-trigger:hover { border-color: var(--cz-accent); background: var(--cz-accent-soft); }
+    .image-upload-preview { width: 100%; height: 100%; object-fit: cover; display: none; }
+    .image-upload-trigger.has-image { border-style: solid; }
+    .image-upload-trigger.has-image .image-upload-preview { display: block; }
     .image-upload-trigger.has-image .image-upload-icon,
-    .image-upload-trigger.has-image .image-upload-text {
-        display: none;
+    .image-upload-trigger.has-image .image-upload-text { display: none; }
+    .image-upload-icon { font-size: 1rem; color: var(--cz-muted); }
+    .image-upload-text { font-size: 0.62rem; font-weight: 600; color: var(--cz-muted); text-align: center; line-height: 1.1; }
+    .image-upload-actions { min-height: 18px; }
+
+    .forma-pago-grid {
+        display: grid;
+        grid-template-columns: minmax(160px, 0.8fr) minmax(220px, 1.2fr);
+        gap: 0.75rem;
+        align-items: end;
     }
 
-    .image-upload-icon {
-        font-size: 1rem;
-        color: #6c757d;
+    .forma-pago-field { display: grid; gap: 0.35rem; }
+
+    .cz-collapse-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 0;
+        border: 0;
+        background: none;
+        text-align: left;
     }
 
-    .image-upload-text {
-        font-size: 0.64rem;
-        font-weight: 600;
-        color: #495057;
-        text-align: center;
+    .cz-collapse-toggle .bi-chevron-down { transition: transform 0.2s ease; color: var(--cz-muted); }
+    .cz-collapse-toggle[aria-expanded="true"] .bi-chevron-down { transform: rotate(180deg); }
+
+    /* ---- Resumen lateral ---- */
+    .cz-aside {
+        position: sticky;
+        top: 1rem;
+        display: grid;
+        gap: 1rem;
+    }
+
+    .cz-total-card { padding: 1.15rem; }
+
+    .cz-total-label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--cz-muted);
+    }
+
+    .cz-total-value {
+        margin: 0.2rem 0 0.1rem;
+        font-size: 2rem;
+        font-weight: 700;
         line-height: 1.1;
-        padding: 0 6px;
+        color: var(--cz-ink);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
+        word-break: break-word;
     }
 
-    .image-upload-actions {
-        min-height: 20px;
+    .cz-total-hint { font-size: 0.8rem; color: var(--cz-muted); }
+
+    .cz-rows { display: grid; gap: 0.45rem; margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid var(--cz-line); }
+
+    .cz-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 0.75rem;
+        font-size: 0.88rem;
     }
 
-    @media (max-width: 1399.98px) {
-        .cotizador-item-content {
-            grid-template-columns: minmax(220px, 0.9fr) minmax(0, 1.3fr);
-        }
+    .cz-row > span:last-child { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--cz-ink); white-space: nowrap; }
+    .cz-row.is-strong { font-size: 0.95rem; font-weight: 700; }
+    .cz-row.is-ok > span:last-child { color: var(--cz-ok); }
+    .cz-row.is-minus > span:last-child { color: var(--cz-warn); }
+    .cz-row.is-danger > span:last-child { color: var(--cz-danger); }
 
-        .cotizador-item-summary {
-            grid-column: 1 / -1;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
+    .cz-ars {
+        margin-top: 1rem;
+        padding: 0.85rem 0.9rem;
+        border-radius: var(--radius);
+        background: var(--muted);
+        border: 1px solid var(--border);
+    }
+
+    .cz-ars-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--muted-foreground);
+    }
+
+    .cz-ars-value {
+        margin-top: 0.25rem;
+        font-size: 1.25rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--foreground);
+        font-variant-numeric: tabular-nums;
+        word-break: break-word;
+    }
+
+    .cz-ars-rate {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin-top: 0.55rem;
+    }
+
+    .cz-ars-rate .form-control { background: var(--background); font-variant-numeric: tabular-nums; }
+    .cz-ars #tipo_cambio_estado { font-size: 0.75rem; color: var(--muted-foreground); margin-top: 0.35rem; }
+    .cz-ars #tipo_cambio_estado.text-danger { color: var(--cz-danger) !important; }
+
+    .cz-badge-ref {
+        padding: 0.12rem 0.45rem;
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+        border: 1px solid var(--border);
+        font-size: 0.6875rem;
+        font-weight: 500;
+        color: var(--foreground);
+    }
+
+    .cz-internal { background: var(--card); }
+    .cz-internal .cz-card-title { font-size: 0.95rem; }
+    .cz-internal .cz-row > span:first-child { color: var(--muted-foreground); }
+    .cz-internal .cz-row.is-ok > span:last-child { color: var(--success-text); }
+    .cz-internal .cz-row.is-minus > span:last-child { color: var(--warning); }
+    .cz-internal .cz-row.is-danger > span:last-child { color: var(--danger); }
+
+    .summary-ars-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-top: 0.85rem;
+        padding: 0.3rem 0.65rem;
+        border: 1px solid var(--input);
+        border-radius: calc(var(--radius) - 2px);
+        background: var(--background);
+        color: var(--foreground);
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .summary-ars-toggle:hover { background: var(--accent); }
+    .summary-ars-demo { margin-top: 0.75rem; display: grid; gap: 0.45rem; }
+    .summary-ars-demo[hidden] { display: none; }
+    .summary-ars-demo-note { margin: 0; font-size: 0.75rem; color: var(--muted-foreground); }
+
+    .cz-calc-help { font-size: 0.78rem; line-height: 1.45; color: var(--muted-foreground); margin: 0.9rem 0 0; padding-left: 1rem; }
+    .cz-calc-help strong { color: var(--foreground); }
+
+    .cz-submit { display: grid; gap: 0.5rem; }
+    .cz-submit .btn { padding: 0.75rem 1rem; border-radius: 12px; font-weight: 700; }
+    .cz-submit-meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--cz-muted); }
+
+    .client-modal-dialog { height: calc(100vh - 2rem); max-height: calc(100vh - 2rem); margin-top: 1rem; margin-bottom: 1rem; }
+    .client-modal-dialog .modal-content { max-height: 100%; }
+    .client-modal-dialog .modal-body { overflow-y: auto; }
+
+    @media (max-width: 1679.98px) {
+        .cotizador-item-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     }
 
     @media (max-width: 1199.98px) {
-        .cotizador-item-metrics {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-        }
-    }
-
-    @media (max-width: 991.98px) {
-        .calc-help-grid {
-            grid-template-columns: 1fr;
-        }
-
-        .cotizador-item-content {
-            grid-template-columns: 1fr;
-        }
-
-        .forma-pago-grid {
-            grid-template-columns: 1fr;
-        }
-
-        .cotizador-item-layout,
-        .cotizador-item-metrics {
-            grid-template-columns: 1fr;
-        }
-
-        .cotizador-item-summary {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
+        .cz-layout { grid-template-columns: minmax(0, 1fr); }
+        .cz-aside { position: static; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
     }
 
     @media (max-width: 767.98px) {
-        .cotizador-item-metrics {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .cotizador-table-shell {
-            padding: 14px;
-        }
-
-        .cotizador-item-summary {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    .client-modal-dialog {
-        height: calc(100vh - 2rem);
-        max-height: calc(100vh - 2rem);
-        margin-top: 1rem;
-        margin-bottom: 1rem;
-    }
-
-    .client-modal-dialog .modal-content {
-        max-height: 100%;
-    }
-
-    .client-modal-dialog .modal-body {
-        overflow-y: auto;
+        .cotizador-item-layout { grid-template-columns: minmax(0, 1fr); }
+        .image-upload-cell { justify-items: start; }
+        .cotizador-item-identity { grid-template-columns: minmax(0, 1fr); }
+        .cotizador-item-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .forma-pago-grid { grid-template-columns: minmax(0, 1fr); }
+        .cz-aside { grid-template-columns: minmax(0, 1fr); }
+        .cz-card-body { padding: 0.95rem; }
     }
 </style>
-<div class="card p-4 page-surface cotizador-workspace">
-    <div class="d-flex align-items-center gap-3 mb-4">
-        <h2 class="text-primary mb-0">
-            <i class="bi bi-currency-exchange"></i>
-            {{ "Editar Presupuesto" if modo_edicion else "Nuevo Presupuesto" }}
-        </h2>
+
+<div class="cz">
+    <div class="cz-header">
+        <div>
+            <h1 class="cz-title">
+                {% if modo_edicion %}Editar presupuesto {{ cotizacion.numero_cotizacion or "" }}{% else %}Nuevo presupuesto{% endif %}
+            </h1>
+            <p class="cz-subtitle">Cargá el cliente y los ítems; el total se calcula a medida que escribís.</p>
+        </div>
+        <div class="cz-header-meta">
+            {% if moneda_cotizacion == "ARS" %}
+            <span class="cz-chip is-legacy" title="Cotizacion cargada antes de fijar la moneda en USD. Conserva sus importes en pesos.">
+                <i class="bi bi-exclamation-triangle"></i> Cotización histórica en ARS
+            </span>
+            {% else %}
+            <span class="cz-chip is-usd"><i class="bi bi-currency-dollar"></i> Cotización en USD</span>
+            {% endif %}
+            <span class="cz-chip" title="Nombre, cargo y contacto que salen en el presupuesto. Se editan en Usuarios.">
+                <i class="bi bi-pen"></i> Firma: <strong>{{ firma_cotizacion.name }}</strong>{% if firma_cotizacion.role %} · {{ firma_cotizacion.role }}{% endif %}
+            </span>
+            {% if modo_edicion %}
+            <select name="estado" form="form-cotizador" id="estado_cotizacion" class="form-select estado-select {% if cotizacion and cotizacion.estado == 'Aceptada' %}estado-aceptada{% elif cotizacion and cotizacion.estado == 'Rechazada' %}estado-rechazada{% else %}estado-en-progreso{% endif %}" onchange="actualizarEstiloEstadoForm(this)" aria-label="Estado">
+                <option value="En progreso" {% if not cotizacion or not cotizacion.estado or cotizacion.estado == 'En progreso' %}selected{% endif %}>En progreso</option>
+                <option value="Aceptada" {% if cotizacion and cotizacion.estado == 'Aceptada' %}selected{% endif %}>Aceptada</option>
+                <option value="Rechazada" {% if cotizacion and cotizacion.estado == 'Rechazada' %}selected{% endif %}>Rechazada</option>
+            </select>
+            {% else %}
+            <span class="estado-pill estado-en-progreso">En progreso</span>
+            {% endif %}
+        </div>
     </div>
+
     {% with mensajes = get_flashed_messages(with_categories=true) %}
     {% if mensajes %}
-    <div class="mb-4">
+    <div class="mb-3">
         {% for categoria, mensaje in mensajes %}
         <div class="alert alert-{{ 'danger' if categoria == 'danger' else 'secondary' }} border-0 shadow-sm mb-2" role="alert">
             {{ mensaje }}
@@ -436,254 +640,312 @@
         <input type="hidden" name="nombre_fantasia" value="Cuenco Tech">
         <input type="hidden" name="razon_social" value="Cuenco Tech S.A.">
         <input type="hidden" name="cuit" value="30-71831614-2">
-
-        <div class="card soft-card mb-4">
-            <div class="card-header bg-dark text-white">
-                <h6 class="mb-0"><i class="bi bi-person-badge me-2"></i>Informacion del Cliente</h6>
-            </div>
-            <div class="card-body">
-                <div class="row align-items-end">
-                    <div class="col-md-8">
-                        <label class="form-label small fw-bold">Seleccionar Cliente</label>
-                        <div class="input-group">
-                            <select name="cliente_id" id="cliente_select" class="form-select select2-dark" required>
-                                <option value="">Buscar por nombre o CUIT...</option>
-                                {% if cotizacion and not cotizacion.cliente_id and cotizacion.cliente %}
-                                <option value="legacy_{{ cotizacion.id }}" data-iva="{{ cotizacion.condicion_iva }}" data-nombre="{{ cotizacion.cliente }}" data-razon="{{ cotizacion.cliente_razon_social }}" data-cuit="{{ cotizacion.cliente_cuit }}" data-domicilio="" data-sector="" data-subsector="" data-email="" data-telefono="" selected>{{ cotizacion.cliente }}{% if cotizacion.cliente_cuit %} ({{ cotizacion.cliente_cuit }}){% endif %}</option>
-                                {% endif %}
-                                {% for c in clientes %}
-                                <option value="{{ c.id }}" data-iva="{{ c.condicion_iva }}" data-nombre="{{ c.nombre }}" data-razon="{{ c.razon_social }}" data-cuit="{{ c.cuit }}" data-domicilio="{{ c.domicilio or '' }}" data-sector="{{ c.sector or '' }}" data-subsector="{{ c.subsector or '' }}" data-email="{{ c.email or '' }}" data-telefono="{{ c.telefono or '' }}" {% if cotizacion and cotizacion.cliente_id == c.id %}selected{% endif %}>{{ c.nombre }}{% if c.cuit %} ({{ c.cuit }}){% endif %}</option>
-                                {% endfor %}
-                            </select>
-                            <button type="button" class="btn btn-outline-secondary" onclick="abrirModalEditarCliente()" title="Editar cliente seleccionado">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button type="button" class="btn btn-dark" onclick="abrirModalNuevoCliente()" title="Agregar cliente">
-                                <i class="bi bi-plus-lg"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small fw-bold">Condicion IVA (Auto)</label>
-                        <input type="text" id="display_iva" class="form-control bg-light" readonly placeholder="Detectado al elegir cliente">
-                    </div>
-                </div>
-                <div class="row g-3 mt-1">
-                    <div class="col-md-6">
-                        <label class="form-label small fw-bold">AT. / Nombre de contacto</label>
-                        <input
-                            type="text"
-                            name="cliente_contacto"
-                            id="input_cliente_contacto"
-                            class="form-control"
-                            value="{{ cotizacion.cliente_contacto if cotizacion and cotizacion.cliente_contacto else (cotizacion.cliente if cotizacion and cotizacion.cliente else '') }}"
-                            data-cliente-id="{{ cotizacion.cliente_id if cotizacion and cotizacion.cliente_id else '' }}"
-                            data-auto-cliente="{{ cotizacion.cliente if cotizacion and cotizacion.cliente else '' }}"
-                            data-personalizado="{% if cotizacion and cotizacion.cliente_contacto and cotizacion.cliente_contacto != cotizacion.cliente %}1{% else %}0{% endif %}"
-                            placeholder="Ej: Martin Moreno"
-                            oninput="marcarContactoPersonalizado()"
-                            required
-                        >
-                        <div class="form-text">Este dato sale como "At." en la vista online, PDF y formato llave en mano. Se edita por cotizacion.</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
+        <input type="hidden" name="moneda" id="moneda" value="{{ moneda_cotizacion }}">
+        {% if not modo_edicion %}<input type="hidden" name="estado" value="En progreso">{% endif %}
         <input type="hidden" name="cliente" id="input_cliente_nombre">
         <input type="hidden" name="cliente_razon_social" id="input_cliente_razon_social">
         <input type="hidden" name="cliente_cuit" id="input_cliente_cuit">
         <input type="hidden" name="familia" id="input_familia_hidden" value="{{ cotizacion.familia if cotizacion and cotizacion.familia else '' }}">
+        <input type="hidden" id="display_iva">
 
-        <div class="row g-3 mb-4 p-3 surface-strip">
-            <div class="col-xl-2 col-md-6">
-                <label class="form-label fw-bold small text-muted text-uppercase">Moneda de la cotizacion</label>
-                <select name="moneda" id="moneda" class="form-select" onchange="calcularTodo()">
-                    <option value="USD" {% if not cotizacion or not cotizacion.moneda or cotizacion.moneda == 'USD' %}selected{% endif %}>Dolares (USD)</option>
-                    <option value="ARS" {% if cotizacion and cotizacion.moneda == 'ARS' %}selected{% endif %}>Pesos (ARS)</option>
-                </select>
-            </div>
-            <div class="col-xl-4 col-md-6">
-                <label class="form-label fw-bold small text-muted text-uppercase">Tipo de Cambio Oficial USD/ARS ($)</label>
-                <div class="input-group">
-                    <input
-                        type="number"
-                        name="tipo_cambio"
-                        id="tipo_cambio"
-                        class="form-control"
-                        value="{{ tipo_cambio_inicial }}"
-                        step="0.0001"
-                        readonly
-                    >
-                    <button type="button" class="btn btn-outline-secondary" id="btn-tipo-cambio-refresh" onclick="actualizarTipoCambioOficial(true)" title="Actualizar desde BNA">
-                        <i class="bi bi-arrow-clockwise"></i>
-                    </button>
-                </div>
-                <div id="tipo_cambio_estado" class="form-text {% if tipo_cambio_estado_error %}text-danger{% endif %}">
-                    {{ tipo_cambio_estado_texto }}
-                </div>
-            </div>
-            <div class="col-xl-3 col-md-6">
-                <label class="form-label fw-bold small text-muted text-uppercase">Condicion IVA</label>
-                <select name="condicion_iva" id="condicion_iva" class="form-select" onchange="calcularTodo()">
-                    <option value="Responsable Inscrito" {% if cotizacion and cotizacion.condicion_iva == 'Responsable Inscrito' %}selected{% endif %}>Responsable Inscrito</option>
-                    <option value="Consumidor Final" {% if cotizacion and cotizacion.condicion_iva == 'Consumidor Final' %}selected{% endif %}>Consumidor Final</option>
-                    <option value="Exento" {% if cotizacion and cotizacion.condicion_iva == 'Exento' %}selected{% endif %}>Exento</option>
-                </select>
-            </div>
-            <div class="col-xl-3 col-md-6">
-                <label class="form-label fw-bold small text-muted text-uppercase">Estado</label>
-                {% if modo_edicion %}
-                <select name="estado" id="estado_cotizacion" class="form-select estado-select {% if cotizacion and cotizacion.estado == 'Aceptada' %}estado-aceptada{% elif cotizacion and cotizacion.estado == 'Rechazada' %}estado-rechazada{% else %}estado-en-progreso{% endif %}" onchange="actualizarEstiloEstadoForm(this)">
-                    <option value="En progreso" {% if not cotizacion or not cotizacion.estado or cotizacion.estado == 'En progreso' %}selected{% endif %}>En progreso</option>
-                    <option value="Aceptada" {% if cotizacion and cotizacion.estado == 'Aceptada' %}selected{% endif %}>Aceptada</option>
-                    <option value="Rechazada" {% if cotizacion and cotizacion.estado == 'Rechazada' %}selected{% endif %}>Rechazada</option>
-                </select>
-                {% else %}
-                <input type="hidden" name="estado" value="En progreso">
-                <div class="form-control d-flex align-items-center">
-                    <span class="estado-pill estado-en-progreso">En progreso</span>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="card soft-card mb-4">
-            <div class="card-header bg-dark text-white">
-                <h6 class="mb-0"><i class="bi bi-bell me-2"></i>Seguimiento por Mail</h6>
-            </div>
-            <div class="card-body">
-                <div class="row g-3 align-items-end">
-                    <div class="col-md-3">
-                        <div class="form-check form-switch pt-4">
-                            <input class="form-check-input" type="checkbox" role="switch" id="seguimiento_activo" name="seguimiento_activo" value="1" {% if cotizacion and cotizacion.seguimiento_activo %}checked{% endif %} onchange="toggleSeguimientoFields()">
-                            <label class="form-check-label fw-semibold" for="seguimiento_activo">Activar recordatorio</label>
-                        </div>
+        <div class="cz-layout">
+            <div class="cz-main">
+                <section class="cz-card" aria-labelledby="cz-cliente-titulo">
+                    <div class="cz-card-head">
+                        <h2 class="cz-card-title" id="cz-cliente-titulo"><span class="cz-step">1</span>Cliente</h2>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold small text-muted text-uppercase">Enviar a</label>
-                        <input type="email" name="seguimiento_email" id="seguimiento_email" class="form-control" value="{{ followup_default_email or 'equipo@example.com' }}" readonly>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold small text-muted text-uppercase">Cada (días)</label>
-                        <input type="number" min="1" name="seguimiento_cada_dias" id="seguimiento_cada_dias" class="form-control" value="{{ cotizacion.seguimiento_cada_dias if cotizacion and cotizacion.seguimiento_cada_dias else 7 }}">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold small text-muted text-uppercase">Próximo aviso</label>
-                        <input type="text" class="form-control" value="{% if cotizacion and cotizacion.seguimiento_proximo_envio %}{{ cotizacion.seguimiento_proximo_envio.strftime('%d/%m/%Y %H:%M') }}{% else %}Pendiente{% endif %}" readonly>
-                    </div>
-                </div>
-                <div class="row g-3 mt-1">
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold small text-muted text-uppercase">Último envío</label>
-                        <input type="text" class="form-control" value="{% if cotizacion and cotizacion.seguimiento_ultimo_envio %}{{ cotizacion.seguimiento_ultimo_envio.strftime('%d/%m/%Y %H:%M') }}{% else %}Sin enviar{% endif %}" readonly>
-                    </div>
-                    <div class="col-md-9 d-flex align-items-end">
-                        <div class="small text-muted">
-                            El sistema enviará un mail preguntando “¿Hay alguna novedad con esta cotización?” y agregará un link directo para verla y otro para editarla/cambiar el estado. Solo se envía mientras la cotización siga en <strong>En progreso</strong>.
-                            {% if not smtp_configurado %}
-                            <div class="text-danger mt-1">SMTP no configurado todavía. Definí `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` y `APP_BASE_URL` para que salgan los correos.</div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card soft-card mb-4">
-            <div class="card-header bg-dark text-white">
-                <h6 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>Condiciones de la Cotizacion</h6>
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-12">
-                        {% set forma_pago_actual = cotizacion.forma_pago if cotizacion and cotizacion.forma_pago else 'A convenir' %}
-                        {% set forma_pago_es_anticipo = forma_pago_actual.lower().startswith('anticipo') %}
-                        {% set forma_pago_es_predefinida = forma_pago_actual in formas_pago_cotizacion %}
-                        <input type="hidden" name="forma_pago" id="forma_pago" value="{{ forma_pago_actual }}" data-default-personalizado="{% if not cotizacion %}1{% else %}0{% endif %}">
-                        <div class="forma-pago-grid">
-                            <div class="forma-pago-field">
-                                <label class="form-label fw-bold small text-muted text-uppercase mb-0">Forma de pago</label>
-                                <select id="forma_pago_tipo" class="form-select" onchange="actualizarFormaPagoUI()">
-                                    <option value="Personalizado" {% if not cotizacion or (not forma_pago_es_predefinida and not forma_pago_es_anticipo) %}selected{% endif %}>Personalizado</option>
-                                    <option value="Anticipo" {% if forma_pago_es_anticipo %}selected{% endif %}>Anticipo</option>
-                            {% for forma in formas_pago_cotizacion %}
-                                    <option value="{{ forma }}" {% if cotizacion and forma_pago_actual == forma %}selected{% endif %}>{{ forma }}</option>
-                            {% endfor %}
-                                </select>
+                    <div class="cz-card-body">
+                        <div class="row g-3">
+                            <div class="col-lg-7">
+                                <label class="form-label" for="cliente_select">Cliente</label>
+                                <div class="input-group">
+                                    <select name="cliente_id" id="cliente_select" class="form-select select2-dark" required>
+                                        <option value="">Buscar por nombre o CUIT...</option>
+                                        {% if cotizacion and not cotizacion.cliente_id and cotizacion.cliente %}
+                                        <option value="legacy_{{ cotizacion.id }}" data-iva="{{ cotizacion.condicion_iva }}" data-nombre="{{ cotizacion.cliente }}" data-razon="{{ cotizacion.cliente_razon_social }}" data-cuit="{{ cotizacion.cliente_cuit }}" data-domicilio="" data-sector="" data-subsector="" data-email="" data-telefono="" selected>{{ cotizacion.cliente }}{% if cotizacion.cliente_cuit %} ({{ cotizacion.cliente_cuit }}){% endif %}</option>
+                                        {% endif %}
+                                        {% for c in clientes %}
+                                        <option value="{{ c.id }}" data-iva="{{ c.condicion_iva }}" data-nombre="{{ c.nombre }}" data-razon="{{ c.razon_social }}" data-cuit="{{ c.cuit }}" data-domicilio="{{ c.domicilio or '' }}" data-sector="{{ c.sector or '' }}" data-subsector="{{ c.subsector or '' }}" data-email="{{ c.email or '' }}" data-telefono="{{ c.telefono or '' }}" {% if cotizacion and cotizacion.cliente_id == c.id %}selected{% endif %}>{{ c.nombre }}{% if c.cuit %} ({{ c.cuit }}){% endif %}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="abrirModalEditarCliente()" title="Editar cliente seleccionado" aria-label="Editar cliente seleccionado">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-dark" onclick="abrirModalNuevoCliente()" title="Agregar cliente" aria-label="Agregar cliente">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="forma-pago-field" id="forma_pago_personalizada_wrap">
-                                <label class="form-label fw-bold small text-muted text-uppercase mb-0">Detalle personalizado</label>
+                            <div class="col-lg-5">
+                                <label class="form-label" for="condicion_iva">Condición IVA</label>
+                                <select name="condicion_iva" id="condicion_iva" class="form-select" onchange="calcularTodo()">
+                                    <option value="Responsable Inscrito" {% if cotizacion and cotizacion.condicion_iva == 'Responsable Inscrito' %}selected{% endif %}>Responsable Inscrito</option>
+                                    <option value="Consumidor Final" {% if cotizacion and cotizacion.condicion_iva == 'Consumidor Final' %}selected{% endif %}>Consumidor Final</option>
+                                    <option value="Exento" {% if cotizacion and cotizacion.condicion_iva == 'Exento' %}selected{% endif %}>Exento</option>
+                                </select>
+                                <div class="form-text">Se toma del cliente al seleccionarlo.</div>
+                            </div>
+                            <div class="col-lg-7">
+                                <label class="form-label" for="input_cliente_contacto">At. / Nombre de contacto</label>
                                 <input
                                     type="text"
-                                    id="forma_pago_personalizada"
+                                    name="cliente_contacto"
+                                    id="input_cliente_contacto"
                                     class="form-control"
-                                    value="{% if not cotizacion or (not forma_pago_es_predefinida and not forma_pago_es_anticipo) %}{{ forma_pago_actual }}{% endif %}"
-                                    placeholder="Ej: A convenir, transferencia, 30/60 dias..."
-                                    oninput="sincronizarFormaPago()"
+                                    value="{{ cotizacion.cliente_contacto if cotizacion and cotizacion.cliente_contacto else (cotizacion.cliente if cotizacion and cotizacion.cliente else '') }}"
+                                    data-cliente-id="{{ cotizacion.cliente_id if cotizacion and cotizacion.cliente_id else '' }}"
+                                    data-auto-cliente="{{ cotizacion.cliente if cotizacion and cotizacion.cliente else '' }}"
+                                    data-personalizado="{% if cotizacion and cotizacion.cliente_contacto and cotizacion.cliente_contacto != cotizacion.cliente %}1{% else %}0{% endif %}"
+                                    placeholder="Ej: Martin Moreno"
+                                    oninput="marcarContactoPersonalizado()"
+                                    required
                                 >
+                                <div class="form-text">Sale como "At." en el presupuesto.</div>
                             </div>
-                            <div class="forma-pago-field d-none" id="forma_pago_anticipo_wrap">
-                                <label class="form-label fw-bold small text-muted text-uppercase mb-0">% anticipo</label>
+                            <div class="col-lg-5">
+                                <label class="form-label" for="observacion_cliente">Referencia / observación</label>
+                                <textarea
+                                    name="observacion_cliente"
+                                    id="observacion_cliente"
+                                    class="form-control"
+                                    rows="1"
+                                    placeholder="Ej: Lic. municipal 221304"
+                                >{{ cotizacion.observacion_cliente if cotizacion and cotizacion.observacion_cliente else '' }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="cz-card" aria-labelledby="cz-items-titulo">
+                    <div class="cz-card-head">
+                        <h2 class="cz-card-title" id="cz-items-titulo"><span class="cz-step">2</span>Ítems</h2>
+                        <span class="small text-muted">Importes en {{ moneda_cotizacion }}</span>
+                    </div>
+                    <div class="cz-card-body">
+                        <div id="cuerpo-tabla" class="cotizador-items-list"></div>
+                        <button type="button" class="cz-add-item" onclick="agregarFila()">
+                            <i class="bi bi-plus-lg me-1"></i>Agregar ítem
+                        </button>
+                    </div>
+                </section>
+
+                <section class="cz-card" aria-labelledby="cz-condiciones-titulo">
+                    <div class="cz-card-head">
+                        <h2 class="cz-card-title" id="cz-condiciones-titulo"><span class="cz-step">3</span>Condiciones comerciales</h2>
+                    </div>
+                    <div class="cz-card-body">
+                        <div class="row g-3">
+                            <div class="col-lg-8">
+                                {% set forma_pago_actual = cotizacion.forma_pago if cotizacion and cotizacion.forma_pago else 'A convenir' %}
+                                {% set forma_pago_es_anticipo = forma_pago_actual.lower().startswith('anticipo') %}
+                                {% set forma_pago_es_predefinida = forma_pago_actual in formas_pago_cotizacion %}
+                                <input type="hidden" name="forma_pago" id="forma_pago" value="{{ forma_pago_actual }}" data-default-personalizado="{% if not cotizacion %}1{% else %}0{% endif %}">
+                                <div class="forma-pago-grid">
+                                    <div class="forma-pago-field">
+                                        <label class="form-label mb-0" for="forma_pago_tipo">Forma de pago</label>
+                                        <select id="forma_pago_tipo" class="form-select" onchange="actualizarFormaPagoUI()">
+                                            <option value="Personalizado" {% if not cotizacion or (not forma_pago_es_predefinida and not forma_pago_es_anticipo) %}selected{% endif %}>Personalizado</option>
+                                            <option value="Anticipo" {% if forma_pago_es_anticipo %}selected{% endif %}>Anticipo</option>
+                                            {% for forma in formas_pago_cotizacion %}
+                                            <option value="{{ forma }}" {% if cotizacion and forma_pago_actual == forma %}selected{% endif %}>{{ forma }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="forma-pago-field" id="forma_pago_personalizada_wrap">
+                                        <label class="form-label mb-0" for="forma_pago_personalizada">Detalle</label>
+                                        <input
+                                            type="text"
+                                            id="forma_pago_personalizada"
+                                            class="form-control"
+                                            value="{% if not cotizacion or (not forma_pago_es_predefinida and not forma_pago_es_anticipo) %}{{ forma_pago_actual }}{% endif %}"
+                                            placeholder="Ej: transferencia, 30/60 dias..."
+                                            oninput="sincronizarFormaPago()"
+                                        >
+                                    </div>
+                                    <div class="forma-pago-field d-none" id="forma_pago_anticipo_wrap">
+                                        <label class="form-label mb-0" for="forma_pago_anticipo_pct">% anticipo</label>
+                                        <div class="input-group">
+                                            <input
+                                                type="text"
+                                                id="forma_pago_anticipo_pct"
+                                                class="form-control cotizador-decimal-input text-end"
+                                                inputmode="decimal"
+                                                autocomplete="off"
+                                                placeholder="0 a 100"
+                                                onfocus="seleccionarContenidoInput(this)"
+                                                oninput="validarPorcentaje(this); sincronizarFormaPago()"
+                                            >
+                                            <span class="input-group-text">%</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-4">
+                                <label class="form-label" for="bonificacion_cierre_monto">Bonificación de cierre</label>
                                 <div class="input-group">
+                                    <span class="input-group-text">{{ "$" if moneda_cotizacion == "ARS" else "US$" }}</span>
                                     <input
                                         type="text"
-                                        id="forma_pago_anticipo_pct"
-                                        class="form-control cotizador-decimal-input text-end"
+                                        name="bonificacion_cierre_monto"
+                                        id="bonificacion_cierre_monto"
+                                        class="form-control cotizador-decimal-input"
                                         inputmode="decimal"
                                         autocomplete="off"
-                                        placeholder="0 a 100"
+                                        min="0"
+                                        placeholder="0,00"
+                                        value="{{ '%.2f'|format(cotizacion.bonificacion_cierre_monto or 0) if cotizacion and (cotizacion.bonificacion_cierre_monto or 0) > 0 else '' }}"
                                         onfocus="seleccionarContenidoInput(this)"
-                                        oninput="validarPorcentaje(this); sincronizarFormaPago()"
+                                        oninput="validarPositivo(this); calcularTodo()"
                                     >
-                                    <span class="input-group-text">%</span>
+                                </div>
+                                <div class="form-text">Descuento global sobre el total.</div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="condicion_cotizacion">Condiciones que se imprimen</label>
+                                <textarea
+                                    name="condicion_cotizacion"
+                                    id="condicion_cotizacion"
+                                    class="form-control"
+                                    rows="4"
+                                    placeholder="Una condicion por linea."
+                                >{{ condicion_cotizacion_texto_inicial }}</textarea>
+                                <div class="form-text">Una condición por línea. Las condiciones base ya vienen cargadas.</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="cz-card" aria-labelledby="cz-seguimiento-titulo">
+                    <div class="cz-card-head">
+                        <h2 class="cz-card-title" id="cz-seguimiento-titulo"><span class="cz-step">4</span>Seguimiento por mail</h2>
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" role="switch" id="seguimiento_activo" name="seguimiento_activo" value="1" {% if cotizacion and cotizacion.seguimiento_activo %}checked{% endif %} onchange="toggleSeguimientoFields()">
+                            <label class="form-check-label small fw-semibold" for="seguimiento_activo">Activar recordatorio</label>
+                        </div>
+                    </div>
+                    <div class="cz-card-body">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-5 seguimiento-field">
+                                <label class="form-label" for="seguimiento_email">Se envía a</label>
+                                <input type="email" name="seguimiento_email" id="seguimiento_email" class="form-control" value="{{ followup_default_email }}" readonly>
+                            </div>
+                            <div class="col-md-2 seguimiento-field">
+                                <label class="form-label" for="seguimiento_cada_dias">Cada (días)</label>
+                                <input type="number" min="1" name="seguimiento_cada_dias" id="seguimiento_cada_dias" class="form-control" value="{{ cotizacion.seguimiento_cada_dias if cotizacion and cotizacion.seguimiento_cada_dias else 7 }}">
+                            </div>
+                            <div class="col-md-5">
+                                <div class="small text-muted">
+                                    Próximo aviso: <strong>{% if cotizacion and cotizacion.seguimiento_proximo_envio %}{{ cotizacion.seguimiento_proximo_envio|fecha_local('%d/%m/%Y %H:%M') }}{% else %}pendiente{% endif %}</strong><br>
+                                    Último envío: <strong>{% if cotizacion and cotizacion.seguimiento_ultimo_envio %}{{ cotizacion.seguimiento_ultimo_envio|fecha_local('%d/%m/%Y %H:%M') }}{% else %}sin enviar{% endif %}</strong>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    <div class="col-md-8">
-                        <label class="form-label fw-bold small text-muted text-uppercase">Condiciones comerciales</label>
-                        <textarea
-                            name="condicion_cotizacion"
-                            id="condicion_cotizacion"
-                            class="form-control"
-                            rows="5"
-                            placeholder="Una condicion por linea."
-                        >{{ condicion_cotizacion_texto_inicial }}</textarea>
-                        <div class="form-text">Las condiciones base ya vienen cargadas. Podes sumar o editar una por linea.</div>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold small text-muted text-uppercase">Bonificacion de cierre</label>
-                        <div class="input-group">
-                            <span class="input-group-text">$</span>
-                            <input
-                                type="text"
-                                name="bonificacion_cierre_monto"
-                                id="bonificacion_cierre_monto"
-                                class="form-control cotizador-decimal-input"
-                                inputmode="decimal"
-                                autocomplete="off"
-                                min="0"
-                                placeholder="Monto"
-                                value="{{ '%.2f'|format(cotizacion.bonificacion_cierre_monto or 0) if cotizacion and (cotizacion.bonificacion_cierre_monto or 0) > 0 else '' }}"
-                                onfocus="seleccionarContenidoInput(this)"
-                                oninput="validarPositivo(this); calcularTodo()"
-                            >
+                        <div class="form-text mt-2">
+                            Pregunta si hay novedades e incluye links para ver y editar la cotización. Solo se envía mientras esté <strong>En progreso</strong>.
+                            {% if not smtp_configurado %}
+                            <span class="text-danger d-block mt-1">SMTP no configurado: los recordatorios no van a salir hasta definir SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD y SMTP_FROM.</span>
+                            {% endif %}
                         </div>
-                        <div class="form-text">Descuento global sobre el total. No altera margenes por item.</div>
                     </div>
-                    <div class="col-md-8">
-                        <label class="form-label fw-bold small text-muted text-uppercase">Observacion al cliente</label>
-                        <textarea
-                            name="observacion_cliente"
-                            id="observacion_cliente"
-                            class="form-control"
-                            rows="2"
-                            placeholder="Ej: Solicitud de presupuesto n 4587 - Lic municipal 221304."
-                        >{{ cotizacion.observacion_cliente if cotizacion and cotizacion.observacion_cliente else '' }}</textarea>
+                </section>
+            </div>
+
+            <aside class="cz-aside" aria-label="Resumen de la cotizacion">
+                <section class="cz-card cz-total-card">
+                    <div class="cz-total-label">Total a cobrar (<span id="label-moneda-actual">{{ moneda_cotizacion }}</span>)</div>
+                    <div id="total-vista" class="cz-total-value">US$ 0,00</div>
+                    <div class="cz-total-hint">Incluye IVA de venta y bonificación de cierre.</div>
+
+                    <div class="cz-rows">
+                        <div class="cz-row"><span>Subtotal neto</span><span id="venta-neta-interna">US$ 0,00</span></div>
+                        <div class="cz-row"><span>IVA</span><span id="total-iva-interno">US$ 0,00</span></div>
+                        <div class="cz-row is-minus"><span class="summary-help-label">Bonificación<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Parte neta de la bonificacion de cierre. El resto es IVA que deja de cobrarse.">?</button></span><span id="bonificacion-cierre-interno">-US$ 0,00</span></div>
+                    </div>
+
+                    <div class="cz-ars">
+                        <div class="cz-ars-head">
+                            <span>Total en <span id="label-moneda-conv">ARS</span></span>
+                            <span class="cz-badge-ref">Referencia BNA</span>
+                        </div>
+                        <div id="total-convertido" class="cz-ars-value">N/D</div>
+                        <div class="cz-ars-rate">
+                            <span class="small text-muted text-nowrap">1 USD =</span>
+                            <input type="number" name="tipo_cambio" id="tipo_cambio" class="form-control form-control-sm" value="{{ tipo_cambio_inicial }}" step="0.0001" readonly aria-label="Tipo de cambio USD/ARS">
+                            <button type="button" class="btn btn-sm btn-outline-dark btn-icon" id="btn-tipo-cambio-refresh" onclick="actualizarTipoCambioOficial(true)" title="Actualizar desde BNA" aria-label="Actualizar tipo de cambio desde BNA">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                        <div id="tipo_cambio_estado" class="{% if tipo_cambio_estado_error %}text-danger{% endif %}">{{ tipo_cambio_estado_texto }}</div>
+                    </div>
+                </section>
+
+                <section class="cz-card cz-internal">
+                    <div class="cz-card-head">
+                        <button type="button" class="cz-collapse-toggle" data-bs-toggle="collapse" data-bs-target="#cz-analisis" aria-expanded="true" aria-controls="cz-analisis">
+                            <span class="cz-card-title"><i class="bi bi-graph-up-arrow"></i>Análisis interno</span>
+                            <i class="bi bi-chevron-down"></i>
+                        </button>
+                    </div>
+                    <div id="cz-analisis" class="collapse show">
+                        <div class="cz-card-body pt-2">
+                            <div class="small mb-1 text-muted">No se muestra al cliente.</div>
+                            <div class="cz-rows mt-2 pt-2">
+                                <div class="cz-row"><span class="summary-help-label">Costo neto real<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Costo neto + Otros %. No incluye IVA compra: queda como credito fiscal.">?</button></span><span id="costo-total-interno">US$ 0,00</span></div>
+                                <div class="cz-row"><span class="summary-help-label">IVA compra (crédito)<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA del proveedor acumulado.">?</button></span><span id="iva-compra-credito">US$ 0,00</span></div>
+                                <div class="cz-row"><span class="summary-help-label">IVA a pagar estimado<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA venta - IVA compra. Puede ser negativo.">?</button></span><span id="iva-a-pagar">US$ 0,00</span></div>
+                                <div class="cz-row is-minus"><span>Descuentos por ítem</span><span id="total-descuentos-interno">-US$ 0,00</span></div>
+                                <div class="cz-row is-danger"><span class="summary-help-label">Carga fiscal<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Venta neta x Carga F. %. No cambia el total del cliente.">?</button></span><span id="monto-carga-fiscal">-US$ 0,00</span></div>
+                                <div class="cz-row is-strong is-ok"><span class="summary-help-label">Ganancia neta<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Venta neta - costo neto real - carga fiscal - bonificacion.">?</button></span><span id="ganancia-neta-real" class="text-success">US$ 0,00</span></div>
+                            </div>
+
+                            <button
+                                type="button"
+                                id="btn-vista-financiera-ars"
+                                class="summary-ars-toggle"
+                                onclick="toggleVistaFinancieraArs()"
+                                aria-controls="vista-financiera-ars"
+                                aria-expanded="false"
+                                title="Muestra los importes internos convertidos a pesos solo como referencia."
+                            >
+                                <i class="bi bi-cash-stack"></i>
+                                <span>Ver en ARS</span>
+                            </button>
+                            <section id="vista-financiera-ars" class="summary-ars-demo" hidden aria-labelledby="vista-financiera-ars-titulo">
+                                <div id="vista-financiera-ars-titulo" class="visually-hidden">Vista financiera en ARS</div>
+                                <p id="vista-financiera-ars-nota" class="summary-ars-demo-note">Usa el tipo de cambio cargado. No modifica la cotizacion ni los valores guardados.</p>
+                                <div class="cz-row"><span>Costo neto real</span><span id="ars-costo-total-interno">N/D</span></div>
+                                <div class="cz-row"><span>IVA compra (crédito)</span><span id="ars-iva-compra-credito">N/D</span></div>
+                                <div class="cz-row"><span>IVA a pagar estimado</span><span id="ars-iva-a-pagar">N/D</span></div>
+                                <div class="cz-row is-minus"><span>Descuentos por ítem</span><span id="ars-total-descuentos-interno">N/D</span></div>
+                                <div class="cz-row"><span>Subtotal neto</span><span id="ars-venta-neta-interna">N/D</span></div>
+                                <div class="cz-row is-minus"><span>Bonificación</span><span id="ars-bonificacion-cierre-interno">N/D</span></div>
+                                <div class="cz-row is-danger"><span>Carga fiscal</span><span id="ars-monto-carga-fiscal">N/D</span></div>
+                                <div class="cz-row is-ok"><span>Ganancia neta</span><span id="ars-ganancia-neta-real" class="text-success">N/D</span></div>
+                                <div class="cz-row"><span>IVA total</span><span id="ars-total-iva-interno">N/D</span></div>
+                                <div class="cz-row is-strong"><span>Total a cobrar (ARS)</span><span id="ars-total-vista">N/D</span></div>
+                            </section>
+
+                            <ul class="cz-calc-help">
+                                <li><strong>Base:</strong> costo neto + Otros %.</li>
+                                <li><strong>Venta neta:</strong> base × (1 + Margen %) × (1 − Desc. %). El margen es un recargo sobre el costo.</li>
+                                <li><strong>Total:</strong> venta neta + IVA − bonificación.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="cz-submit">
+                    <button type="button" onclick="prepararEnvio()" class="btn btn-primary btn-lg">
+                        <i class="bi bi-check2-circle me-1"></i>{{ "Guardar cambios" if modo_edicion else "Generar presupuesto" }}
+                    </button>
+                    <div class="cz-submit-meta">
+                        <span>Familia</span>
+                        <span id="familia-indicador" class="badge rounded-pill {% if cotizacion and cotizacion.familia %}text-bg-dark{% else %}text-bg-warning{% endif %}">
+                            {{ cotizacion.familia if cotizacion and cotizacion.familia else "Sin definir" }}
+                        </span>
                     </div>
                 </div>
-            </div>
+            </aside>
         </div>
 
         <div class="modal fade" id="modalNuevoCliente" tabindex="-1">
@@ -691,55 +953,58 @@
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title" id="modalClienteTitulo">Agregar Nuevo Cliente</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                     </div>
                     <div class="modal-body">
                         <input type="hidden" id="cliente_modal_id">
-                        <div class="mb-3">
-                            <label>Nombre o Alias (Obligatorio)</label>
-                            <input type="text" id="nuevo_cli_nombre" class="form-control">
-                        </div>
-                        <div class="mb-3">
-                            <label>Razon Social</label>
-                            <input type="text" id="nuevo_cli_razon" class="form-control" placeholder="Ej: Empresa S.A.">
-                        </div>
-                        <div class="mb-3">
-                            <label>CUIT</label>
-                            <input type="text" id="nuevo_cli_cuit" class="form-control" placeholder="XX-XXXXXXXX-X">
-                        </div>
-                        <div class="mb-3">
-                            <label>Domicilio</label>
-                            <input type="text" id="nuevo_cli_domicilio" class="form-control" placeholder="Opcional">
-                        </div>
-                        <div class="mb-3">
-                            <label>Sector</label>
-                            <select id="nuevo_cli_sector" class="form-select" onchange="actualizarSubsectores()">
-                                <option value="">Seleccionar...</option>
-                                <option value="Publico">Publico</option>
-                                <option value="Privado">Privado</option>
-                            </select>
-                        </div>
-                        <div class="mb-3 d-none" id="div_subsector">
-                            <label>Subdivision</label>
-                            <select id="nuevo_cli_subsector" class="form-select">
-                                <option value="">Seleccionar subdivision...</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label>Email</label>
-                            <input type="email" id="nuevo_cli_email" class="form-control" placeholder="mail@cliente.com">
-                        </div>
-                        <div class="mb-3">
-                            <label>Telefono</label>
-                            <input type="text" id="nuevo_cli_telefono" class="form-control" placeholder="+54 ...">
-                        </div>
-                        <div class="mb-3">
-                            <label>Condicion IVA</label>
-                            <select id="nuevo_cli_iva" class="form-select">
-                                <option value="Consumidor Final">Consumidor Final</option>
-                                <option value="Responsable Inscrito">Responsable Inscrito</option>
-                                <option value="Exento">Exento</option>
-                            </select>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="nuevo_cli_nombre">Nombre o alias (obligatorio)</label>
+                                <input type="text" id="nuevo_cli_nombre" class="form-control">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="nuevo_cli_razon">Razón social</label>
+                                <input type="text" id="nuevo_cli_razon" class="form-control" placeholder="Ej: Empresa S.A.">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="nuevo_cli_cuit">CUIT (obligatorio)</label>
+                                <input type="text" id="nuevo_cli_cuit" class="form-control" placeholder="XX-XXXXXXXX-X" inputmode="numeric" maxlength="13" autocomplete="off" required oninput="this.classList.remove('is-invalid')">
+                                <div class="invalid-feedback" id="nuevo_cli_cuit_error">Revisá el CUIT.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="nuevo_cli_iva">Condición IVA</label>
+                                <select id="nuevo_cli_iva" class="form-select">
+                                    <option value="Consumidor Final">Consumidor Final</option>
+                                    <option value="Responsable Inscrito">Responsable Inscrito</option>
+                                    <option value="Exento">Exento</option>
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="nuevo_cli_domicilio">Domicilio</label>
+                                <input type="text" id="nuevo_cli_domicilio" class="form-control" placeholder="Opcional">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="nuevo_cli_sector">Sector</label>
+                                <select id="nuevo_cli_sector" class="form-select" onchange="actualizarSubsectores()">
+                                    <option value="">Seleccionar...</option>
+                                    <option value="Publico">Publico</option>
+                                    <option value="Privado">Privado</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 d-none" id="div_subsector">
+                                <label class="form-label" for="nuevo_cli_subsector">Subdivisión</label>
+                                <select id="nuevo_cli_subsector" class="form-select">
+                                    <option value="">Seleccionar subdivision...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="nuevo_cli_email">Email</label>
+                                <input type="email" id="nuevo_cli_email" class="form-control" placeholder="mail@cliente.com">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="nuevo_cli_telefono">Teléfono</label>
+                                <input type="text" id="nuevo_cli_telefono" class="form-control" placeholder="+54 ...">
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -749,124 +1014,40 @@
                 </div>
             </div>
         </div>
-
-        <div class="calc-help-panel mt-4">
-            <div class="calc-help-title">
-                Criterio interno de calculo
-                <button type="button" class="field-help-button dark" data-bs-toggle="tooltip" data-bs-placement="top" title="Estos calculos son internos. El cliente solo ve precios finales, salvo que sea Responsable Inscrito y corresponda detallar IVA.">?</button>
-            </div>
-            <div class="calc-help-grid">
-                <div><strong>Base venta:</strong> Costo neto + Otros. El IVA compra queda como credito.</div>
-                <div><strong>Venta neta:</strong> Base venta x (1 + Margen %) x (1 - Desc. %).</div>
-                <div><strong>Total cliente:</strong> Venta neta + IVA venta - Bonificacion de cierre.</div>
-                <div><strong>Ganancia neta:</strong> Venta neta - Costo neto real - Carga fiscal - Bonificacion.</div>
-            </div>
-        </div>
-
-        <div class="table-container mt-4 cotizador-table-shell">
-            <div id="cuerpo-tabla" class="cotizador-items-list"></div>
-        </div>
-        <button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="agregarFila()">+ Item</button>
-
-        <div class="row mt-5 justify-content-end">
-            <div class="col-md-5">
-                <div class="card summary-panel text-white p-4 shadow-lg border-0">
-                    <h5 class="border-bottom border-secondary pb-2 mb-3">
-                        <i class="bi bi-graph-up-arrow me-2"></i>Analisis Financiero
-                        <button type="button" class="field-help-button ms-1" data-bs-toggle="tooltip" title="Panel interno. No se muestra al cliente en el PDF.">?</button>
-                    </h5>
-                    <div class="d-flex justify-content-between mb-1 small text-secondary">
-                        <span class="summary-help-label">Costo neto real (Base + Otros):<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Suma de costo neto + Otros %. No incluye IVA compra porque se trata como credito fiscal interno.">?</button></span>
-                        <span id="costo-total-interno">$ 0.00</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-1 small text-info">
-                        <span class="summary-help-label">IVA compra credito:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA del proveedor acumulado. Sirve para estimar el credito fiscal.">?</button></span>
-                        <span id="iva-compra-credito">$ 0.00</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-1 small text-info">
-                        <span class="summary-help-label">IVA a pagar estimado:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA venta - IVA compra credito. Puede ser negativo si el credito supera al debito.">?</button></span>
-                        <span id="iva-a-pagar">$ 0.00</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-1 small text-warning">
-                        <span class="summary-help-label">Descuento total:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Suma del descuento aplicado despues del margen en todos los items.">?</button></span>
-                        <span id="total-descuentos-interno">-$ 0.00</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-2 pb-2 border-bottom border-secondary">
-                        <span class="summary-help-label text-light">Subtotal Venta Neto:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Suma de ventas netas antes del IVA de venta.">?</button></span>
-                        <span id="venta-neta-interna" class="fw-bold">$ 0.00</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-1 small text-warning">
-                        <span class="summary-help-label">Bonificacion de cierre:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Descuento global sobre el total final. No modifica los margenes ni descuentos por item.">?</button></span>
-                        <span id="bonificacion-cierre-interno">-$ 0.00</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-1 text-danger">
-                        <span class="summary-help-label"><i class="bi bi-bank me-1"></i>Carga Fiscal Retenida:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Venta neta x Carga F. %. Es una carga interna, no modifica el total que ve el cliente.">?</button></span>
-                        <span id="monto-carga-fiscal">-$ 0.00</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-2 pt-2 border-top border-secondary text-success h5">
-                        <span class="summary-help-label">Ganancia Neta (Bolsillo):<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Subtotal venta neto - costo neto real - carga fiscal retenida - bonificacion de cierre.">?</button></span>
-                        <span id="ganancia-neta-real" class="text-success">$ 0.00</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-2 mt-3 p-2 bg-secondary bg-opacity-25 rounded border border-secondary">
-                        <span class="summary-help-label text-info fw-bold">IVA TOTAL:<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA de venta acumulado sobre todos los items.">?</button></span>
-                        <span id="total-iva-interno" class="text-info">$ 0.00</span>
-                    </div>
-                    <div class="d-flex justify-content-between h4 mb-0 mt-3">
-                        <span>TOTAL A COBRAR (<span id="label-moneda-actual">USD</span>):</span>
-                        <span id="total-vista" class="text-success">$ 0.00</span>
-                    </div>
-                    <div class="d-flex justify-content-between pt-2 border-top border-secondary text-warning mt-2">
-                        <span class="small text-uppercase">Equivalente en <span id="label-moneda-conv">ARS</span>:</span>
-                        <span id="total-convertido" class="fw-bold">$ 0.00</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="text-end mt-4">
-            <div class="d-inline-flex align-items-center gap-2 me-3">
-                <span class="small text-muted text-uppercase fw-semibold">Familia</span>
-                <span id="familia-indicador" class="badge rounded-pill {% if cotizacion and cotizacion.familia %}text-bg-dark{% else %}text-bg-warning{% endif %}">
-                    {{ cotizacion.familia if cotizacion and cotizacion.familia else "Sin definir" }}
-                </span>
-            </div>
-            <button type="button" onclick="prepararEnvio()" class="btn btn-success btn-lg px-5 shadow">{{ "Guardar Cambios" if modo_edicion else "Generar Presupuesto" }}</button>
-        </div>
     </form>
 </div>
 
 <div class="modal fade" id="modalFamilia" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content bg-dark text-white border-secondary">
-            <div class="modal-header border-secondary">
-                <h5 class="modal-title">Finalizar Cotizacion</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Finalizar cotización</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
-                <label class="form-label fw-bold">¿A qué familia pertenece este proyecto?</label>
-                <select id="select_familia" class="form-select form-select-lg mb-3">
+                <label class="form-label fw-bold" for="select_familia">¿A qué familia pertenece este proyecto?</label>
+                <select id="select_familia" class="form-select form-select-lg mb-2">
                     <option value="" disabled>Seleccionar Familia...</option>
                     {% for familia in familias_cotizacion %}
                     <option value="{{ familia }}">{{ familia }}</option>
                     {% endfor %}
                 </select>
-                <div class="small text-white-50">La familia es obligatoria y se usa en historial, dashboard y exportaciones.</div>
+                <div class="small text-muted">La familia es obligatoria y se usa en historial, dashboard y exportaciones.</div>
                 {% if current_user and current_user.is_admin %}
-                <div class="border border-secondary rounded-3 p-3 mt-3">
-                    <label class="form-label fw-bold small text-white-50 text-uppercase">No aparece la familia?</label>
+                <div class="familia-nueva mt-3">
+                    <label class="form-label" for="nueva_familia_nombre">¿No aparece la familia? Creala acá</label>
                     <div class="input-group">
                         <input type="text" id="nueva_familia_nombre" class="form-control" maxlength="50" placeholder="Ej: DATA CENTER">
-                        <button type="button" class="btn btn-outline-light" onclick="crearFamiliaDesdeModal()">
+                        <button type="button" class="btn btn-outline-dark" onclick="crearFamiliaDesdeModal()">
                             <i class="bi bi-plus-circle me-1"></i>Crear
                         </button>
                     </div>
-                    <div class="small text-white-50 mt-2">Se agrega al selector y queda disponible para dashboards.</div>
                 </div>
                 {% endif %}
             </div>
-            <div class="modal-footer border-secondary">
-                <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-success" onclick="confirmarEnvio()">
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="confirmarEnvio()">
                     <i class="bi bi-check-circle me-2"></i>{{ "Guardar Cambios" if modo_edicion else "Generar y Guardar" }}
                 </button>
             </div>
@@ -1125,7 +1306,7 @@ function aplicarBorradorCotizacion(draft) {
         }
     };
 
-    setValue("#moneda", draft.moneda);
+    // La moneda la define el servidor (siempre USD); no se restaura del borrador.
     setValue("#tipo_cambio", draft.tipo_cambio);
     setValue("#condicion_iva", draft.condicion_iva);
     setValue("#input_cliente_contacto", draft.cliente_contacto);
@@ -1209,7 +1390,7 @@ function toggleSeguimientoFields() {
     const dias = document.getElementById("seguimiento_cada_dias");
     [email, dias].filter(Boolean).forEach((el) => {
         el.required = !!activo;
-        const columna = el.closest(".col-md-4, .col-md-2");
+        const columna = el.closest(".seguimiento-field");
         if (columna) {
             columna.classList.toggle("opacity-50", !activo);
         }
@@ -1424,6 +1605,7 @@ function limpiarModalCliente() {
     document.getElementById("nuevo_cli_nombre").value = "";
     document.getElementById("nuevo_cli_razon").value = "";
     document.getElementById("nuevo_cli_cuit").value = "";
+    document.getElementById("nuevo_cli_cuit").classList.remove("is-invalid");
     document.getElementById("nuevo_cli_domicilio").value = "";
     document.getElementById("nuevo_cli_sector").value = "";
     document.getElementById("nuevo_cli_email").value = "";
@@ -1445,6 +1627,7 @@ function abrirModalEditarCliente() {
         alert("Selecciona un cliente existente para poder editarlo.");
         return;
     }
+    document.getElementById("nuevo_cli_cuit").classList.remove("is-invalid");
 
     document.getElementById("cliente_modal_id").value = cliente.id;
     document.getElementById("modalClienteTitulo").textContent = "Editar Cliente";
@@ -1514,6 +1697,39 @@ function actualizarOptionClienteEnSelect(data) {
     programarGuardarBorradorCotizacion();
 }
 
+// Mismo criterio que el servidor (normalizar_cuit): 11 digitos y digito verificador AFIP.
+function validarCuit(valor) {
+    const digitos = (valor || "").replace(/\D/g, "");
+    if (!digitos) {
+        return "El CUIT es obligatorio.";
+    }
+    if (digitos.length !== 11) {
+        return "El CUIT debe tener 11 dígitos (XX-XXXXXXXX-X).";
+    }
+    const pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+    const suma = pesos.reduce((acc, peso, i) => acc + peso * Number(digitos[i]), 0);
+    let verificador = 11 - (suma % 11);
+    if (verificador === 11) {
+        verificador = 0;
+    }
+    if (verificador === 10 || verificador !== Number(digitos[10])) {
+        return "El CUIT no es válido: revisá los números (no coincide el dígito verificador).";
+    }
+    return "";
+}
+
+function mostrarErrorCuit(mensaje) {
+    const input = document.getElementById("nuevo_cli_cuit");
+    const feedback = document.getElementById("nuevo_cli_cuit_error");
+    if (feedback) {
+        feedback.textContent = mensaje;
+    }
+    if (input) {
+        input.classList.add("is-invalid");
+        input.focus();
+    }
+}
+
 async function guardarCliente() {
     const clienteId = document.getElementById("cliente_modal_id").value.trim();
     const esEdicion = Boolean(clienteId);
@@ -1530,6 +1746,11 @@ async function guardarCliente() {
 
     if (!nombre) {
         alert("El nombre es requerido");
+        return;
+    }
+    const errorCuit = validarCuit(cuit);
+    if (errorCuit) {
+        mostrarErrorCuit(errorCuit);
         return;
     }
     if (!sector) {
@@ -1569,6 +1790,10 @@ async function guardarCliente() {
             return;
         }
         if (!response.ok || data.error) {
+            if (data.error && data.error.includes("CUIT")) {
+                mostrarErrorCuit(data.error);
+                return;
+            }
             alert(data.error || `No se pudo guardar el cliente. Error HTTP ${response.status}.`);
             return;
         }
@@ -1724,7 +1949,14 @@ function parseNumero(valor, defaultValue = 0) {
 }
 
 function seleccionarContenidoInput(input) {
-    window.requestAnimationFrame(() => input.select());
+    // Se selecciona en el cuadro siguiente (si no, el click deselecciona). Pero si
+    // ya se empezo a escribir, no: si no la segunda tecla pisaria a la primera.
+    const valorAlEntrar = input.value;
+    window.requestAnimationFrame(() => {
+        if (document.activeElement === input && input.value === valorAlEntrar) {
+            input.select();
+        }
+    });
 }
 
 function tieneDato(data, key) {
@@ -1845,9 +2077,91 @@ function normalizarIvaVenta(valor) {
     return [21, 10.5, 0].includes(numero) ? numero : 21;
 }
 
-function formatoMoneda(valor) {
+function redondearCentavos(valor) {
+    // Redondeo mitad hacia arriba a 2 decimales (igual que Decimal ROUND_HALF_UP en el servidor).
+    if (!Number.isFinite(valor)) {
+        return 0;
+    }
+    const signo = valor < 0 ? -1 : 1;
+    return signo * Number(Math.round(Number(`${Math.abs(valor)}e2`)) + "e-2");
+}
+
+function formatoImporte(valor, simbolo) {
     const numero = Number.isFinite(valor) ? valor : 0;
-    return `$ ${numero.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${simbolo} ${numero.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function monedaCotizacion() {
+    return (document.getElementById("moneda")?.value || "USD").toUpperCase() === "ARS" ? "ARS" : "USD";
+}
+
+function formatoMoneda(valor) {
+    return formatoImporte(valor, monedaCotizacion() === "ARS" ? "$" : "US$");
+}
+
+function formatoPesos(valor) {
+    return formatoImporte(valor, "$");
+}
+
+function formatoVistaArs(valor, factor, negativo = false) {
+    if (!Number.isFinite(factor) || factor <= 0) {
+        return "N/D";
+    }
+    return `${negativo ? "-" : ""}${formatoPesos(valor * factor)}`;
+}
+
+function actualizarVistaFinancieraArs(valores, moneda, tipoCambio) {
+    const factor = moneda === "ARS" ? 1 : tipoCambio;
+    const actualizarMonto = (id, valor, negativo = false) => {
+        const node = document.getElementById(id);
+        if (node) {
+            node.innerText = formatoVistaArs(valor, factor, negativo);
+        }
+    };
+
+    actualizarMonto("ars-costo-total-interno", valores.costoNetoReal);
+    actualizarMonto("ars-iva-compra-credito", valores.ivaCompraCredito);
+    actualizarMonto("ars-iva-a-pagar", valores.ivaAPagar);
+    actualizarMonto("ars-total-descuentos-interno", valores.descuentoTotal, true);
+    actualizarMonto("ars-venta-neta-interna", valores.subtotalVentaNeto);
+    actualizarMonto("ars-bonificacion-cierre-interno", valores.bonificacionCierre, true);
+    actualizarMonto("ars-monto-carga-fiscal", valores.cargaFiscal, true);
+    actualizarMonto("ars-total-iva-interno", valores.ivaTotal);
+    actualizarMonto("ars-total-vista", valores.totalFinal);
+
+    const gananciaNode = document.getElementById("ars-ganancia-neta-real");
+    if (gananciaNode) {
+        gananciaNode.innerText = formatoVistaArs(valores.gananciaNeta, factor);
+        gananciaNode.classList.remove("text-success", "text-danger");
+        gananciaNode.classList.add(valores.gananciaNeta >= 0 ? "text-success" : "text-danger");
+    }
+
+    const nota = document.getElementById("vista-financiera-ars-nota");
+    if (!nota) {
+        return;
+    }
+    if (moneda === "ARS") {
+        nota.innerText = "La cotizacion ya esta expresada en ARS. Esta vista es solo una referencia y no modifica valores guardados.";
+    } else if (Number.isFinite(tipoCambio) && tipoCambio > 0) {
+        nota.innerText = `Conversion demostrativa con TC $ ${tipoCambio.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 4 })} por USD. No modifica la cotizacion ni los valores guardados.`;
+    } else {
+        nota.innerText = "Carga o actualiza el tipo de cambio para ver la referencia en ARS. No modifica la cotizacion.";
+    }
+}
+
+function toggleVistaFinancieraArs() {
+    const panel = document.getElementById("vista-financiera-ars");
+    const button = document.getElementById("btn-vista-financiera-ars");
+    if (!panel || !button) {
+        return;
+    }
+    const mostrar = panel.hidden;
+    panel.hidden = !mostrar;
+    button.setAttribute("aria-expanded", String(mostrar));
+    const label = button.querySelector("span");
+    if (label) {
+        label.innerText = mostrar ? "Ocultar ARS" : "Ver en ARS";
+    }
 }
 
 function agregarFila(data = {}) {
@@ -1878,12 +2192,16 @@ function agregarFila(data = {}) {
         <input type="hidden" name="item_id[]" value="${escapeHtml(data.item_id || "")}">
         <input type="hidden" name="imagen_actual[]" value="${imagenActualHtml}">
         <div class="cotizador-item-head">
-            <span class="cotizador-item-index">Item ${itemRowCounter}</span>
-            <button type="button" class="btn item-delete-btn" onclick="quitarFila(this);" title="Eliminar item">
+            <div class="cotizador-item-title">
+                <span class="cotizador-item-num">${itemRowCounter}</span>
+                <span class="cotizador-item-index">Ítem ${itemRowCounter}</span>
+                <span class="cotizador-item-nombre"></span>
+            </div>
+            <button type="button" class="btn item-delete-btn" onclick="quitarFila(this);" title="Eliminar ítem" aria-label="Eliminar ítem ${itemRowCounter}">
                 <i class="bi bi-trash"></i>
             </button>
         </div>
-        <div class="cotizador-item-layout">
+        <div class="cotizador-item-layout cotizador-item-body">
             <div class="text-center image-upload-cell">
             <input type="file" name="foto_${rowId}" id="foto_${rowId}" class="image-upload-input" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif" onchange="previsualizarFoto(this)">
             <label class="image-upload-trigger ${hasImageClass}" for="foto_${rowId}" title="Cargar imagen del producto">
@@ -1898,12 +2216,12 @@ function agregarFila(data = {}) {
             <div class="cotizador-item-content">
                 <div class="cotizador-item-identity">
                     <div class="cotizador-field">
-                        <label class="cotizador-field-label">Producto / Servicio</label>
-                        <input type="text" name="desc[]" class="form-control cotizador-input" placeholder="Producto o servicio..." value="${descripcionHtml}" required>
+                        <label class="cotizador-field-label">Producto / servicio</label>
+                        <input type="text" name="desc[]" class="form-control cotizador-input" placeholder="Ej: Cámara domo 4MP" value="${descripcionHtml}" required>
                     </div>
                     <div class="cotizador-field">
-                        <label class="cotizador-field-label">Descripcion</label>
-                        <textarea name="detalle[]" class="form-control cotizador-textarea" rows="2" placeholder="Descripcion adicional del item...">${detalleHtml}</textarea>
+                        <label class="cotizador-field-label">Descripción para el cliente</label>
+                        <textarea name="detalle[]" class="form-control cotizador-textarea" rows="1" placeholder="Detalle que sale en el presupuesto (opcional)">${detalleHtml}</textarea>
                     </div>
                 </div>
                 <div class="cotizador-item-metrics">
@@ -1912,19 +2230,19 @@ function agregarFila(data = {}) {
                         <input type="text" name="cant[]" class="form-control cotizador-input cotizador-number-no-spin text-center" value="${cantidad}" min="1" inputmode="numeric" autocomplete="off" onfocus="seleccionarContenidoInput(this)" oninput="validarCantidadEntera(this); calcularTodo()" onblur="normalizarCantidadEntera(this); calcularTodo()">
                     </div>
                     <div class="cotizador-field">
-                        <label class="cotizador-field-label">Costo Neto U.</label>
+                        <label class="cotizador-field-label" title="Costo unitario del proveedor, sin IVA">Costo unitario</label>
                         <input type="text" name="costo[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end" value="${costoUnitario}" min="0" inputmode="decimal" autocomplete="off" placeholder="Costo" onfocus="seleccionarContenidoInput(this)" oninput="validarPositivo(this); calcularTodo()">
                     </div>
                     <div class="cotizador-field">
-                        <label class="cotizador-field-label">IVA Compra %</label>
+                        <label class="cotizador-field-label" title="IVA del proveedor; se usa como credito fiscal">IVA compra %</label>
                         <input type="text" name="iva_compra[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end" value="${ivaCompra}" min="0" inputmode="decimal" autocomplete="off" placeholder="%" onfocus="seleccionarContenidoInput(this)" oninput="validarPositivo(this); calcularTodo()" title="IVA del proveedor. Se usa como credito fiscal interno.">
                     </div>
                     <div class="cotizador-field">
-                        <label class="cotizador-field-label">Otros %</label>
+                        <label class="cotizador-field-label" title="Flete, comisiones y otros costos sobre el costo neto">Otros %</label>
                         <input type="text" name="extra[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end" value="${costoExtra}" min="0" inputmode="decimal" autocomplete="off" placeholder="%" onfocus="seleccionarContenidoInput(this)" oninput="validarPositivo(this); calcularTodo()">
                     </div>
                     <div class="cotizador-field">
-                        <label class="cotizador-field-label">Margen %</label>
+                        <label class="cotizador-field-label" title="Recargo sobre el costo (markup). 75% de recargo equivale a 42,9% de margen sobre la venta.">Margen %</label>
                         <input type="text" name="margen[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end" value="${margen}" min="0" inputmode="decimal" autocomplete="off" placeholder="%" onfocus="seleccionarContenidoInput(this)" oninput="validarPositivo(this); calcularTodo()">
                     </div>
                     <div class="cotizador-field">
@@ -1932,11 +2250,11 @@ function agregarFila(data = {}) {
                         <input type="text" name="descuento[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end" value="${descuento}" min="0" max="100" inputmode="decimal" autocomplete="off" placeholder="%" onfocus="seleccionarContenidoInput(this)" oninput="validarPorcentaje(this); calcularTodo()">
                     </div>
                     <div class="cotizador-field">
-                        <label class="cotizador-field-label text-danger">Carga F. %</label>
-                        <input type="text" name="carga_fiscal[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end text-danger fw-bold" value="${cargaFiscal}" min="0" inputmode="decimal" autocomplete="off" placeholder="%" onfocus="seleccionarContenidoInput(this)" oninput="validarPositivo(this); calcularTodo()">
+                        <label class="cotizador-field-label" title="IIBB, Ganancias, sellos, impuesto al cheque, etc. Interno.">Carga fiscal %</label>
+                        <input type="text" name="carga_fiscal[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end" value="${cargaFiscal}" min="0" inputmode="decimal" autocomplete="off" placeholder="%" onfocus="seleccionarContenidoInput(this)" oninput="validarPositivo(this); calcularTodo()">
                     </div>
                     <div class="cotizador-field">
-                        <label class="cotizador-field-label">IVA</label>
+                        <label class="cotizador-field-label" title="IVA de venta">IVA venta</label>
                         <select name="iva_item[]" class="form-select cotizador-select select-iva" onchange="calcularTodo()">
                             <option value="21" ${Number(ivaItem) === 21 ? "selected" : ""}>21%</option>
                             <option value="10.5" ${Number(ivaItem) === 10.5 ? "selected" : ""}>10.5%</option>
@@ -1946,12 +2264,12 @@ function agregarFila(data = {}) {
                 </div>
                 <div class="cotizador-item-summary">
                     <div class="cotizador-item-pill ganancia">
-                        <span class="cotizador-item-pill-label">Ganancia Neta U.</span>
-                        <span class="cotizador-item-pill-value ganancia-badge">$ 0.00</span>
+                        <span class="cotizador-item-pill-label">Ganancia por unidad</span>
+                        <span class="cotizador-item-pill-value ganancia-badge">US$ 0,00</span>
                     </div>
                     <div class="cotizador-item-pill venta">
-                        <span class="cotizador-item-pill-label">Venta total</span>
-                        <span class="cotizador-item-pill-value venta-total-badge">$ 0.00</span>
+                        <span class="cotizador-item-pill-label">Total ítem (con IVA)</span>
+                        <span class="cotizador-item-pill-value venta-total-badge">US$ 0,00</span>
                     </div>
                 </div>
             </div>
@@ -1961,6 +2279,7 @@ function agregarFila(data = {}) {
         fila.querySelector(".image-upload-preview").src = placeholderProductUrl;
     }
     cuerpo.appendChild(fila);
+    renumerarItems();
     calcularTodo();
     programarGuardarBorradorCotizacion();
 }
@@ -2085,6 +2404,38 @@ function quitarFoto(button) {
     }
 }
 
+// La numeracion visible sigue la posicion: al borrar el item 1, el 2 pasa a ser el 1.
+// (row_id no cambia: identifica la foto de cada fila en el envio.)
+function renumerarItems() {
+    document.querySelectorAll("#cuerpo-tabla .cotizador-item-card").forEach((card, indice) => {
+        const numero = indice + 1;
+        const num = card.querySelector(".cotizador-item-num");
+        const titulo = card.querySelector(".cotizador-item-index");
+        const borrar = card.querySelector(".item-delete-btn");
+        if (num) num.textContent = numero;
+        if (titulo) titulo.textContent = `Ítem ${numero}`;
+        if (borrar) borrar.setAttribute("aria-label", `Eliminar ítem ${numero}`);
+        actualizarNombreItem(card);
+    });
+}
+
+// Muestra el nombre del producto en el encabezado del item para ubicarlo rapido.
+function actualizarNombreItem(card) {
+    const nombre = card?.querySelector(".cotizador-item-nombre");
+    if (!nombre) {
+        return;
+    }
+    const texto = (card.querySelector('[name="desc[]"]')?.value || "").trim();
+    nombre.textContent = texto ? `· ${texto}` : "· Sin producto";
+    nombre.classList.toggle("vacio", !texto);
+}
+
+document.addEventListener("input", function (event) {
+    if (event.target.matches?.('#cuerpo-tabla [name="desc[]"]')) {
+        actualizarNombreItem(event.target.closest(".cotizador-item-card"));
+    }
+});
+
 function quitarFila(button) {
     const fila = button.closest(".cotizador-item-card");
     if (!fila) {
@@ -2095,6 +2446,7 @@ function quitarFila(button) {
         URL.revokeObjectURL(preview.dataset.objectUrl);
     }
     fila.remove();
+    renumerarItems();
     calcularTodo();
     programarGuardarBorradorCotizacion();
 }
@@ -2136,29 +2488,42 @@ function normalizarCantidadEntera(input) {
     validarCantidadEntera(input);
 }
 
-function renderTipoCambioEstado(data, errorMessage = "") {
+function horaConsultaTipoCambio(data) {
+    // fetched_at viene en UTC ("...Z"): se muestra en la hora de la PC.
+    const fecha = data && data.fetched_at ? new Date(data.fetched_at) : null;
+    if (!fecha || Number.isNaN(fecha.getTime())) {
+        return "";
+    }
+    return fecha.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+}
+
+function renderTipoCambioEstado(data, errorMessage = "", aviso = "") {
     const statusNode = document.getElementById("tipo_cambio_estado");
     if (!statusNode) {
         return;
     }
     if (data && data.pending) {
         statusNode.classList.remove("text-danger");
-        statusNode.textContent = "Actualizando tipo de cambio desde BNA...";
+        statusNode.textContent = "Consultando el BNA...";
         return;
     }
     if (data && data.ok && Number.isFinite(Number(data.rate))) {
         statusNode.classList.remove("text-danger");
         let mensaje = `${data.label || "BNA oficial"}`;
         if (data.date) {
-            mensaje += ` - ${data.date}`;
+            mensaje += ` · publicado ${data.date}`;
         }
         if (data.time) {
             mensaje += ` ${data.time}`;
         }
-        if (data.stale) {
-            mensaje += " - ultimo dato en cache";
+        const consulta = horaConsultaTipoCambio(data);
+        if (consulta) {
+            mensaje += ` · consultado ${consulta}`;
         }
-        statusNode.textContent = mensaje;
+        if (data.stale) {
+            mensaje += " · último dato guardado";
+        }
+        statusNode.textContent = aviso ? `${aviso} ${mensaje}` : mensaje;
         return;
     }
     statusNode.classList.add("text-danger");
@@ -2183,15 +2548,31 @@ function normalizarMensajeErrorTipoCambio(errorMessage = "") {
     return message;
 }
 
-async function actualizarTipoCambioOficial(force = false, intentos = 0) {
-    const input = document.getElementById("tipo_cambio");
+function marcarTipoCambioCargando(cargando) {
     const refreshBtn = document.getElementById("btn-tipo-cambio-refresh");
+    if (!refreshBtn) {
+        return;
+    }
+    refreshBtn.disabled = cargando;
+    refreshBtn.setAttribute("aria-busy", cargando ? "true" : "false");
+    refreshBtn.querySelector("i")?.classList.toggle("spin", cargando);
+}
+
+// manual: el usuario apreto el boton. Se mantiene durante los reintentos para
+// poder avisar al final si el valor cambio o si el BNA sigue publicando el mismo.
+async function actualizarTipoCambioOficial(force = false, intentos = 0, manual = null) {
+    const input = document.getElementById("tipo_cambio");
     if (!input) {
         return;
     }
-    if (refreshBtn) {
-        refreshBtn.disabled = true;
+    if (force && !manual) {
+        manual = { anterior: Number(input.value) || null };
     }
+    marcarTipoCambioCargando(true);
+    if (intentos === 0 && manual) {
+        renderTipoCambioEstado({ pending: true });
+    }
+    let reintentar = false;
     try {
         const response = await fetch(`${tipoCambioUrl}${force ? "?refresh=1" : ""}`, {
             headers: { "X-Requested-With": "fetch" },
@@ -2200,26 +2581,39 @@ async function actualizarTipoCambioOficial(force = false, intentos = 0) {
         const data = await response.json();
         if (data.pending) {
             renderTipoCambioEstado(data);
-            if (intentos < 15) {
-                window.setTimeout(() => actualizarTipoCambioOficial(false, intentos + 1), 1000);
-            }
+            reintentar = intentos < 15;
             return;
         }
         if (!response.ok || !data.ok || !Number.isFinite(Number(data.rate))) {
             throw new Error(normalizarMensajeErrorTipoCambio(data.error || "No se pudo obtener el tipo de cambio oficial."));
         }
         input.value = Number(data.rate);
-        renderTipoCambioEstado(data);
         calcularTodo();
         if (data.refreshing && intentos < 15) {
-            window.setTimeout(() => actualizarTipoCambioOficial(false, intentos + 1), 1000);
+            renderTipoCambioEstado({ pending: true });
+            reintentar = true;
+            return;
         }
+        let aviso = "";
+        if (manual) {
+            const nuevo = Number(data.rate);
+            if (data.error) {
+                aviso = "No se pudo consultar el BNA; se muestra el último valor guardado.";
+            } else if (manual.anterior && Math.abs(nuevo - manual.anterior) > 0.00005) {
+                aviso = `Actualizado (antes ${manual.anterior.toLocaleString("es-AR")}).`;
+            } else {
+                aviso = "Sin cambios: el BNA todavía publica este valor.";
+            }
+        }
+        renderTipoCambioEstado(data, "", aviso);
     } catch (error) {
         renderTipoCambioEstado(null, normalizarMensajeErrorTipoCambio(error.message));
         calcularTodo();
     } finally {
-        if (refreshBtn) {
-            refreshBtn.disabled = false;
+        if (reintentar) {
+            window.setTimeout(() => actualizarTipoCambioOficial(false, intentos + 1, manual), 1000);
+        } else {
+            marcarTipoCambioCargando(false);
         }
     }
 }
@@ -2229,13 +2623,20 @@ function calcularTodo() {
     const tc = Number.isFinite(tcRaw) && tcRaw > 0 ? tcRaw : null;
     const bonificacionSolicitada = Math.max(0, parseNumero(document.getElementById("bonificacion_cierre_monto")?.value, 0));
 
+    // Mismas reglas que calculos_cotizacion.py (el servidor recalcula al guardar):
+    // unitario neto redondeado; con IVA incluido se redondea el precio final y
+    // la linea es cantidad x precio final; la bonificacion se reparte entre
+    // neto e IVA en forma proporcional.
+    const precioIncluyeIva = (document.getElementById("condicion_iva")?.value || "") !== "Responsable Inscrito";
+
     let subtotalBaseAcumulado = 0;
     let totalExtrasAcumulado = 0;
     let totalIvaCompraAcumulado = 0;
     let totalDescuentosAcumulado = 0;
     let subtotalVentaNeto = 0;
-    let ivaTotalAcumulado = 0;
-    let totalCargaFiscalAcumulado = 0;
+    let cargaFiscalBruta = 0;
+    const netoPorTasa = {};
+    let ivaPorTasa = {};
 
     const rows = document.querySelectorAll("#cuerpo-tabla .cotizador-item-card");
     rows.forEach((row) => {
@@ -2246,30 +2647,29 @@ function calcularTodo() {
         const margenPct = Math.max(0, parseNumero(row.querySelector('[name="margen[]"]')?.value));
         const descuentoPct = Math.min(100, Math.max(0, parseNumero(row.querySelector('[name="descuento[]"]')?.value)));
         const cargaFiscPerc = Math.max(0, parseNumero(row.querySelector('[name="carga_fiscal[]"]')?.value));
-        const margen = margenPct / 100;
-        const descuento = descuentoPct / 100;
         const ivaPerc = normalizarIvaVenta(row.querySelector('[name="iva_item[]"]')?.value);
 
         const costoBaseTotalFila = cant * costoUnitario;
-        const montoIvaCompraFila = costoBaseTotalFila * (ivaCompraPerc / 100);
-        const montoExtraFila = costoBaseTotalFila * (extraPerc / 100);
-        const costoParaVenta = costoUnitario * (1 + (extraPerc / 100));
         const costoRealUnitario = costoUnitario * (1 + (extraPerc / 100));
-        const pVentaLista = costoParaVenta * (1 + margen);
-        const pVentaNeto = pVentaLista * (1 - descuento);
-        const descuentoFila = (cant * pVentaLista) - (cant * pVentaNeto);
-        const subNetoFila = cant * pVentaNeto;
-        const montoCargaFiscalFila = subNetoFila * (cargaFiscPerc / 100);
-
-        const ivaFila = subNetoFila * (ivaPerc / 100);
+        const pVentaLista = redondearCentavos(costoRealUnitario * (1 + margenPct / 100));
+        const pVentaNeto = redondearCentavos(costoRealUnitario * (1 + margenPct / 100) * (1 - descuentoPct / 100));
+        const subNetoFila = redondearCentavos(cant * pVentaNeto);
+        let ventaTotalFila;
+        if (precioIncluyeIva) {
+            const unitarioFinal = redondearCentavos(pVentaNeto * (1 + ivaPerc / 100));
+            ventaTotalFila = redondearCentavos(unitarioFinal * cant);
+            ivaPorTasa[ivaPerc] = (ivaPorTasa[ivaPerc] || 0) + (ventaTotalFila - subNetoFila);
+        } else {
+            ventaTotalFila = redondearCentavos(subNetoFila * (1 + ivaPerc / 100));
+        }
+        netoPorTasa[ivaPerc] = (netoPorTasa[ivaPerc] || 0) + subNetoFila;
 
         subtotalBaseAcumulado += costoBaseTotalFila;
-        totalIvaCompraAcumulado += montoIvaCompraFila;
-        totalExtrasAcumulado += montoExtraFila;
-        totalDescuentosAcumulado += descuentoFila;
+        totalIvaCompraAcumulado += costoBaseTotalFila * (ivaCompraPerc / 100);
+        totalExtrasAcumulado += costoBaseTotalFila * (extraPerc / 100);
+        totalDescuentosAcumulado += Math.max(0, cant * (pVentaLista - pVentaNeto));
         subtotalVentaNeto += subNetoFila;
-        totalCargaFiscalAcumulado += montoCargaFiscalFila;
-        ivaTotalAcumulado += ivaFila;
+        cargaFiscalBruta += subNetoFila * (cargaFiscPerc / 100);
 
         const gananciaU = pVentaNeto - costoRealUnitario - (pVentaNeto * (cargaFiscPerc / 100));
         const gananciaNode = row.querySelector(".ganancia-badge");
@@ -2278,24 +2678,38 @@ function calcularTodo() {
         }
         const ventaTotalNode = row.querySelector(".venta-total-badge");
         if (ventaTotalNode) {
-            const ventaTotalFila = subNetoFila + ivaFila;
             ventaTotalNode.innerText = formatoMoneda(ventaTotalFila);
         }
     });
 
+    if (!precioIncluyeIva) {
+        ivaPorTasa = {};
+        Object.entries(netoPorTasa).forEach(([tasa, base]) => {
+            ivaPorTasa[tasa] = redondearCentavos(base * Number(tasa) / 100);
+        });
+    }
+    subtotalVentaNeto = redondearCentavos(subtotalVentaNeto);
+    const ivaBruto = Object.values(ivaPorTasa).reduce((acc, monto) => acc + monto, 0);
+    const totalAntesBonificacion = redondearCentavos(subtotalVentaNeto + ivaBruto);
+    const bonificacionCierre = redondearCentavos(Math.min(bonificacionSolicitada, totalAntesBonificacion));
+    const factorBonificacion = totalAntesBonificacion > 0 ? bonificacionCierre / totalAntesBonificacion : 0;
+    const totalFinal = redondearCentavos(totalAntesBonificacion - bonificacionCierre);
+    const ivaTotalAcumulado = redondearCentavos(
+        Object.values(ivaPorTasa).reduce((acc, monto) => acc + redondearCentavos(monto * (1 - factorBonificacion)), 0)
+    );
+    const bonificacionNeta = redondearCentavos(subtotalVentaNeto + ivaTotalAcumulado - totalFinal);
+    const totalCargaFiscalAcumulado = redondearCentavos(cargaFiscalBruta * (1 - factorBonificacion));
+
     const costoNetoReal = subtotalBaseAcumulado + totalExtrasAcumulado;
     const ivaAPagar = ivaTotalAcumulado - totalIvaCompraAcumulado;
-    const totalAntesBonificacion = subtotalVentaNeto + ivaTotalAcumulado;
-    const bonificacionCierre = Math.min(bonificacionSolicitada, totalAntesBonificacion);
-    const gananciaNetaReal = subtotalVentaNeto - costoNetoReal - totalCargaFiscalAcumulado - bonificacionCierre;
-    const totalFinal = totalAntesBonificacion - bonificacionCierre;
+    const gananciaNetaReal = subtotalVentaNeto - costoNetoReal - totalCargaFiscalAcumulado - bonificacionNeta;
 
     document.getElementById("costo-total-interno").innerText = formatoMoneda(costoNetoReal);
     document.getElementById("iva-compra-credito").innerText = formatoMoneda(totalIvaCompraAcumulado);
     document.getElementById("iva-a-pagar").innerText = formatoMoneda(ivaAPagar);
     document.getElementById("total-descuentos-interno").innerText = `-${formatoMoneda(totalDescuentosAcumulado)}`;
     document.getElementById("venta-neta-interna").innerText = formatoMoneda(subtotalVentaNeto);
-    document.getElementById("bonificacion-cierre-interno").innerText = `-${formatoMoneda(bonificacionCierre)}`;
+    document.getElementById("bonificacion-cierre-interno").innerText = `-${formatoMoneda(bonificacionNeta)}`;
     document.getElementById("monto-carga-fiscal").innerText = `-${formatoMoneda(totalCargaFiscalAcumulado)}`;
     document.getElementById("total-iva-interno").innerText = formatoMoneda(ivaTotalAcumulado);
     document.getElementById("total-vista").innerText = formatoMoneda(totalFinal);
@@ -2304,14 +2718,32 @@ function calcularTodo() {
     gananciaNetaNode.classList.remove("text-success", "text-danger");
     gananciaNetaNode.classList.add(gananciaNetaReal >= 0 ? "text-success" : "text-danger");
 
-    const moneda = document.getElementById("moneda")?.value || "ARS";
+    const moneda = monedaCotizacion();
     const totalConv = tc ? (moneda === "ARS" ? (totalFinal / tc) : (totalFinal * tc)) : null;
     const labelConv = moneda === "ARS" ? "USD" : "ARS";
+    const formatoConv = moneda === "ARS" ? (valor) => formatoImporte(valor, "US$") : formatoPesos;
+
+    actualizarVistaFinancieraArs(
+        {
+            costoNetoReal,
+            ivaCompraCredito: totalIvaCompraAcumulado,
+            ivaAPagar,
+            descuentoTotal: totalDescuentosAcumulado,
+            subtotalVentaNeto,
+            bonificacionCierre: bonificacionNeta,
+            cargaFiscal: totalCargaFiscalAcumulado,
+            gananciaNeta: gananciaNetaReal,
+            ivaTotal: ivaTotalAcumulado,
+            totalFinal,
+        },
+        moneda,
+        tc,
+    );
 
     document.getElementById("label-moneda-actual").innerText = moneda;
     document.getElementById("label-moneda-conv").innerText = labelConv;
     document.getElementById("total-convertido").innerText = tc
-        ? formatoMoneda(totalConv)
+        ? formatoConv(totalConv)
         : "N/D";
 }
 

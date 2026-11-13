@@ -147,7 +147,7 @@
                     <div class="text-md-end">
                         <p class="meta-label mb-2">Datos de la cotizacion</p>
                         <p class="mb-1 fw-bold quote-doc-number">Cotizacion #{{ cotizacion.numero_cotizacion or cotizacion.id }}</p>
-                        <p class="mb-1"><strong>Fecha:</strong> {{ cotizacion.fecha.strftime('%d/%m/%Y %H:%M') }}</p>
+                        <p class="mb-1"><strong>Fecha:</strong> {{ cotizacion.fecha|fecha_local('%d/%m/%Y %H:%M') }}</p>
                         <p class="mb-1"><strong>Cliente:</strong> {{ cotizacion.cliente }}</p>
                         {% if cotizacion.cliente_razon_social %}
                         <p class="mb-1"><strong>Razon Social:</strong> {{ cotizacion.cliente_razon_social }}</p>

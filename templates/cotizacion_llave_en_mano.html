@@ -1,14 +1,23 @@
 {% extends "layout.html" %}
 
+{% block title %}Consolidada {{ cot.numero_cotizacion }}{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('historial_page') }}">Historial</a></li>
+<li class="breadcrumb-item"><a href="{{ url_for('ver_cotizacion', id=cot.id) }}">{{ cot.numero_cotizacion }}</a></li>
+<li class="breadcrumb-item active">Consolidada</li>
+{% endblock %}
+
 {% block content %}
 <style>
     .turnkey-shell {
         max-width: 920px;
-        margin: 2rem auto 4rem;
+        margin: 0 auto 2rem;
         padding: 36px 40px 42px;
         background: #fff;
-        border: 1px solid #d8dde5;
-        box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) + 4px);
+        box-shadow: var(--shadow-sm);
     }
     .turnkey-topline,
     .turnkey-footerline {
@@ -234,14 +243,19 @@
     }
 </style>
 
-<div class="container no-print text-center my-4">
-    <button onclick="window.print()" class="btn btn-pdf-custom btn-lg px-5">Guardar como PDF / Imprimir</button>
-    <a href="{{ url_for('ver_cotizacion', id=cot.id) }}" class="btn btn-view-custom btn-lg">Ver detalle</a>
-    <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-edit-custom btn-lg">Editar</a>
-    <a href="/historial" class="btn btn-outline-secondary btn-lg">Volver al Historial</a>
+<div class="page-header no-print">
+    <div>
+        <h1 class="page-title">Consolidada {{ cot.numero_cotizacion }}</h1>
+        <p class="page-description">Versión llave en mano para {{ cot.cliente_razon_social or cot.cliente }}. Se exporta con la impresión del navegador.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{{ url_for('ver_cotizacion', id=cot.id) }}" class="btn btn-outline-dark"><i class="bi bi-eye"></i>Ver detalle</a>
+        <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-outline-dark"><i class="bi bi-pencil"></i>Editar</a>
+        <button onclick="window.print()" class="btn btn-primary"><i class="bi bi-printer"></i>Imprimir / Guardar PDF</button>
+    </div>
 </div>
 
-<article class="turnkey-shell">
+<article class="turnkey-shell tema-claro" data-bs-theme="light">
     <header class="turnkey-header">
         <div class="turnkey-company">
             <img src="{{ url_for('static', filename='LOGO color.png') }}" alt="Logo Cuenco Tech" onerror="this.onerror=null;this.src='{{ url_for('static', filename='logo.png') }}';">
@@ -253,7 +267,7 @@
             </div>
         </div>
         <div class="turnkey-date">
-            MENDOZA, {{ cot.fecha.strftime('%d/%m/%Y') }}.
+            MENDOZA, {{ cot.fecha|fecha_local }}.
         </div>
     </header>
 
@@ -339,8 +353,18 @@
         {% if not precio_incluye_iva %}
         <div class="turnkey-total-row">
             <span>Subtotal neto</span>
-            <span>{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(cot.total_neto or 0) }}</span>
+            <span>{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(totales.neto) }}</span>
         </div>
+        {% if totales.bonificacion > 0 %}
+        <div class="turnkey-total-row">
+            <span>Bonificación de cierre</span>
+            <span>- {{ cot.moneda or "USD" }} {{ "{:,.2f}".format(totales.bonificacion_neta) }}</span>
+        </div>
+        <div class="turnkey-total-row">
+            <span>Neto bonificado</span>
+            <span>{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(totales.neto_bonificado) }}</span>
+        </div>
+        {% endif %}
         {% for iva_linea in desglose_iva %}
         <div class="turnkey-total-row">
             <span>{{ iva_linea.label }}</span>
@@ -349,18 +373,21 @@
         {% endfor %}
         <div class="turnkey-total-row">
             <span>IVA total</span>
-            <span>{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(cot.total_iva or 0) }}</span>
+            <span>{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(totales.iva_total) }}</span>
         </div>
-        {% endif %}
-        {% if (cot.bonificacion_cierre_monto or 0) > 0 %}
+        {% elif totales.bonificacion > 0 %}
         <div class="turnkey-total-row">
-            <span>Bonificacion de cierre</span>
-            <span>- {{ cot.moneda or "USD" }} {{ "{:,.2f}".format(cot.bonificacion_cierre_monto) }}</span>
+            <span>Subtotal</span>
+            <span>{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(totales.bruto) }}</span>
+        </div>
+        <div class="turnkey-total-row">
+            <span>Bonificación de cierre</span>
+            <span>- {{ cot.moneda or "USD" }} {{ "{:,.2f}".format(totales.bonificacion) }}</span>
         </div>
         {% endif %}
         <div class="turnkey-total-row is-final">
             <span>Total final</span>
-            <span>{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(cot.total_final or 0) }}</span>
+            <span>{{ cot.moneda or "USD" }} {{ "{:,.2f}".format(totales.total) }}</span>
         </div>
     </aside>
 
@@ -391,6 +418,8 @@
         <div class="turnkey-signature-line"></div>
         <strong>{{ quote_signature.name }}</strong><br>
         {{ quote_signature.role }}<br>
+        {% if quote_signature.email %}{{ quote_signature.email }}<br>{% endif %}
+        {% if quote_signature.phone %}{{ quote_signature.phone }}<br>{% endif %}
         {{ cot.razon_social or "Cuenco Tech S.A." }}
     </section>
 

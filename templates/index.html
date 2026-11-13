@@ -131,11 +131,11 @@
                         <tr>
                             <td>#{{ "%04d" | format(c.id) }}</td>
                             <td>{{ c.cliente }}</td>
-                            <td>{{ c.fecha.strftime('%d/%m/%Y') }}</td>
+                            <td>{{ c.fecha|fecha_local }}</td>
                             <td class="fw-bold">${{ "{:,.2f}".format(c.total_final) }}</td>
                             <td class="text-end">
                                 <a href="/cotizacion/{{ c.id }}" class="btn btn-sm btn-view-custom">Ver</a>
-                                <a href="/cotizacion/{{ c.id }}?download=1" class="btn btn-sm btn-pdf-custom">PDF</a>
+                                <a href="/cotizacion/{{ c.id }}/pdf" class="btn btn-sm btn-pdf-custom">PDF</a>
                             </td>
                         </tr>
                         {% endfor %}
@@ -197,7 +197,7 @@ function recalcularTodo() {
 window.onload = addFila;
 
 function descargarPDF(id) {
-    window.open(`/cotizacion/${id}?print=true`, "_blank");
+    window.open(`/cotizacion/${id}/pdf`, "_blank");
 }
 
 function aplicarFiltros() {
@@ -221,7 +221,7 @@ function aplicarFiltros() {
                         <td class="fw-bold text-primary">${c.total}</td>
                         <td class="text-end">
                             <a href="/cotizacion/${c.id}" class="btn btn-sm btn-view-custom">Ver</a>
-                            <a href="/cotizacion/${c.id}?download=1" class="btn btn-sm btn-pdf-custom">PDF</a>
+                            <a href="/cotizacion/${c.id}/pdf" class="btn btn-sm btn-pdf-custom">PDF</a>
                         </td>
                     </tr>
                 `;

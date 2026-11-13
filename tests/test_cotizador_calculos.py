@@ -9,7 +9,7 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
-os.environ["APP_SECRET_KEY"] = "test-secret"
+os.environ["APP_SECRET_KEY"] = "clave-secreta-solo-para-tests"
 _tmp_root = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
 _tmp_path = Path(_tmp_root.name)
 os.environ["DATA_DIR"] = str(_tmp_path / "data")
@@ -28,6 +28,7 @@ from app import (
     generar_excel_cotizacion,
 )
 from openpyxl import load_workbook
+from sqlalchemy.exc import IntegrityError
 
 
 class CotizadorCalculosTest(unittest.TestCase):
@@ -104,7 +105,10 @@ class CotizadorCalculosTest(unittest.TestCase):
         login_response = self.client.get("/login")
         self.assertEqual(login_response.status_code, 200)
         html = login_response.get_data(as_text=True)
-        self.assertIn("Acceso al cotizador", html)
+        self.assertIn("Bienvenido", html)
+        self.assertIn("yocotizo-icono.svg", html)
+        self.assertIn("· YoCotizo", html)
+        self.assertNotIn("Presupuestos claros", html)
         self.assertIn("Usuario", html)
         self.assertIn('name="password"', html)
         self.assertNotIn("setup-admin", html)
@@ -180,6 +184,13 @@ class CotizadorCalculosTest(unittest.TestCase):
             cotizacion.fecha = fecha
             db.session.commit()
 
+    def _bloque_firma(self, html):
+        for marca in ('class="quote-signature-card"', 'class="turnkey-signature"'):
+            if marca in html:
+                # El bloque de firma termina antes del cierre de la pagina.
+                return html.split(marca, 1)[1].split("</section>", 1)[0].split("<script", 1)[0]
+        self.fail("No se encontro el bloque de firma")
+
     def _valor_por_etiqueta(self, ws, etiqueta):
         for row in ws.iter_rows():
             for indice, cell in enumerate(row[:-1]):
@@ -225,17 +236,32 @@ class CotizadorCalculosTest(unittest.TestCase):
 
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Criterio interno de calculo", html)
+        self.assertIn("Análisis interno", html)
         self.assertIn('data-bs-toggle="tooltip"', html)
-        self.assertIn("Costo Neto U.", html)
-        self.assertIn("IVA Compra %", html)
-        self.assertIn("Bonificacion de cierre", html)
-        self.assertIn("Ganancia Neta (Bolsillo)", html)
+        self.assertIn("Costo unitario", html)
+        self.assertIn("IVA compra %", html)
+        self.assertIn("Bonificación de cierre", html)
+        self.assertIn("Ganancia neta", html)
+        self.assertIn("El margen es un recargo sobre el costo.", html)
         self.assertIn("inicializarAyudasCalculo", html)
         self.assertIn("Una condicion por linea.", html)
         self.assertIn("Las condiciones base ya vienen cargadas.", html)
-        self.assertIn("Las imagenes son ilustrativas.", html)
+        self.assertIn("Las imágenes son ilustrativas.", html)
         self.assertNotIn("Agregar personalizada", html)
+
+    def test_formulario_tiene_vista_demostrativa_del_analisis_en_ars(self):
+        response = self.client.get("/")
+
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="btn-vista-financiera-ars"', html)
+        self.assertIn('id="vista-financiera-ars"', html)
+        self.assertIn("Vista financiera en ARS", html)
+        self.assertIn("Referencia BNA", html)
+        self.assertIn("function toggleVistaFinancieraArs()", html)
+        self.assertIn("function actualizarVistaFinancieraArs", html)
+        self.assertIn("ivaCompraCredito: totalIvaCompraAcumulado", html)
+        self.assertIn("No modifica la cotizacion ni los valores guardados.", html)
 
     def test_formulario_cliente_tiene_guardado_con_manejo_de_errores(self):
         payload_bna = {
@@ -541,7 +567,7 @@ class CotizadorCalculosTest(unittest.TestCase):
             json={
                 "nombre": "Municipalidad de Lujan Editada",
                 "razon_social": "Municipalidad de Lujan",
-                "cuit": "30-12345678-9",
+                "cuit": "30-12345678-1",
                 "domicilio": "San Martin 100",
                 "sector": "Publico",
                 "subsector": "Municipal",
@@ -559,6 +585,53 @@ class CotizadorCalculosTest(unittest.TestCase):
         with app.app_context():
             cliente = db.session.get(Cliente, self.cliente_exento_id)
             self.assertEqual(cliente.nombre, "Municipalidad de Lujan Editada")
+
+    def _cliente_payload(self, **overrides):
+        data = {"nombre": "Cliente Nuevo", "sector": "Privado", "subsector": "Otro", "cuit": "30-50000001-1"}
+        data.update(overrides)
+        return data
+
+    def test_cuit_es_obligatorio_y_se_valida(self):
+        for cuit, error in (
+            ("", "El CUIT es obligatorio"),
+            ("   ", "El CUIT es obligatorio"),
+            ("2044835533", "11 digitos"),
+            ("30-50000001-9", "digito verificador"),
+        ):
+            for url in ("/api/clientes", "/api/integracion/clientes"):
+                response = self.client.post(url, json=self._cliente_payload(cuit=cuit))
+                self.assertEqual(response.status_code, 400, (url, cuit))
+                self.assertIn(error, response.get_json()["error"])
+
+        response = self.client.put(
+            f"/api/clientes/{self.cliente_exento_id}", json=self._cliente_payload(nombre="Sin CUIT", cuit="")
+        )
+        self.assertEqual(response.status_code, 400)
+
+        with app.app_context():
+            self.assertEqual(Cliente.query.count(), 2)
+
+    def test_cuit_se_guarda_normalizado_y_no_se_duplica(self):
+        response = self.client.post("/api/clientes", json=self._cliente_payload(cuit="30 50000001 1"))
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["cuit"], "30-50000001-1")
+
+        # El mismo CUIT escrito sin guiones es un duplicado, y no da error 500.
+        response = self.client.post("/api/clientes", json=self._cliente_payload(nombre="Otro", cuit="30500000011"))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Ya existe un cliente con ese CUIT (Cliente Nuevo)", response.get_json()["error"])
+
+        # Un cliente viejo con CUIT guardado sin guiones tambien cuenta como duplicado.
+        with app.app_context():
+            db.session.add(Cliente(nombre="Viejo", cuit="20448355331"))
+            db.session.commit()
+        response = self.client.post("/api/clientes", json=self._cliente_payload(nombre="Nuevo", cuit="20-44835533-1"))
+        self.assertEqual(response.status_code, 400)
+
+    def test_formulario_cliente_marca_cuit_obligatorio(self):
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertIn("CUIT (obligatorio)", html)
+        self.assertIn("function validarCuit(", html)
 
     def test_api_actualizar_cliente_sin_sesion_responde_json_auth_required(self):
         self.client.get("/logout")
@@ -780,10 +853,12 @@ class CotizadorCalculosTest(unittest.TestCase):
             cliente="Cliente ARS",
             cliente_razon_social="Cliente ARS SA",
             cliente_cuit="30-44444444-4",
-            moneda="ARS",
-            tipo_cambio="1",
             familia="SEGURIDAD URBANA",
         )
+        with app.app_context():
+            # Simula una cotizacion historica cargada en pesos.
+            db.session.get(Cotizacion, cotizacion_ars_id).moneda = "ARS"
+            db.session.commit()
         fecha_dentro_del_rango = cotizador_app.datetime.utcnow() - cotizador_app.timedelta(days=1)
         self._set_fecha_cotizacion(cotizacion_usd_id, fecha_dentro_del_rango)
         self._set_fecha_cotizacion(cotizacion_ars_id, fecha_dentro_del_rango)
@@ -1015,16 +1090,122 @@ class CotizadorCalculosTest(unittest.TestCase):
         html = self.client.get(f"/cotizacion/{cotizacion_id}").get_data(as_text=True)
         self.assertIn("Las imagenes son ilustrativas. Oferta sujeta a stock.", html)
 
-    def test_pdf_toma_nombre_visible_del_usuario_logueado(self):
-        cotizacion_id = self._crear_cotizacion()
+    def test_pdf_firma_con_el_autor_aunque_lo_abra_otro_usuario(self):
+        with app.app_context():
+            operador = Usuario.query.filter_by(username="operador").first()
+            operador.cargo = "Asesor Comercial"
+            operador.email = "lucas@cuencotech.com"
+            operador.telefono = "+54 9 261 555 0000"
+            db.session.commit()
         self._login("operador", "operador123")
+        cotizacion_id = self._crear_cotizacion()
 
-        response = self.client.get(f"/cotizacion/{cotizacion_id}")
-        html = response.get_data(as_text=True)
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            self.assertEqual(cotizacion.autor.username, "operador")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Lucas Santacruz", html)
-        self.assertNotIn("Administrador Principal", html)
+        self._login("admin", "admin123")
+        for url in (f"/cotizacion/{cotizacion_id}", f"/cotizacion/{cotizacion_id}/llave-en-mano"):
+            firma = self._bloque_firma(self.client.get(url).get_data(as_text=True))
+            self.assertIn("Lucas Santacruz", firma)
+            self.assertIn("Asesor Comercial", firma)
+            self.assertIn("lucas@cuencotech.com", firma)
+            self.assertIn("+54 9 261 555 0000", firma)
+            # Quien mira (el admin) aparece en la barra lateral, pero no firma.
+            self.assertNotIn("Administrador Principal", firma)
+
+        # Editar la cotizacion no cambia el autor.
+        self.client.post(f"/cotizacion/{cotizacion_id}/editar", data=self._form_cotizacion())
+        with app.app_context():
+            self.assertEqual(db.session.get(Cotizacion, cotizacion_id).autor.username, "operador")
+
+    def test_cotizacion_sin_autor_firma_con_el_firmante_por_defecto(self):
+        cotizacion_id = self._crear_cotizacion()
+        with app.app_context():
+            db.session.get(Cotizacion, cotizacion_id).autor_id = None
+            db.session.commit()
+
+        firma = self._bloque_firma(self.client.get(f"/cotizacion/{cotizacion_id}").get_data(as_text=True))
+        self.assertIn(cotizador_app.QUOTE_SIGNER_NAME, firma)
+        self.assertNotIn("Administrador Principal", firma)
+
+    def test_admin_actualiza_datos_de_firma_de_usuario(self):
+        with app.app_context():
+            operador_id = Usuario.query.filter_by(username="operador").first().id
+        response = self.client.post(
+            f"/usuarios/{operador_id}/nombre",
+            data={
+                "nombre_completo": "Lucas S.",
+                "cargo": "Ventas",
+                "email": "ventas@cuencotech.com",
+                "telefono": "261-000",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        with app.app_context():
+            operador = db.session.get(Usuario, operador_id)
+            self.assertEqual(
+                (operador.nombre_completo, operador.cargo, operador.email, operador.telefono),
+                ("Lucas S.", "Ventas", "ventas@cuencotech.com", "261-000"),
+            )
+
+    def test_cotizacion_siempre_se_guarda_en_usd(self):
+        cotizacion_id = self._crear_cotizacion(moneda="ARS")
+        with app.app_context():
+            self.assertEqual(db.session.get(Cotizacion, cotizacion_id).moneda, "USD")
+
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertIn('name="moneda" id="moneda" value="USD"', html)
+        self.assertNotIn('<option value="ARS"', html)
+
+    def test_cotizacion_historica_en_ars_conserva_su_moneda_al_editar(self):
+        cotizacion_id = self._crear_cotizacion()
+        with app.app_context():
+            db.session.get(Cotizacion, cotizacion_id).moneda = "ARS"
+            db.session.commit()
+
+        self.client.post(f"/cotizacion/{cotizacion_id}/editar", data=self._form_cotizacion())
+        with app.app_context():
+            self.assertEqual(db.session.get(Cotizacion, cotizacion_id).moneda, "ARS")
+
+    def test_seguimiento_siempre_va_a_la_casilla_del_cotizador(self):
+        cotizacion_id = self._crear_cotizacion(seguimiento_activo="1", seguimiento_email="otro@example.com")
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            self.assertEqual(cotizacion.seguimiento_email, "cotizador@cuencotech.com")
+
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertIn('value="cotizador@cuencotech.com" readonly', html)
+
+        enviados = []
+
+        class SmtpFalso:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def starttls(self):
+                pass
+
+            def login(self, *args):
+                pass
+
+            def send_message(self, mensaje):
+                enviados.append(mensaje["To"])
+
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            cotizacion.seguimiento_email = "viejo@example.com"
+            with patch.object(cotizador_app, "smtp_esta_configurado", return_value=True), \
+                    patch.object(cotizador_app.smtplib, "SMTP_SSL", SmtpFalso), \
+                    patch.object(cotizador_app.smtplib, "SMTP", SmtpFalso):
+                self.assertTrue(cotizador_app.enviar_mail_recordatorio(cotizacion))
+        self.assertEqual(enviados, ["cotizador@cuencotech.com"])
 
     def test_vista_llave_en_mano_muestra_propuesta_memoria_y_condiciones(self):
         condiciones = [
@@ -1066,7 +1247,7 @@ class CotizadorCalculosTest(unittest.TestCase):
         self.assertIn("Camara bullet 4MP", html)
         self.assertIn("NVR 16 canales", html)
         self.assertIn("Los precios expresados incluyen IVA.", html)
-        self.assertIn("Nota: La factura se pesificara considerando el TC BNA Ventas Divisa", html)
+        self.assertIn("Nota: La factura se pesificará considerando el TC BNA Ventas Divisa", html)
         self.assertNotIn("Familia:", html)
         self.assertNotIn("usuario@example.com", html)
         self.assertIn("Consolidada", self.client.get("/historial").get_data(as_text=True))
@@ -1118,7 +1299,7 @@ class CotizadorCalculosTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("IVA 21%:", html)
-        self.assertIn("IVA 10.5%:", html)
+        self.assertIn("IVA 10,5%:", html)
         self.assertIn("IVA Total:", html)
 
         with app.app_context():
@@ -1127,7 +1308,7 @@ class CotizadorCalculosTest(unittest.TestCase):
 
         ws = wb.active
         self.assertIsNotNone(self._valor_por_etiqueta(ws, "IVA 21%"))
-        self.assertIsNotNone(self._valor_por_etiqueta(ws, "IVA 10.5%"))
+        self.assertIsNotNone(self._valor_por_etiqueta(ws, "IVA 10,5%"))
 
     def test_descuento_solo_aparece_en_pdf_si_alguna_fila_lo_usa(self):
         sin_descuento_id = self._crear_cotizacion()
@@ -1152,8 +1333,10 @@ class CotizadorCalculosTest(unittest.TestCase):
 
             self.assertAlmostEqual(item.precio_venta, 159.60, places=2)
             self.assertAlmostEqual(cotizacion.total_neto, 159.60, places=2)
-            self.assertAlmostEqual(cotizacion.total_iva, 33.52, places=2)
-            self.assertAlmostEqual(cotizacion.total_carga_fiscal, 7.98, places=2)
+            # La bonificacion (con IVA incluido) se reparte entre neto e IVA:
+            # 143,12 pagados = 118,28 neto + 24,84 IVA.
+            self.assertAlmostEqual(cotizacion.total_iva, 24.84, places=2)
+            self.assertAlmostEqual(cotizacion.total_carga_fiscal, 5.91, places=2)
             self.assertAlmostEqual(cotizacion.bonificacion_cierre_monto, 50.0, places=2)
             self.assertAlmostEqual(cotizacion.total_final, 143.12, places=2)
 
@@ -1161,12 +1344,15 @@ class CotizadorCalculosTest(unittest.TestCase):
 
         ws = wb.active
         self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Bonificacion de cierre"), 50.0, places=2)
-        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Ganancia neta (Bolsillo)"), 1.87, places=2)
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Bonificacion neta de IVA"), 41.32, places=2)
+        # 159,60 venta - 99,75 costo - 5,91 carga fiscal - 41,32 bonificacion neta.
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Ganancia neta (Bolsillo)"), 12.62, places=2)
         self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Total a cobrar"), 143.12, places=2)
 
         html = self.client.get(f"/cotizacion/{cotizacion_id}").get_data(as_text=True)
-        self.assertIn("Bonificacion de cierre:", html)
-        self.assertIn("- $ 50.00", html)
+        self.assertIn("Bonificación de cierre:", html)
+        self.assertIn("- US$ 50.00", html)
+        self.assertIn("US$ 143.12", html)
 
     def test_recordatorio_actualiza_fechas_de_seguimiento(self):
         cotizacion_id = self._crear_cotizacion()
@@ -1206,6 +1392,133 @@ class CotizadorCalculosTest(unittest.TestCase):
 
         self.assertEqual(enviar_mock.call_count, 1)
 
+    def _texto_pdf(self, contenido):
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            self.skipTest("pypdf no instalado")
+        return "\n".join(page.extract_text() for page in PdfReader(BytesIO(contenido)).pages)
+
+    def test_pdf_del_servidor_tiene_datos_totales_y_firma(self):
+        cotizacion_id = self._crear_cotizacion(
+            condicion_iva="Responsable Inscrito",
+            cliente_id=str(self.cliente_ri_id),
+            bonificacion_cierre_monto="10",
+            forma_pago="30 dias",
+        )
+        response = self.client.get(f"/cotizacion/{cotizacion_id}/pdf")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content_type, "application/pdf")
+        self.assertIn("attachment;", response.headers["Content-Disposition"])
+        self.assertTrue(response.data.startswith(b"%PDF"))
+
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            numero = cotizacion.numero_cotizacion
+        texto = self._texto_pdf(response.data)
+        self.assertIn(numero, texto)
+        self.assertIn("Cliente Responsable SA", texto)
+        self.assertIn("Lector DS-K1T321MFWX", texto)
+        self.assertIn("Subtotal neto", texto)
+        self.assertIn("US$ 159,60", texto)
+        # Responsable Inscrito: la bonificacion de 10 se descuenta del neto antes del IVA.
+        self.assertIn("- US$ 8,26", texto.replace("-US$", "- US$"))
+        self.assertIn("Neto bonificado", texto)
+        self.assertIn("US$ 151,34", texto)
+        self.assertIn("US$ 31,78", texto)
+        self.assertIn("US$ 183,12", texto)
+        self.assertIn("Administrador Principal", texto)
+        self.assertIn("TC BNA", texto)
+
+        inline = self.client.get(f"/cotizacion/{cotizacion_id}/pdf?ver=1")
+        self.assertIn("inline;", inline.headers["Content-Disposition"])
+
+    def test_pdf_incluye_fotos_de_items_y_omite_emoji(self):
+        from PIL import Image as PilImage
+
+        foto = BytesIO()
+        PilImage.new("RGB", (400, 300), "steelblue").save(foto, "JPEG")
+        foto.seek(0)
+        datos = self._form_cotizacion(**{"desc[]": ["Camara 😀 domo"]})
+        datos["foto_row-1"] = (foto, "foto.jpg")
+        response = self.client.post("/", data=datos, content_type="multipart/form-data")
+        self.assertEqual(response.status_code, 302)
+        with app.app_context():
+            cotizacion = Cotizacion.query.order_by(Cotizacion.id.desc()).first()
+            self.assertTrue(cotizacion.items[0].imagen_url)
+            cotizacion_id = cotizacion.id
+
+        pdf = self.client.get(f"/cotizacion/{cotizacion_id}/pdf").data
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            self.skipTest("pypdf no instalado")
+        pagina = PdfReader(BytesIO(pdf)).pages[0]
+        # Logo de la empresa + foto del item.
+        self.assertGreaterEqual(len(pagina.images), 2)
+        texto = pagina.extract_text()
+        self.assertRegex(texto, r"Camara\s+domo")
+        self.assertNotIn("😀", texto)
+        self.assertIn("Página 1 de 1", texto)
+
+    def test_pdf_con_muchos_items_ocupa_varias_paginas(self):
+        n = 40
+        cotizacion_id = self._crear_cotizacion(
+            **{
+                "row_id[]": [f"r{i}" for i in range(n)],
+                "item_id[]": [""] * n,
+                "imagen_actual[]": [""] * n,
+                "desc[]": [f"Producto {i}" for i in range(n)],
+                "detalle[]": ["Descripcion larga del item " * 4] * n,
+                "cant[]": ["1"] * n,
+                "costo[]": ["10"] * n,
+                "iva_compra[]": ["21"] * n,
+                "extra[]": ["5"] * n,
+                "margen[]": ["50"] * n,
+                "descuento[]": ["0"] * n,
+                "carga_fiscal[]": ["0"] * n,
+                "iva_item[]": ["21"] * n,
+            }
+        )
+        response = self.client.get(f"/cotizacion/{cotizacion_id}/pdf")
+        texto = self._texto_pdf(response.data)
+        self.assertIn("Página 2", texto)
+        self.assertIn("Producto 39", texto)
+
+    def test_fechas_se_muestran_y_filtran_en_hora_argentina(self):
+        cotizacion_id = self._crear_cotizacion()
+        # 12/11/2026 01:30 UTC = 11/11/2026 22:30 en Argentina.
+        self._set_fecha_cotizacion(cotizacion_id, cotizador_app.datetime(2026, 11, 12, 1, 30))
+
+        html = self.client.get(f"/cotizacion/{cotizacion_id}").get_data(as_text=True)
+        self.assertIn("Fecha: 11/11/2026", html)
+        self.assertNotIn("12/11/2026", html)
+
+        data = self.client.get("/filtrar_historial?desde=2026-11-11&hasta=2026-11-11").get_json()
+        self.assertEqual([item["id"] for item in data["items"]], [cotizacion_id])
+        self.assertEqual(data["items"][0]["fecha"], "11/11/2026")
+        data = self.client.get("/filtrar_historial?desde=2026-11-12&hasta=2026-11-12").get_json()
+        self.assertEqual(data["items"], [])
+
+    def test_numero_usa_el_anio_de_argentina(self):
+        # 01/01/2027 02:00 UTC todavia es 31/12/2026 en Argentina.
+        with app.app_context():
+            numero = cotizador_app.generar_numero_cotizacion(cotizador_app.datetime(2027, 1, 1, 2, 0))
+            db.session.commit()
+        self.assertTrue(numero.startswith("CT-2026-"), numero)
+
+    def test_numeros_emitidos_no_cambian_al_borrar_y_reiniciar(self):
+        ids = [self._crear_cotizacion() for _ in range(3)]
+        with app.app_context():
+            numeros = {c.id: c.numero_cotizacion for c in Cotizacion.query.all()}
+        self.client.post(f"/cotizacion/{ids[1]}/eliminar")
+
+        # Lo mismo que corre al arrancar la app.
+        with app.app_context():
+            cotizador_app.completar_numeracion_cotizaciones()
+            despues = {c.id: c.numero_cotizacion for c in Cotizacion.query.all()}
+        self.assertEqual(despues, {ids[0]: numeros[ids[0]], ids[2]: numeros[ids[2]]})
+
     def test_caso_2_tipo_cambio_guardado_no_se_pisa_con_bna_actual(self):
         cotizacion_id = self._crear_cotizacion()
 
@@ -1237,7 +1550,303 @@ class CotizadorCalculosTest(unittest.TestCase):
 
         self.assertEqual(cotizacion.items[0].cantidad, 2)
         self.assertAlmostEqual(cotizacion.total_neto, 319.20, places=2)
-        self.assertAlmostEqual(cotizacion.total_final, 386.23, places=2)
+        # 2 x US$ 193,12 (precio con IVA redondeado): las lineas suman el total.
+        self.assertAlmostEqual(cotizacion.total_final, 386.24, places=2)
+
+    def test_api_tipo_cambio_avisa_si_la_recarga_del_bna_fallo(self):
+        payload = {"ok": True, "rate": 1570.0, "date": "12/11/2026", "time": "17:00", "label": "BNA billete vendedor"}
+        with app.app_context():
+            cotizador_app.guardar_tipo_cambio_bna_cache(payload)
+
+        with patch.object(cotizador_app, "descargar_html_bna", side_effect=requests.exceptions.ConnectionError("caido")):
+            cotizador_app._actualizar_tipo_cambio_bna_en_segundo_plano(force=True)
+        with patch.object(cotizador_app, "solicitar_actualizacion_tipo_cambio_bna", return_value=False):
+            data = self.client.get("/api/tipo-cambio/oficial").get_json()
+        self.assertEqual(data["rate"], 1570.0)
+        self.assertEqual(data["error"], "No se pudo conectar con el BNA.")
+
+        with patch.object(cotizador_app, "descargar_html_bna", return_value=("<html></html>", False)), \
+                patch.object(cotizador_app, "extraer_tipo_cambio_bna", return_value={**payload, "rate": 1580.0}):
+            cotizador_app._actualizar_tipo_cambio_bna_en_segundo_plano(force=True)
+        with patch.object(cotizador_app, "solicitar_actualizacion_tipo_cambio_bna", return_value=False):
+            data = self.client.get("/api/tipo-cambio/oficial").get_json()
+        self.assertEqual(data["rate"], 1580.0)
+        self.assertNotIn("error", data)
+
+    def test_boton_recarga_dolar_da_feedback(self):
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertIn("function marcarTipoCambioCargando", html)
+        self.assertIn("Sin cambios: el BNA todavía publica este valor.", html)
+        self.assertIn("consultado ${consulta}", html)
+
+    def test_historial_permite_cambiar_estado_desde_la_fila(self):
+        html = self.client.get("/historial").get_data(as_text=True)
+        self.assertIn("function cambiarEstadoCotizacion", html)
+        self.assertIn("function menuEstado", html)
+        self.assertIn('id="toast-estado"', html)
+
+        cotizacion_id = self._crear_cotizacion()
+        self._login("operador", "operador123")
+        for estado in ("Aceptada", "Rechazada", "En progreso"):
+            response = self.client.post(f"/cotizacion/{cotizacion_id}/estado", json={"estado": estado})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()["estado"], estado)
+            data = self.client.get(f"/filtrar_historial?estado={estado}").get_json()
+            self.assertEqual([item["id"] for item in data["items"]], [cotizacion_id])
+
+        response = self.client.post(f"/cotizacion/{cotizacion_id}/estado", json={"estado": "Inventado"})
+        self.assertEqual(response.status_code, 400)
+        with app.app_context():
+            cambios = cotizador_app.Auditoria.query.filter_by(
+                accion="Cambió estado de cotización", entidad_id=cotizacion_id
+            ).all()
+            self.assertEqual(len(cambios), 3)
+            self.assertTrue(all(c.username == "operador" for c in cambios))
+
+    def test_excel_queda_marcado_como_uso_interno(self):
+        cotizacion_id = self._crear_cotizacion()
+        response = self.client.get(f"/cotizacion/{cotizacion_id}/xlsx")
+        self.assertIn("_INTERNO.xlsx", response.headers["Content-Disposition"])
+        ws = load_workbook(BytesIO(response.data)).active
+        self.assertEqual(ws.title, "Uso interno")
+        self.assertIn("USO INTERNO", ws["A1"].value)
+        for url in ("/historial", f"/cotizacion/{cotizacion_id}"):
+            html = self.client.get(url).get_data(as_text=True)
+            self.assertIn("Excel interno (costos y márgenes)", html)
+            self.assertNotIn("Exportar Excel", html)
+
+    def test_admin_cambia_rol_de_usuarios(self):
+        with app.app_context():
+            operador_id = Usuario.query.filter_by(username="operador").first().id
+            admin_id = Usuario.query.filter_by(username="admin").first().id
+
+        # Operador -> administrador: ya ve el dashboard sin volver a entrar.
+        operador = app.test_client()
+        operador.post("/login", data={"username": "operador", "password": "operador123"})
+        self.assertEqual(operador.get("/dashboard").status_code, 302)
+        self.client.post(f"/usuarios/{operador_id}/rol", data={"is_admin": "1"})
+        self.assertEqual(operador.get("/dashboard").status_code, 200)
+
+        # Con dos admins, uno puede pasar al otro a operador.
+        self.client.post(f"/usuarios/{operador_id}/rol", data={"is_admin": "0"})
+        with app.app_context():
+            self.assertFalse(db.session.get(Usuario, operador_id).is_admin)
+            auditoria = cotizador_app.Auditoria.query.filter_by(accion="Cambio rol de usuario").count()
+            self.assertEqual(auditoria, 2)
+
+        # No se puede cambiar el propio rol (ni dejar el sistema sin administradores).
+        response = self.client.post(f"/usuarios/{admin_id}/rol", data={"is_admin": "0"}, follow_redirects=True)
+        self.assertIn("No podés cambiar tu propio rol", response.get_data(as_text=True))
+        with app.app_context():
+            self.assertTrue(db.session.get(Usuario, admin_id).is_admin)
+
+        # Un operador no puede cambiar roles.
+        self._login("operador", "operador123")
+        self.client.post(f"/usuarios/{operador_id}/rol", data={"is_admin": "1"})
+        with app.app_context():
+            self.assertFalse(db.session.get(Usuario, operador_id).is_admin)
+
+    def test_ultimo_admin_no_puede_quedar_como_operador(self):
+        with app.app_context():
+            otro = Usuario(username="otro_admin", is_admin=True)
+            otro.set_password("otro-admin-123")
+            db.session.add(otro)
+            admin = Usuario.query.filter_by(username="admin").first()
+            admin.activo = False  # el unico otro admin esta dado de baja
+            db.session.commit()
+            otro_id = otro.id
+        cliente = app.test_client()
+        cliente.post("/login", data={"username": "otro_admin", "password": "otro-admin-123"})
+        with app.app_context():
+            operador_id = Usuario.query.filter_by(username="operador").first().id
+        # Promover a otro sigue funcionando.
+        cliente.post(f"/usuarios/{operador_id}/rol", data={"is_admin": "1"})
+        with app.app_context():
+            self.assertTrue(db.session.get(Usuario, operador_id).is_admin)
+        # Con el operador ya admin, puede quitarle el rol a otro_admin? No: es su propio rol.
+        response = cliente.post(f"/usuarios/{otro_id}/rol", data={"is_admin": "0"}, follow_redirects=True)
+        self.assertIn("No podés cambiar tu propio rol", response.get_data(as_text=True))
+
+    def test_layout_tiene_modo_oscuro(self):
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertIn('localStorage.getItem("cuencotech:tema")', html)
+        self.assertIn("function alternarTema()", html)
+        self.assertIn('class="btn btn-ghost btn-sm btn-icon theme-toggle"', html)
+        login = app.test_client().get("/login").get_data(as_text=True)
+        self.assertIn("auth-theme-toggle", login)
+        documento = self.client.get(f"/cotizacion/{self._crear_cotizacion()}").get_data(as_text=True)
+        self.assertIn('class="invoice-box tema-claro" data-bs-theme="light"', documento)
+
+    def test_dashboard_periodo_todo_incluye_cotizaciones_viejas(self):
+        cotizacion_id = self._crear_cotizacion()
+        self._set_fecha_cotizacion(cotizacion_id, cotizador_app.datetime.utcnow() - cotizador_app.timedelta(days=500))
+
+        html = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("No hay cotizaciones para esta vista.", html)
+
+        html = self.client.get("/dashboard?periodo=todo").get_data(as_text=True)
+        self.assertIn('class="active">Todo</a>', html)
+        with app.app_context():
+            numero = db.session.get(Cotizacion, cotizacion_id).numero_cotizacion
+        self.assertIn(numero, html)
+
+    # ---- Base de datos ----
+    def test_sqlite_aplica_claves_foraneas_y_usa_wal(self):
+        with app.app_context():
+            self.assertEqual(db.session.execute(db.text("PRAGMA foreign_keys")).scalar(), 1)
+            self.assertEqual(db.session.execute(db.text("PRAGMA journal_mode")).scalar(), "wal")
+            self.assertGreaterEqual(db.session.execute(db.text("PRAGMA busy_timeout")).scalar(), 10000)
+            with self.assertRaises(IntegrityError):
+                db.session.execute(db.text("INSERT INTO item_cotizacion (cotizacion_id, descripcion) VALUES (99999, 'x')"))
+                db.session.commit()
+            db.session.rollback()
+
+    # ---- Guardado sin aviso ----
+    def test_guardar_sin_items_avisa_y_no_guarda(self):
+        response = self.client.post("/", data=self._form_cotizacion(**{"desc[]": ["   "]}), follow_redirects=True)
+        html = response.get_data(as_text=True)
+        self.assertIn("No se guardo la cotizacion: falta al menos un item con nombre de producto.", html)
+        with app.app_context():
+            self.assertEqual(Cotizacion.query.count(), 0)
+
+    def test_guardar_sin_cliente_ni_familia_lista_todo_lo_que_falta(self):
+        response = self.client.post(
+            "/",
+            data=self._form_cotizacion(cliente_id="", cliente="", familia=""),
+            follow_redirects=True,
+        )
+        html = response.get_data(as_text=True)
+        self.assertIn("falta el cliente y la familia", html)
+        with app.app_context():
+            self.assertEqual(Cotizacion.query.count(), 0)
+
+    def test_editar_sin_items_avisa_y_conserva_la_cotizacion(self):
+        cotizacion_id = self._crear_cotizacion()
+        response = self.client.post(
+            f"/cotizacion/{cotizacion_id}/editar", data=self._form_cotizacion(**{"desc[]": [""]}), follow_redirects=True
+        )
+        self.assertIn("No se guardo la cotizacion", response.get_data(as_text=True))
+        with app.app_context():
+            self.assertEqual(len(db.session.get(Cotizacion, cotizacion_id).items), 1)
+
+    # ---- Usuarios ----
+    def test_usuario_dado_de_baja_no_puede_entrar_y_pierde_la_sesion(self):
+        operador = app.test_client()
+        operador.post("/login", data={"username": "operador", "password": "operador123"})
+        self.assertEqual(operador.get("/").status_code, 200)
+
+        with app.app_context():
+            operador_id = Usuario.query.filter_by(username="operador").first().id
+        response = self.client.post(f"/usuarios/{operador_id}/estado", data={"activo": "0"})
+        self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(operador.get("/").status_code, 302)  # sesion abierta: cerrada
+        response = app.test_client().post("/login", data={"username": "operador", "password": "operador123"})
+        self.assertIn("Usuario o contraseña incorrectos.", response.get_data(as_text=True))
+
+        self.client.post(f"/usuarios/{operador_id}/estado", data={"activo": "1"})
+        response = app.test_client().post("/login", data={"username": "operador", "password": "operador123"})
+        self.assertEqual(response.status_code, 302)
+
+    def test_no_se_puede_dar_de_baja_a_si_mismo_ni_al_ultimo_admin(self):
+        with app.app_context():
+            admin_id = Usuario.query.filter_by(username="admin").first().id
+        response = self.client.post(f"/usuarios/{admin_id}/estado", data={"activo": "0"}, follow_redirects=True)
+        self.assertIn("No podés darte de baja a vos mismo.", response.get_data(as_text=True))
+        with app.app_context():
+            self.assertTrue(db.session.get(Usuario, admin_id).activo)
+
+    def test_cambiar_mi_contrasena_cierra_otras_sesiones(self):
+        otra_sesion = app.test_client()
+        otra_sesion.post("/login", data={"username": "admin", "password": "admin123"})
+
+        response = self.client.post(
+            "/mi-cuenta",
+            data={"password_actual": "incorrecta", "password": "nueva-clave-1", "password_confirm": "nueva-clave-1"},
+        )
+        self.assertIn("La contraseña actual no es correcta.", response.get_data(as_text=True))
+
+        response = self.client.post(
+            "/mi-cuenta",
+            data={"password_actual": "admin123", "password": "nueva-clave-1", "password_confirm": "nueva-clave-1"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.client.get("/").status_code, 200)  # esta sesion sigue
+        self.assertEqual(otra_sesion.get("/").status_code, 302)  # la otra se cerro
+        response = app.test_client().post("/login", data={"username": "admin", "password": "nueva-clave-1"})
+        self.assertEqual(response.status_code, 302)
+
+    def test_admin_cambia_contrasena_de_otro_usuario(self):
+        with app.app_context():
+            operador_id = Usuario.query.filter_by(username="operador").first().id
+        response = self.client.post(
+            f"/usuarios/{operador_id}/password", data={"password": "corta", "password_confirm": "corta"},
+            follow_redirects=True,
+        )
+        self.assertIn("al menos 8 caracteres", response.get_data(as_text=True))
+        self.client.post(
+            f"/usuarios/{operador_id}/password", data={"password": "operador-nueva", "password_confirm": "operador-nueva"}
+        )
+        response = app.test_client().post("/login", data={"username": "operador", "password": "operador-nueva"})
+        self.assertEqual(response.status_code, 302)
+
+    def test_operador_no_puede_gestionar_usuarios(self):
+        self._login("operador", "operador123")
+        with app.app_context():
+            admin_id = Usuario.query.filter_by(username="admin").first().id
+        self.client.post(f"/usuarios/{admin_id}/estado", data={"activo": "0"})
+        self.client.post(f"/usuarios/{admin_id}/password", data={"password": "hackeada1", "password_confirm": "hackeada1"})
+        with app.app_context():
+            admin = db.session.get(Usuario, admin_id)
+            self.assertTrue(admin.activo)
+            self.assertTrue(admin.check_password("admin123"))
+
+    def test_comando_crear_admin(self):
+        runner = app.test_cli_runner()
+        resultado = runner.invoke(args=["crear-admin", "jefa"], input="clave-segura-1\nclave-segura-1\n")
+        self.assertEqual(resultado.exit_code, 0, resultado.output)
+        with app.app_context():
+            jefa = Usuario.query.filter_by(username="jefa").first()
+            self.assertTrue(jefa.is_admin and jefa.activo and jefa.check_password("clave-segura-1"))
+        resultado = runner.invoke(args=["crear-admin", "otra"], input="corta\ncorta\n")
+        self.assertNotEqual(resultado.exit_code, 0)
+
+    # ---- Seguridad ----
+    def test_login_se_bloquea_tras_5_intentos_fallidos(self):
+        cliente = app.test_client()
+        for _ in range(5):
+            response = cliente.post("/login", data={"username": "operador", "password": "mal"})
+            self.assertEqual(response.status_code, 200)
+        response = cliente.post("/login", data={"username": "operador", "password": "operador123"})
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("Demasiados intentos fallidos", response.get_data(as_text=True))
+        # Otro usuario no queda bloqueado.
+        response = cliente.post("/login", data={"username": "admin", "password": "admin123"})
+        self.assertEqual(response.status_code, 302)
+
+    def test_login_no_redirige_a_otros_sitios(self):
+        for destino in ("//evil.example", "/\\\\evil.example", "https://evil.example", "/%5C%5Cevil"):
+            cliente = app.test_client()
+            response = cliente.post(f"/login?next={destino}", data={"username": "admin", "password": "admin123"})
+            self.assertEqual(response.status_code, 302)
+            self.assertNotIn("evil", response.headers["Location"], destino)
+        response = app.test_client().post("/login?next=/historial", data={"username": "admin", "password": "admin123"})
+        self.assertEqual(response.headers["Location"], "/historial")
+
+    def test_clave_secreta_obligatoria(self):
+        with patch.dict(os.environ, {"APP_SECRET_KEY": "", "SECRET_KEY": "", "COTIZADOR_MODO": ""}), \
+                patch.object(cotizador_app, "LOCAL_SETTINGS", {}), \
+                patch.object(cotizador_app, "MODO_DESARROLLO", False):
+            with self.assertRaises(RuntimeError):
+                cotizador_app.resolver_clave_secreta()
+            with patch.dict(os.environ, {"APP_SECRET_KEY": "cambia-esto-por-un-secreto-largo-y-unico"}):
+                with self.assertRaises(RuntimeError):
+                    cotizador_app.resolver_clave_secreta()
+            with patch.dict(os.environ, {"APP_SECRET_KEY": "corta"}):
+                with self.assertRaises(RuntimeError):
+                    cotizador_app.resolver_clave_secreta()
+            with patch.dict(os.environ, {"APP_SECRET_KEY": "una-clave-propia-bien-larga-123"}):
+                self.assertEqual(cotizador_app.resolver_clave_secreta(), "una-clave-propia-bien-larga-123")
 
 
 if __name__ == "__main__":

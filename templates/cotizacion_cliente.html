@@ -1,8 +1,16 @@
 {% extends "layout.html" %}
 
+{% block title %}Presupuesto {{ cot.numero_cotizacion }}{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('historial_page') }}">Historial</a></li>
+<li class="breadcrumb-item active">{{ cot.numero_cotizacion }}</li>
+{% endblock %}
+
 {% block content %}
+{% set simbolo_moneda = "$" if cot.moneda == "ARS" else "US$" %}
 <style>
-    .invoice-box { max-width: 920px; margin: auto; padding: 30px; border: 1px solid #eee; background: #fff; }
+    .invoice-box { max-width: 920px; margin: 0 auto; padding: 30px; border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); box-shadow: var(--shadow-sm); background: #fff; }
     .quote-items-table {
         border: 1px solid #c3cfdb;
         table-layout: fixed;
@@ -21,7 +29,7 @@
         background: #fff;
         padding: 4px;
     }
-    thead th {
+    .quote-items-table thead th {
         background-color: #dbe4ee !important;
         color: #111111 !important;
         text-transform: none;
@@ -158,7 +166,7 @@
     .quote-doc-number {
         display: inline-block;
         white-space: nowrap;
-        font-size: clamp(1.5rem, 2.1vw, 1.9rem);
+        font-size: clamp(1.15rem, 1.5vw, 1.45rem);
         line-height: 1.05;
         letter-spacing: -0.02em;
     }
@@ -210,7 +218,7 @@
             font-size: 0.74rem;
             min-width: 0 !important;
         }
-        thead th {
+        .quote-items-table thead th {
             background-color: #dbe4ee !important;
             color: #111111 !important;
             font-size: 0.66rem;
@@ -241,15 +249,26 @@
     }
 </style>
 
-<div class="container no-print text-center my-4">
-    <button onclick="window.print()" class="btn btn-pdf-custom btn-lg px-5">Guardar como PDF / Imprimir</button>
-    <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-edit-custom btn-lg">Editar</a>
-    <a href="{{ url_for('ver_cotizacion_llave_en_mano', id=cot.id) }}" class="btn btn-outline-dark btn-lg">Consolidada</a>
-    <a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="btn btn-excel-custom btn-lg">Exportar Excel</a>
-    <a href="/historial" class="btn btn-outline-secondary btn-lg">Volver al Historial</a>
+<div class="page-header no-print">
+    <div>
+        <h1 class="page-title">Presupuesto {{ cot.numero_cotizacion }}</h1>
+        <p class="page-description">{{ cot.cliente_razon_social or cot.cliente }} · {{ cot.fecha|fecha_local }} · <span class="estado-pill {% if cot.estado == 'Aceptada' %}estado-aceptada{% elif cot.estado == 'Rechazada' %}estado-rechazada{% else %}estado-en-progreso{% endif %}">{{ cot.estado or 'En progreso' }}</span></p>
+    </div>
+    <div class="page-actions">
+        <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-outline-dark"><i class="bi bi-pencil"></i>Editar</a>
+        <div class="dropdown">
+            <button type="button" class="btn btn-outline-dark" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-three-dots"></i>Más</button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a href="{{ url_for('ver_cotizacion_llave_en_mano', id=cot.id) }}" class="dropdown-item"><i class="bi bi-file-text"></i>Consolidada</a></li>
+                <li><a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="dropdown-item"><i class="bi bi-file-earmark-lock"></i>Excel interno (costos y márgenes)</a></li>
+                <li><button type="button" class="dropdown-item" onclick="window.print()"><i class="bi bi-printer"></i>Imprimir</button></li>
+            </ul>
+        </div>
+        <a href="{{ url_for('exportar_cotizacion_pdf', id=cot.id) }}" class="btn btn-primary"><i class="bi bi-file-earmark-pdf"></i>Descargar PDF</a>
+    </div>
 </div>
 
-<div class="invoice-box mt-5">
+<div class="invoice-box tema-claro" data-bs-theme="light">
     <div class="row align-items-center mb-3">
         <div class="col-6 d-flex align-items-center">
             <img src="{{ url_for('static', filename='LOGO color.png') }}" alt="Logo Cuenco Tech" style="max-width: 120px; margin-right: 15px;" onerror="this.onerror=null;this.src='{{ url_for('static', filename='logo.png') }}';">
@@ -261,7 +280,7 @@
         <div class="col-6 text-end">
             <h2 class="h4 quote-doc-number">PRESUPUESTO #{{ cot.numero_cotizacion or ("%04d" | format(cot.id)) }}</h2>
             <p class="fw-bold mb-1">Moneda: {{ "Pesos Argentinos" if cot.moneda == "ARS" else "Dolares Estadounidenses" }}</p>
-            <p class="mb-0">Fecha: {{ cot.fecha.strftime('%d/%m/%Y') }}</p>
+            <p class="mb-0">Fecha: {{ cot.fecha|fecha_local }}</p>
         </div>
     </div>
     <hr>
@@ -363,12 +382,13 @@
                     {% endif %}
                 </td>
                 {% endif %}
-                {% if cot.condicion_iva == 'Responsable Inscrito' %}
-                <td class="text-end col-price-unit">$ {{ "{:,.2f}".format(item.precio_venta) }}</td>
-                <td class="col-sale-total">$ {{ "{:,.2f}".format(item.precio_venta * item.cantidad) }}</td>
+                {% set linea = lineas_documento[loop.index0] %}
+                {% if precio_incluye_iva %}
+                <td class="text-end col-price-unit">{{ simbolo_moneda }} {{ "{:,.2f}".format(linea.unitario_final) }}</td>
+                <td class="col-sale-total">{{ simbolo_moneda }} {{ "{:,.2f}".format(linea.total) }}</td>
                 {% else %}
-                <td class="text-end col-price-unit">$ {{ "{:,.2f}".format(item.precio_venta * (1 + item.iva_porcentaje / 100)) }}</td>
-                <td class="col-sale-total">$ {{ "{:,.2f}".format(item.subtotal) }}</td>
+                <td class="text-end col-price-unit">{{ simbolo_moneda }} {{ "{:,.2f}".format(linea.unitario_neto) }}</td>
+                <td class="col-sale-total">{{ simbolo_moneda }} {{ "{:,.2f}".format(linea.neto) }}</td>
                 {% endif %}
             </tr>
             {% endfor %}
@@ -378,36 +398,50 @@
     <div class="row justify-content-end">
         <div class="col-5">
             <div class="p-3 quote-totals-card">
-            {% if cot.condicion_iva == 'Responsable Inscrito' %}
+            {% if not precio_incluye_iva %}
             <div class="d-flex justify-content-between mb-2">
                 <span class="fw-bold">Subtotal Neto:</span>
-                <span>$ {{ "{:,.2f}".format(cot.total_neto) }}</span>
+                <span>{{ simbolo_moneda }} {{ "{:,.2f}".format(totales.neto) }}</span>
             </div>
+            {% if totales.bonificacion > 0 %}
+            <div class="d-flex justify-content-between mb-2 text-success">
+                <span class="fw-bold">Bonificación de cierre:</span>
+                <span>- {{ simbolo_moneda }} {{ "{:,.2f}".format(totales.bonificacion_neta) }}</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2">
+                <span class="fw-bold">Neto bonificado:</span>
+                <span>{{ simbolo_moneda }} {{ "{:,.2f}".format(totales.neto_bonificado) }}</span>
+            </div>
+            {% endif %}
             {% for iva_linea in desglose_iva %}
             <div class="d-flex justify-content-between mb-2">
                 <span class="fw-bold">{{ iva_linea.label }}:</span>
-                <span>$ {{ "{:,.2f}".format(iva_linea.amount) }}</span>
+                <span>{{ simbolo_moneda }} {{ "{:,.2f}".format(iva_linea.amount) }}</span>
             </div>
             {% endfor %}
             <div class="d-flex justify-content-between mb-2">
                 <span class="fw-bold">IVA Total:</span>
-                <span>$ {{ "{:,.2f}".format(cot.total_iva) }}</span>
+                <span>{{ simbolo_moneda }} {{ "{:,.2f}".format(totales.iva_total) }}</span>
             </div>
             {% else %}
             <div class="mb-2 text-muted small">
                 <i>* Los precios incluyen IVA.</i>
             </div>
-            {% endif %}
-            {% if (cot.bonificacion_cierre_monto or 0) > 0 %}
-            <div class="d-flex justify-content-between mb-2 text-success">
-                <span class="fw-bold">Bonificacion de cierre:</span>
-                <span>- $ {{ "{:,.2f}".format(cot.bonificacion_cierre_monto) }}</span>
+            {% if totales.bonificacion > 0 %}
+            <div class="d-flex justify-content-between mb-2">
+                <span class="fw-bold">Subtotal:</span>
+                <span>{{ simbolo_moneda }} {{ "{:,.2f}".format(totales.bruto) }}</span>
             </div>
+            <div class="d-flex justify-content-between mb-2 text-success">
+                <span class="fw-bold">Bonificación de cierre:</span>
+                <span>- {{ simbolo_moneda }} {{ "{:,.2f}".format(totales.bonificacion) }}</span>
+            </div>
+            {% endif %}
             {% endif %}
             <hr style="border-top: 2px solid #000;">
             <div class="d-flex justify-content-between h5 fw-bold" style="color: #000;">
                 <span>TOTAL:</span>
-                <span>$ {{ "{:,.2f}".format(cot.total_final) }}</span>
+                <span>{{ simbolo_moneda }} {{ "{:,.2f}".format(totales.total) }}</span>
             </div>
             </div>
         </div>
@@ -441,6 +475,9 @@
                 <div class="quote-signature-line"></div>
                 <div class="quote-signature-name">{{ quote_signature.name }}</div>
                 <div class="quote-signature-role">{{ quote_signature.role }}</div>
+                {% if quote_signature.email %}
+                <div class="quote-signature-contact">{{ quote_signature.email }}</div>
+                {% endif %}
                 {% if quote_signature.phone %}
                 <div class="quote-signature-contact">{{ quote_signature.phone }}</div>
                 {% endif %}

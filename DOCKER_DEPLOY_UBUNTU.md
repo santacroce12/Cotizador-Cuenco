@@ -25,9 +25,16 @@ cp .env.example .env
 
 Completar como mínimo:
 
-- `APP_SECRET_KEY`
+- `APP_SECRET_KEY`: **obligatoria**. La app no arranca sin una clave propia de 16 caracteres o más. Generala con:
+
+  ```bash
+  python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+  ```
+
+  No la cambies después: si cambia, se cierran todas las sesiones.
 - `APP_BASE_URL`
 - `SMTP_PASSWORD`
+- `AUTH_COOKIE_SECURE=true` **solo si** se entra por HTTPS (ver punto 6). Con `http://` dejala en `false` o no se va a poder iniciar sesión.
 
 ## 4. Build y arranque
 
@@ -85,18 +92,47 @@ docker compose build
 docker compose up -d
 ```
 
-## 8. Backup
+## 8. Backups
 
-Respaldar al menos:
+El script `scripts/backup.py` genera un `.zip` con la base (copiada de forma segura aunque la app esté en uso, y verificada) y las fotos de productos. Guarda los zips en `./data/backups/` y borra los de más de 30 días.
 
-- `./data/database.db`
-- `./storage/uploads/productos/`
-- `.env`
+Probarlo a mano:
+
+```bash
+docker compose exec -T cotizador python scripts/backup.py
+```
+
+Programarlo todos los días a las 2 AM (`crontab -e` en el servidor):
+
+```cron
+0 2 * * * cd /ruta/al/cotizador && docker compose exec -T cotizador python scripts/backup.py >> /var/log/cotizador-backup.log 2>&1
+```
+
+**Importante:** un backup en el mismo disco no sirve si se rompe el disco o el servidor. Copiá `./data/backups/` a otro lugar todos los días (Google Drive o Dropbox con `rclone`, un NAS, otra PC). Guardá también una copia del `.env` en un lugar seguro: sin la `APP_SECRET_KEY` y la contraseña SMTP no se puede reconstruir el servicio.
+
+Restaurar un backup:
+
+```bash
+docker compose down
+unzip cotizador-backup-AAAAMMDD-HHMMSS.zip -d /tmp/restaurar
+cp /tmp/restaurar/database.db ./data/database.db
+rm -f ./data/database.db-wal ./data/database.db-shm
+cp -r /tmp/restaurar/uploads/productos/. ./storage/uploads/productos/
+docker compose up -d
+```
+
+Probá restaurar un backup en otra máquina al menos una vez: un backup que nunca se probó no es un backup.
 
 ## 9. Primer acceso
 
-Entrar a:
+Crear el primer administrador (pide la contraseña sin mostrarla):
 
-- `/login`
+```bash
+docker compose exec cotizador flask --app app crear-admin admin
+```
 
-El sistema usa el login normal con usuario y contraseña.
+El mismo comando sirve para recuperar el acceso si se olvida la contraseña del administrador: la cambia y reactiva el usuario.
+
+Después entrar a `/login`. Desde **Usuarios** el administrador crea las cuentas, carga los datos de firma de cada uno, cambia contraseñas y da de baja a quien ya no trabaja en la empresa (no se borran: sus cotizaciones y la auditoría quedan). Cada usuario cambia su propia contraseña desde **Mi cuenta** (su nombre arriba a la derecha).
+
+Después de 5 intentos fallidos de login, ese usuario queda bloqueado 15 minutos desde esa IP.

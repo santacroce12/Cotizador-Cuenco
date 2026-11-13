@@ -21,3 +21,8 @@ storage/uploads/productos/*
 .codex/
 tmp_*
 *.log
+backups_locales/
+*.arranque.lock
+*.db-wal
+*.db-shm
+*.db.arranque.lock
