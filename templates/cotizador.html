@@ -375,6 +375,21 @@
         font-size: 0.92rem;
     }
 
+    .cz-imprevisto-general {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem 1.5rem;
+        margin-top: 1rem;
+        padding: 0.85rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--muted);
+    }
+
+    .cz-imprevisto-general > div:first-child { flex: 1 1 320px; }
+
     .cz-add-item:hover { background: var(--accent); border-color: var(--ring); }
 
     .image-upload-cell { display: grid; justify-items: center; }
@@ -726,6 +741,19 @@
                         <button type="button" class="cz-add-item" onclick="agregarFila()">
                             <i class="bi bi-plus-lg me-1"></i>Agregar ítem
                         </button>
+                        <div class="cz-imprevisto-general">
+                            <div>
+                                <label class="form-label mb-1" for="imprevisto_general_pct">Imprevistos generales</label>
+                                <div class="form-text mt-0">Sobre el <strong>costo total de la cotización</strong> (ya con los imprevistos de cada ítem), antes del margen. Queda incluido en los precios: el cliente no lo ve.</div>
+                            </div>
+                            <div class="input-group" style="max-width: 9rem;">
+                                <input type="text" name="imprevisto_general_pct" id="imprevisto_general_pct" class="form-control text-end cotizador-decimal-input"
+                                    inputmode="decimal" autocomplete="off" placeholder="0"
+                                    value="{{ ('%g'|format(imprevisto_general_inicial)) if imprevisto_general_inicial else '' }}"
+                                    onfocus="seleccionarContenidoInput(this)" oninput="validarPorcentaje(this); calcularTodo()">
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
@@ -799,6 +827,23 @@
                                     >
                                 </div>
                                 <div class="form-text">Descuento global sobre el total.</div>
+                            </div>
+                            <div class="col-lg-8">
+                                <label class="form-label" for="validez_dias">Validez de la oferta</label>
+                                <div class="d-flex flex-wrap align-items-center gap-2">
+                                    <div class="input-group" style="max-width: 11rem;">
+                                        <input type="number" name="validez_dias" id="validez_dias" class="form-control text-end"
+                                            min="1" max="365" step="1" required value="{{ validez_dias_inicial }}"
+                                            data-fecha-emision="{{ fecha_emision_iso }}" oninput="actualizarValidez()">
+                                        <span class="input-group-text">días</span>
+                                    </div>
+                                    <div class="segmented" aria-label="Validez rápida">
+                                        {% for dias in [2, 3, 7, 15, 30] %}
+                                        <button type="button" data-validez="{{ dias }}" onclick="elegirValidez({{ dias }})">{{ dias }}</button>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="form-text" id="validez_texto">Días corridos desde la fecha de la cotización.</div>
                             </div>
                             <div class="col-12">
                                 <label class="form-label" for="condicion_cotizacion">Condiciones que se imprimen</label>
@@ -890,7 +935,7 @@
                         <div class="cz-card-body pt-2">
                             <div class="small mb-1 text-muted">No se muestra al cliente.</div>
                             <div class="cz-rows mt-2 pt-2">
-                                <div class="cz-row"><span class="summary-help-label">Costo neto real<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Costo neto + Otros %. No incluye IVA compra: queda como credito fiscal.">?</button></span><span id="costo-total-interno">US$ 0,00</span></div>
+                                <div class="cz-row"><span class="summary-help-label">Costo con imprevistos<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="Costo neto + imprevistos (del ítem y generales). No incluye IVA compra: queda como crédito fiscal.">?</button></span><span id="costo-total-interno">US$ 0,00</span></div>
                                 <div class="cz-row"><span class="summary-help-label">IVA compra (crédito)<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA del proveedor acumulado.">?</button></span><span id="iva-compra-credito">US$ 0,00</span></div>
                                 <div class="cz-row"><span class="summary-help-label">IVA a pagar estimado<button type="button" class="field-help-button" data-bs-toggle="tooltip" title="IVA venta - IVA compra. Puede ser negativo.">?</button></span><span id="iva-a-pagar">US$ 0,00</span></div>
                                 <div class="cz-row is-minus"><span>Descuentos por ítem</span><span id="total-descuentos-interno">-US$ 0,00</span></div>
@@ -926,7 +971,7 @@
                             </section>
 
                             <ul class="cz-calc-help">
-                                <li><strong>Base:</strong> costo neto + Otros %.</li>
+                                <li><strong>Costo:</strong> costo neto + imprevisto del ítem + imprevistos generales.</li>
                                 <li><strong>Venta neta:</strong> base × (1 + Margen %) × (1 − Desc. %). El margen es un recargo sobre el costo.</li>
                                 <li><strong>Total:</strong> venta neta + IVA − bonificación.</li>
                             </ul>
@@ -1226,6 +1271,8 @@ function obtenerBorradorCotizacion() {
         condicion_cotizacion: obtenerValor("#condicion_cotizacion"),
         observacion_cliente: obtenerValor("#observacion_cliente"),
         bonificacion_cierre_monto: obtenerValor("#bonificacion_cierre_monto"),
+        imprevisto_general_pct: obtenerValor("#imprevisto_general_pct"),
+        validez_dias: obtenerValor("#validez_dias"),
         estado: estadoSelect?.value || "En progreso",
         seguimiento_activo: Boolean(seguimientoActivo?.checked),
         seguimiento_cada_dias: obtenerValor("#seguimiento_cada_dias"),
@@ -1319,6 +1366,11 @@ function aplicarBorradorCotizacion(draft) {
     setValue("#condicion_cotizacion", formatearCondicionesCotizacionParaTextarea(draft.condicion_cotizacion));
     setValue("#observacion_cliente", draft.observacion_cliente);
     setValue("#bonificacion_cierre_monto", draft.bonificacion_cierre_monto);
+    setValue("#imprevisto_general_pct", draft.imprevisto_general_pct);
+    if (draft.validez_dias) {
+        setValue("#validez_dias", draft.validez_dias);
+    }
+    actualizarValidez();
     setValue("#estado_cotizacion", draft.estado);
     setValue("#seguimiento_cada_dias", draft.seguimiento_cada_dias);
     const seguimientoActivo = document.getElementById("seguimiento_activo");
@@ -2083,7 +2135,15 @@ function redondearCentavos(valor) {
         return 0;
     }
     const signo = valor < 0 ? -1 : 1;
-    return signo * Number(Math.round(Number(`${Math.abs(valor)}e2`)) + "e-2");
+    const absoluto = Math.abs(valor);
+    const texto = String(absoluto);
+    // Truco "e2" para evitar errores de punto flotante (1.005 -> 1.01). Pero si el
+    // numero ya viene en notacion cientifica (residuos como 2.9e-11 o numeros
+    // enormes), "2.9e-11e2" no es un numero: ahi se redondea de la forma comun.
+    if (texto.includes("e")) {
+        return signo * (Math.round(absoluto * 100) / 100);
+    }
+    return signo * Number(Math.round(Number(`${texto}e2`)) + "e-2");
 }
 
 function formatoImporte(valor, simbolo) {
@@ -2238,7 +2298,7 @@ function agregarFila(data = {}) {
                         <input type="text" name="iva_compra[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end" value="${ivaCompra}" min="0" inputmode="decimal" autocomplete="off" placeholder="%" onfocus="seleccionarContenidoInput(this)" oninput="validarPositivo(this); calcularTodo()" title="IVA del proveedor. Se usa como credito fiscal interno.">
                     </div>
                     <div class="cotizador-field">
-                        <label class="cotizador-field-label" title="Flete, comisiones y otros costos sobre el costo neto">Otros %</label>
+                        <label class="cotizador-field-label" title="Se suma al costo de ESTE ítem (no al total de la cotización): cubre riesgos de este producto. Para imprevistos de todo el proyecto usá Imprevistos generales, abajo de los ítems.">Imprevisto % (ítem)</label>
                         <input type="text" name="extra[]" class="form-control cotizador-input cotizador-number-no-spin cotizador-decimal-input text-end" value="${costoExtra}" min="0" inputmode="decimal" autocomplete="off" placeholder="%" onfocus="seleccionarContenidoInput(this)" oninput="validarPositivo(this); calcularTodo()">
                     </div>
                     <div class="cotizador-field">
@@ -2618,10 +2678,46 @@ async function actualizarTipoCambioOficial(force = false, intentos = 0, manual =
     }
 }
 
+function elegirValidez(dias) {
+    const input = document.getElementById("validez_dias");
+    if (!input) {
+        return;
+    }
+    input.value = dias;
+    actualizarValidez();
+    programarGuardarBorradorCotizacion();
+}
+
+// Muestra hasta que fecha vale la oferta: dias corridos desde la fecha de la cotizacion.
+function actualizarValidez() {
+    const input = document.getElementById("validez_dias");
+    const texto = document.getElementById("validez_texto");
+    if (!input || !texto) {
+        return;
+    }
+    const dias = Math.min(365, Math.max(0, parseInt(input.value, 10) || 0));
+    document.querySelectorAll("[data-validez]").forEach((boton) => {
+        boton.classList.toggle("active", Number(boton.dataset.validez) === dias);
+    });
+    if (!dias) {
+        texto.textContent = "Indicá cuántos días corridos vale la oferta.";
+        return;
+    }
+    const [anio, mes, dia] = (input.dataset.fechaEmision || "").split("-").map(Number);
+    const emision = anio ? new Date(anio, mes - 1, dia) : new Date();
+    const vence = new Date(emision);
+    vence.setDate(vence.getDate() + dias);
+    const formato = (fecha) => fecha.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+    texto.textContent = `${dias} día${dias === 1 ? "" : "s"} corrido${dias === 1 ? "" : "s"} desde el ${formato(emision)}: vence el ${formato(vence)}.`;
+}
+
 function calcularTodo() {
     const tcRaw = parseNumero(document.getElementById("tipo_cambio")?.value, 0);
     const tc = Number.isFinite(tcRaw) && tcRaw > 0 ? tcRaw : null;
     const bonificacionSolicitada = Math.max(0, parseNumero(document.getElementById("bonificacion_cierre_monto")?.value, 0));
+    // Imprevistos generales: % sobre el costo total (ya con los imprevistos de cada item).
+    const imprevistoGeneralPct = Math.min(100, Math.max(0, parseNumero(document.getElementById("imprevisto_general_pct")?.value, 0)));
+    const factorImprevistoGeneral = 1 + imprevistoGeneralPct / 100;
 
     // Mismas reglas que calculos_cotizacion.py (el servidor recalcula al guardar):
     // unitario neto redondeado; con IVA incluido se redondea el precio final y
@@ -2650,7 +2746,7 @@ function calcularTodo() {
         const ivaPerc = normalizarIvaVenta(row.querySelector('[name="iva_item[]"]')?.value);
 
         const costoBaseTotalFila = cant * costoUnitario;
-        const costoRealUnitario = costoUnitario * (1 + (extraPerc / 100));
+        const costoRealUnitario = costoUnitario * (1 + (extraPerc / 100)) * factorImprevistoGeneral;
         const pVentaLista = redondearCentavos(costoRealUnitario * (1 + margenPct / 100));
         const pVentaNeto = redondearCentavos(costoRealUnitario * (1 + margenPct / 100) * (1 - descuentoPct / 100));
         const subNetoFila = redondearCentavos(cant * pVentaNeto);
@@ -2666,7 +2762,7 @@ function calcularTodo() {
 
         subtotalBaseAcumulado += costoBaseTotalFila;
         totalIvaCompraAcumulado += costoBaseTotalFila * (ivaCompraPerc / 100);
-        totalExtrasAcumulado += costoBaseTotalFila * (extraPerc / 100);
+        totalExtrasAcumulado += costoBaseTotalFila * ((1 + extraPerc / 100) * factorImprevistoGeneral - 1);
         totalDescuentosAcumulado += Math.max(0, cant * (pVentaLista - pVentaNeto));
         subtotalVentaNeto += subNetoFila;
         cargaFiscalBruta += subNetoFila * (cargaFiscPerc / 100);
@@ -2787,6 +2883,7 @@ window.onload = function () {
     inicializarFormaPagoDesdeValor();
     initClienteSelect();
     actualizarEstiloEstadoForm(document.getElementById("estado_cotizacion"));
+    actualizarValidez();
     toggleSeguimientoFields();
     actualizarIndicadorFamilia();
     const borradorRestaurado = inicializarBorradorCotizacion();

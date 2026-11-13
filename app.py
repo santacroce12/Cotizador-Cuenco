@@ -218,7 +218,7 @@ CONDICIONES_COTIZACION = (
     "Las imágenes son ilustrativas.",
     "Oferta sujeta a stock.",
     "Precios sujetos a variación sin previo aviso.",
-    "Entrega y validez a confirmar.",
+    "Plazo de entrega a confirmar.",
 )
 FAMILIAS_COTIZACION = (
     "SEGURIDAD URBANA",
@@ -306,6 +306,11 @@ class Cotizacion(db.Model):
     carga_fiscal_monto = db.Column(db.Float, default=0.0)
     total_carga_fiscal = db.Column(db.Float, default=0.0)
     bonificacion_cierre_monto = db.Column(db.Float, default=0.0)
+    # Imprevistos de todo el proyecto, % sobre el costo total (ya con los del item).
+    imprevisto_general_pct = db.Column(db.Float, default=0.0)
+    # Validez de la oferta en dias corridos desde la fecha de la cotizacion.
+    # Se guarda en cada cotizacion: reimprimir una vieja no cambia su validez.
+    validez_dias = db.Column(db.Integer)
     total_neto = db.Column(db.Float)
     total_iva = db.Column(db.Float)
     total_final = db.Column(db.Float)
@@ -883,6 +888,32 @@ def construir_firma_usuario(autor):
     return firma
 
 
+VALIDEZ_MAXIMA_DIAS = 365
+
+
+def normalizar_validez_dias(valor, default=None):
+    dias = parsear_entero_positivo(valor, default=None)
+    if dias is None:
+        return default
+    return min(dias, VALIDEZ_MAXIMA_DIAS)
+
+
+def validez_de_cotizacion(cotizacion):
+    """Dias corridos de validez y fecha de vencimiento (en hora de Argentina)."""
+    dias = cotizacion.validez_dias or QUOTE_VALIDITY_DAYS
+    emitida = a_hora_local(cotizacion.fecha or datetime.utcnow()).date()
+    vence = emitida + timedelta(days=dias)
+    return {
+        "dias": dias,
+        "desde": emitida.strftime("%d/%m/%Y"),
+        "hasta": vence.strftime("%d/%m/%Y"),
+        "texto": (
+            f"Validez de la oferta: {dias} día{'s' if dias != 1 else ''} corrido{'s' if dias != 1 else ''} "
+            f"desde el {emitida:%d/%m/%Y} (hasta el {vence:%d/%m/%Y})."
+        ),
+    }
+
+
 def construir_contexto_documento_cotizacion(cotizacion):
     totales = totales_de_cotizacion(cotizacion)
     lineas = []
@@ -900,6 +931,7 @@ def construir_contexto_documento_cotizacion(cotizacion):
         "cliente_sector": cotizacion.cliente_ref.sector if cotizacion.cliente_ref else "",
         "cliente_subsector": cotizacion.cliente_ref.subsector if cotizacion.cliente_ref else "",
         "quote_signature": construir_firma_cotizacion(cotizacion),
+        "validez": validez_de_cotizacion(cotizacion),
     }
 
 
@@ -964,8 +996,7 @@ def construir_contexto_llave_en_mano(cotizacion):
     condiciones_venta = []
     if cotizacion.forma_pago:
         condiciones_venta.append(f"Forma de pago: {cotizacion.forma_pago}.")
-    if QUOTE_VALIDITY_DAYS:
-        condiciones_venta.append(f"Mantenimiento de oferta: {QUOTE_VALIDITY_DAYS} dias corridos.")
+    condiciones_venta.append(validez_de_cotizacion(cotizacion)["texto"])
     condiciones_venta.extend(cotizacion.condiciones_cotizacion_lista)
     if cotizacion.moneda == "USD":
         condiciones_venta.append(QUOTE_USD_FACTURACION_NOTE)
@@ -1344,6 +1375,12 @@ with app.app_context(), bloqueo_de_arranque():
         db.session.commit()
     if "total_carga_fiscal" not in columnas_cot:
         db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN total_carga_fiscal FLOAT DEFAULT 0.0"))
+        db.session.commit()
+    if "imprevisto_general_pct" not in columnas_cot:
+        db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN imprevisto_general_pct FLOAT DEFAULT 0.0"))
+        db.session.commit()
+    if "validez_dias" not in columnas_cot:
+        db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN validez_dias INTEGER"))
         db.session.commit()
     if "bonificacion_cierre_monto" not in columnas_cot:
         db.session.execute(db.text("ALTER TABLE cotizacion ADD COLUMN bonificacion_cierre_monto FLOAT DEFAULT 0.0"))
@@ -2204,6 +2241,10 @@ def renderizar_cotizador(cotizacion=None):
         smtp_configurado=smtp_esta_configurado(),
         followup_default_email=FOLLOWUP_EMAIL,
         firma_cotizacion=firma_cotizacion,
+        validez_dias_inicial=(cotizacion.validez_dias if cotizacion and cotizacion.validez_dias else QUOTE_VALIDITY_DAYS),
+        # La validez corre desde la fecha de la cotizacion (hoy, si es nueva).
+        fecha_emision_iso=a_hora_local(cotizacion.fecha if cotizacion and cotizacion.fecha else datetime.utcnow()).date().isoformat(),
+        imprevisto_general_inicial=(cotizacion.imprevisto_general_pct or 0.0) if cotizacion else 0.0,
         moneda_cotizacion=(cotizacion.moneda if cotizacion and cotizacion.moneda == "ARS" else MONEDA_COTIZACION),
         tipo_cambio_oficial=tipo_cambio_ctx["payload"],
         tipo_cambio_inicial=tipo_cambio_ctx["inicial"],
@@ -2276,6 +2317,8 @@ def generar_excel_cotizacion(cotizacion):
         ("Condicion IVA", cotizacion.condicion_iva or ""),
         ("Forma de pago", cotizacion.forma_pago or ""),
         ("Condicion de la cotizacion", formatear_condiciones_cotizacion(cotizacion.condicion_cotizacion)),
+        ("Validez de la oferta", validez_de_cotizacion(cotizacion)["texto"]),
+        ("Imprevisto general % (sobre el costo total)", cotizacion.imprevisto_general_pct or 0.0),
         ("Observacion al cliente", cotizacion.observacion_cliente or ""),
     ]
     for label, value in datos_generales:
@@ -2289,7 +2332,7 @@ def generar_excel_cotizacion(cotizacion):
         "Cantidad",
         "Costo neto unitario",
         "IVA compra %",
-        "Otros %",
+        "Imprevisto item %",
         "Margen %",
         "Descuento %",
         "Carga fiscal %",
@@ -2314,12 +2357,14 @@ def generar_excel_cotizacion(cotizacion):
         costo_unitario = item.costo_unitario or 0.0
         iva_compra_pct = item.iva_compra_pct or 0.0
         extra_pct = item.costo_extra or 0.0
-        costo_real_unitario = costo_unitario * (1 + (extra_pct / 100.0))
+        factor_general = 1 + ((cotizacion.imprevisto_general_pct or 0.0) / 100.0)
+        costo_real_unitario = costo_unitario * (1 + (extra_pct / 100.0)) * factor_general
         ganancia_neta_unitaria = (item.precio_venta or 0.0) - costo_real_unitario - ((item.precio_venta or 0.0) * ((item.carga_fiscal or 0.0) / 100.0))
         costo_base_total = cantidad * costo_unitario
         iva_compra_total += costo_base_total * (iva_compra_pct / 100.0)
-        otros_costos_total += costo_base_total * (extra_pct / 100.0)
-        costo_neto_real += costo_base_total + (costo_base_total * (extra_pct / 100.0))
+        costo_con_imprevistos_total = costo_base_total * (1 + (extra_pct / 100.0)) * factor_general
+        otros_costos_total += costo_con_imprevistos_total - costo_base_total
+        costo_neto_real += costo_con_imprevistos_total
         values = [
             item.descripcion or "",
             item.detalle or "",
@@ -2355,7 +2400,8 @@ def generar_excel_cotizacion(cotizacion):
     ganancia_neta_bolsillo = subtotal_neto - costo_neto_real - total_carga_fiscal - totales["bonificacion_neta"]
     iva_a_pagar = (cotizacion.total_iva or 0.0) - iva_compra_total
     resumen = [
-        ("Costo neto real (Base + Otros)", round(costo_neto_real, 2)),
+        ("Costo neto real (con imprevistos)", round(costo_neto_real, 2)),
+        ("Imprevistos incluidos", round(otros_costos_total, 2)),
         ("IVA compra credito", round(iva_compra_total, 2)),
         ("IVA a pagar estimado", round(iva_a_pagar, 2)),
         ("Descuento total", descuento_total),
@@ -2888,6 +2934,11 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     observacion_cliente = (request.form.get("observacion_cliente") or "").strip()
     cliente_contacto = (request.form.get("cliente_contacto") or "").strip()
     bonificacion_cierre_solicitada = max(0.0, parsear_decimal(request.form.get("bonificacion_cierre_monto") or 0))
+    imprevisto_general_pct = min(100.0, max(0.0, parsear_decimal(request.form.get("imprevisto_general_pct") or 0)))
+    validez_dias = normalizar_validez_dias(
+        request.form.get("validez_dias"),
+        default=(cotizacion.validez_dias if cotizacion and cotizacion.validez_dias else QUOTE_VALIDITY_DAYS),
+    )
 
     es_edicion = cotizacion is not None
     estado_anterior = None
@@ -2939,6 +2990,8 @@ def persistir_cotizacion_desde_form(cotizacion=None):
     cotizacion.forma_pago = forma_pago
     cotizacion.condicion_cotizacion = condicion_cotizacion
     cotizacion.observacion_cliente = observacion_cliente
+    cotizacion.imprevisto_general_pct = imprevisto_general_pct
+    cotizacion.validez_dias = validez_dias
     cotizacion.carga_fiscal_pct = 0.0
     cotizacion.carga_fiscal_monto = 0.0
     preparar_seguimiento_cotizacion(cotizacion, cliente_sel=cliente_sel)
@@ -3015,7 +3068,7 @@ def persistir_cotizacion_desde_form(cotizacion=None):
         carga_pct = max(0.0, carga_pct)
         margen_ratio = margen_pct / 100.0
         iva_pct = normalizar_iva_venta(iva_items[i] if i < len(iva_items) else 21.0)
-        unitario_neto = precio_unitario_neto(costo, extra_pct, margen_pct, descuento_pct)
+        unitario_neto = precio_unitario_neto(costo, extra_pct, margen_pct, descuento_pct, imprevisto_general_pct)
 
         row_id = row_ids[i] if i < len(row_ids) else str(i)
         item_id = (item_ids[i] if i < len(item_ids) else "").strip()
@@ -4088,6 +4141,8 @@ def clonar_cotizacion(id):
         carga_fiscal_monto=cot_original.carga_fiscal_monto or 0.0,
         total_carga_fiscal=cot_original.total_carga_fiscal or 0.0,
         bonificacion_cierre_monto=cot_original.bonificacion_cierre_monto or 0.0,
+        imprevisto_general_pct=cot_original.imprevisto_general_pct or 0.0,
+        validez_dias=cot_original.validez_dias,
         total_neto=cot_original.total_neto or 0.0,
         total_iva=cot_original.total_iva or 0.0,
         total_final=cot_original.total_final or 0.0,

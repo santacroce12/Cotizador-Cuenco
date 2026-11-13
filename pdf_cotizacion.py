@@ -324,8 +324,8 @@ def generar_pdf_cotizacion(contexto, *, static_dir, fecha_texto, empresa, nota_f
 
     # ---- Condiciones y firma ----
     condiciones = []
-    if firma.get("validity_days"):
-        condiciones.append(f"Validez de la oferta: {firma['validity_days']} días.")
+    if contexto.get("validez"):
+        condiciones.append(contexto["validez"]["texto"])
     condiciones += list(contexto["condiciones_cotizacion"])
     if firma.get("footer_note"):
         condiciones.append(firma["footer_note"])

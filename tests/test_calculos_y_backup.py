@@ -58,6 +58,13 @@ class CalculosTest(unittest.TestCase):
         self.assertEqual(calcular_totales([linea(100)], False, 999999)["total"], 0.0)
         self.assertEqual(calcular_totales([linea(100)], False, -50)["bonificacion"], 0.0)
 
+    def test_imprevisto_general_se_aplica_sobre_el_costo_con_imprevisto_del_item(self):
+        # 100 de costo, 5% imprevisto del item, 10% general, 50% margen:
+        # 100 x 1,05 x 1,10 x 1,50 = 173,25
+        self.assertEqual(precio_unitario_neto(100, 5, 50, 0, 10), 173.25)
+        # Sin imprevisto general da lo mismo que antes.
+        self.assertEqual(precio_unitario_neto(100, 5, 50, 0), precio_unitario_neto(100, 5, 50, 0, 0))
+
     def test_sin_lineas(self):
         totales = calcular_totales([], precio_incluye_iva=True, bonificacion_solicitada=10)
         self.assertEqual((totales["neto"], totales["total"], totales["bonificacion"]), (0.0, 0.0, 0.0))

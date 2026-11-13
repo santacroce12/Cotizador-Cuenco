@@ -451,9 +451,7 @@
             <div class="quote-note-card">
                 <h6>Condiciones comerciales</h6>
                 <ul>
-                    {% if quote_signature.validity_days %}
-                    <li>Validez de la oferta: {{ quote_signature.validity_days }} dias.</li>
-                    {% endif %}
+                    <li>{{ validez.texto }}</li>
                     {% for condicion in condiciones_cotizacion %}
                     <li>{{ condicion }}</li>
                     {% endfor %}

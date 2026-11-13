@@ -35,9 +35,25 @@ def redondear(valor):
     return _d(valor).quantize(CENTAVO, rounding=ROUND_HALF_UP)
 
 
-def precio_unitario_neto(costo, extra_pct, margen_pct, descuento_pct):
-    """Costo x (1 + Otros%) x (1 + Margen%) x (1 - Desc%), redondeado a centavos."""
-    precio = _d(costo) * (1 + _d(extra_pct) / CIEN) * (1 + _d(margen_pct) / CIEN) * (1 - _d(descuento_pct) / CIEN)
+def costo_con_imprevistos(costo, imprevisto_item_pct=0, imprevisto_general_pct=0):
+    """Costo x (1 + Imprevisto del item%) x (1 + Imprevisto general%), sin redondear.
+
+    El imprevisto del item cubre riesgos de ese producto; el general, de todo el
+    proyecto, y se aplica sobre el costo ya con los imprevistos de cada item.
+    """
+    return _d(costo) * (1 + _d(imprevisto_item_pct) / CIEN) * (1 + _d(imprevisto_general_pct) / CIEN)
+
+
+def precio_unitario_neto(costo, extra_pct, margen_pct, descuento_pct, imprevisto_general_pct=0):
+    """Costo con imprevistos x (1 + Margen%) x (1 - Desc%), redondeado a centavos.
+
+    extra_pct es el imprevisto del item (antes llamado "Otros %").
+    """
+    precio = (
+        costo_con_imprevistos(costo, extra_pct, imprevisto_general_pct)
+        * (1 + _d(margen_pct) / CIEN)
+        * (1 - _d(descuento_pct) / CIEN)
+    )
     return float(redondear(precio))
 
 

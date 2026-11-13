@@ -1603,6 +1603,51 @@ class CotizadorCalculosTest(unittest.TestCase):
             self.assertEqual(len(cambios), 3)
             self.assertTrue(all(c.username == "operador" for c in cambios))
 
+    def test_imprevisto_general_y_validez_se_guardan_y_se_usan(self):
+        cotizacion_id = self._crear_cotizacion(imprevisto_general_pct="10", validez_dias="3")
+        # La fecha de emision fija el vencimiento: 12/11/2026 15:00 UTC (12:00 en Argentina).
+        self._set_fecha_cotizacion(cotizacion_id, cotizador_app.datetime(2026, 11, 12, 15, 0))
+        with app.app_context():
+            cotizacion = db.session.get(Cotizacion, cotizacion_id)
+            self.assertEqual(cotizacion.imprevisto_general_pct, 10.0)
+            self.assertEqual(cotizacion.validez_dias, 3)
+            # 95 x 1,05 (imprevisto item) x 1,10 (general) x 1,60 (margen) = 175,56
+            self.assertAlmostEqual(cotizacion.items[0].precio_venta, 175.56, places=2)
+            ws = load_workbook(BytesIO(generar_excel_cotizacion(cotizacion)), data_only=True).active
+        self.assertEqual(self._valor_por_etiqueta(ws, "Imprevisto general % (sobre el costo total)"), 10.0)
+        # Costo con imprevistos: 95 x 1,05 x 1,10 = 109,725
+        self.assertAlmostEqual(self._valor_por_etiqueta(ws, "Costo neto real (con imprevistos)"), 109.73, places=2)
+
+        texto = "Validez de la oferta: 3 días corridos desde el 12/11/2026 (hasta el 15/11/2026)."
+        self.assertIn(texto, self.client.get(f"/cotizacion/{cotizacion_id}").get_data(as_text=True))
+        self.assertIn(texto, self.client.get(f"/cotizacion/{cotizacion_id}/llave-en-mano").get_data(as_text=True))
+        self.assertIn("3 días corridos desde el 12/11/2026", self._texto_pdf(self.client.get(f"/cotizacion/{cotizacion_id}/pdf").data))
+
+        # El formulario de edicion muestra los valores guardados.
+        html = self.client.get(f"/cotizacion/{cotizacion_id}/editar").get_data(as_text=True)
+        self.assertIn('id="validez_dias"', html)
+        self.assertIn('value="3"', html)
+        self.assertIn('data-fecha-emision="2026-11-12"', html)
+        self.assertIn('value="10"', html)
+        self.assertIn("Imprevisto % (ítem)", html)
+
+        # Al duplicar se conservan.
+        nueva_id = self.client.post(f"/cotizacion/clonar/{cotizacion_id}").get_json()["nueva_id"]
+        with app.app_context():
+            nueva = db.session.get(Cotizacion, nueva_id)
+            self.assertEqual((nueva.imprevisto_general_pct, nueva.validez_dias), (10.0, 3))
+
+    def test_validez_por_defecto_es_7_dias(self):
+        cotizacion_id = self._crear_cotizacion()
+        with app.app_context():
+            self.assertEqual(db.session.get(Cotizacion, cotizacion_id).validez_dias, 7)
+        self.assertRegex(self.client.get("/").get_data(as_text=True), r'id="validez_dias"[^>]*value="7"')
+        # Una cotizacion vieja (sin validez guardada) usa la configurada, 7 dias.
+        with app.app_context():
+            db.session.get(Cotizacion, cotizacion_id).validez_dias = None
+            db.session.commit()
+        self.assertIn("Validez de la oferta: 7 días corridos", self.client.get(f"/cotizacion/{cotizacion_id}").get_data(as_text=True))
+
     def test_excel_queda_marcado_como_uso_interno(self):
         cotizacion_id = self._crear_cotizacion()
         response = self.client.get(f"/cotizacion/{cotizacion_id}/xlsx")
