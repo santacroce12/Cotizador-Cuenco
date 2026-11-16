@@ -1648,6 +1648,44 @@ class CotizadorCalculosTest(unittest.TestCase):
             db.session.commit()
         self.assertIn("Validez de la oferta: 7 días corridos", self.client.get(f"/cotizacion/{cotizacion_id}").get_data(as_text=True))
 
+    def test_presupuesto_sin_fotos_no_muestra_columna_imagen(self):
+        from PIL import Image as PilImage
+
+        # Sin ninguna foto: no hay columna ni recuadros vacios.
+        sin_fotos = self._crear_cotizacion()
+        html = self.client.get(f"/cotizacion/{sin_fotos}").get_data(as_text=True)
+        self.assertNotIn("<th>Imagen</th>", html)
+        self.assertNotIn('class="product-img"', html)
+        self.assertNotIn("placeholder_product.png", html)
+
+        # Dos items, solo el primero con foto: columna visible, segunda celda vacia.
+        foto = BytesIO()
+        PilImage.new("RGB", (200, 200), "steelblue").save(foto, "JPEG")
+        foto.seek(0)
+        datos = self._form_cotizacion(**{
+            "row_id[]": ["r1", "r2"], "item_id[]": ["", ""], "imagen_actual[]": ["", ""],
+            "desc[]": ["Con foto", "Sin foto"], "detalle[]": ["", ""], "cant[]": ["1", "1"],
+            "costo[]": ["10", "10"], "iva_compra[]": ["21", "21"], "extra[]": ["5", "5"],
+            "margen[]": ["50", "50"], "descuento[]": ["0", "0"], "carga_fiscal[]": ["0", "0"],
+            "iva_item[]": ["21", "21"],
+        })
+        datos["foto_r1"] = (foto, "foto.jpg")
+        self.assertEqual(self.client.post("/", data=datos, content_type="multipart/form-data").status_code, 302)
+        with app.app_context():
+            mezcla = Cotizacion.query.order_by(Cotizacion.id.desc()).first().id
+        html = self.client.get(f"/cotizacion/{mezcla}").get_data(as_text=True)
+        self.assertIn("<th>Imagen</th>", html)
+        self.assertEqual(html.count('class="product-img"'), 1)
+        self.assertNotIn("placeholder_product.png", html)
+
+        # Una foto que se borro del disco cuenta como "sin foto".
+        with app.app_context():
+            item = Cotizacion.query.get(mezcla).items[0]
+            ruta = cotizador_app._ruta_imagen_item(item.imagen_url, app.static_folder, cotizador_app.UPLOADS_PRODUCTOS_DIR)
+            ruta.unlink()
+        html = self.client.get(f"/cotizacion/{mezcla}").get_data(as_text=True)
+        self.assertNotIn("<th>Imagen</th>", html)
+
     def test_excel_queda_marcado_como_uso_interno(self):
         cotizacion_id = self._crear_cotizacion()
         response = self.client.get(f"/cotizacion/{cotizacion_id}/xlsx")

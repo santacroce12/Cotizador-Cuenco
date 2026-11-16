@@ -45,7 +45,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from calculos_cotizacion import calcular_totales, precio_unitario_neto
-from pdf_cotizacion import generar_pdf_cotizacion
+from pdf_cotizacion import _ruta_imagen_item, generar_pdf_cotizacion
 
 
 app = Flask(__name__)
@@ -914,8 +914,24 @@ def validez_de_cotizacion(cotizacion):
     }
 
 
+def url_imagen_de_item(item):
+    """URL de la foto del item, o None si no tiene (o el archivo ya no existe).
+
+    Mismo criterio que el PDF: sin foto no se muestra nada, ni un recuadro vacio.
+    """
+    imagen = (item.imagen_url or "").strip()
+    if not imagen:
+        return None
+    if imagen.startswith(("http://", "https://")):
+        return imagen
+    if _ruta_imagen_item(imagen, app.static_folder, UPLOADS_PRODUCTOS_DIR) is None:
+        return None
+    return url_for("static", filename=imagen)
+
+
 def construir_contexto_documento_cotizacion(cotizacion):
     totales = totales_de_cotizacion(cotizacion)
+    imagenes_items = [url_imagen_de_item(item) for item in cotizacion.items]
     lineas = []
     for item, linea in zip(cotizacion.items, totales["lineas"]):
         lineas.append({"item": item, **linea})
@@ -926,6 +942,9 @@ def construir_contexto_documento_cotizacion(cotizacion):
         "condiciones_cotizacion": cotizacion.condiciones_cotizacion_lista,
         "domicilio_empresa": DOMICILIO,
         "mostrar_descuento": any((item.descuento_pct or 0.0) > 0 for item in cotizacion.items),
+        # La columna de imagen solo aparece si al menos un item tiene foto.
+        "imagenes_items": imagenes_items,
+        "mostrar_imagenes": any(imagenes_items),
         "desglose_iva": construir_desglose_iva_cotizacion(cotizacion, totales),
         "precio_incluye_iva": cotizacion.condicion_iva != "Responsable Inscrito",
         "cliente_sector": cotizacion.cliente_ref.sector if cotizacion.cliente_ref else "",

@@ -313,26 +313,21 @@
     {% endif %}
     <div class="table-responsive quote-items-wrap mt-4">
     <table class="table quote-items-table mb-0">
+        {# Anchos: la columna de imagen solo existe si algun item tiene foto; si no,
+           ese 8% pasa a Producto. #}
+        {% set ancho_producto = (18 if mostrar_descuento else 21) + (0 if mostrar_imagenes else 8) %}
         <colgroup>
+            {% if mostrar_imagenes %}<col style="width: 8%;">{% endif %}
+            <col style="width: {{ ancho_producto }}%;">
+            <col style="width: {{ 30 if mostrar_descuento else 35 }}%;">
             <col style="width: 8%;">
-            {% if mostrar_descuento %}
-            <col style="width: 18%;">
-            <col style="width: 30%;">
-            <col style="width: 8%;">
-            <col style="width: 8%;">
+            {% if mostrar_descuento %}<col style="width: 8%;">{% endif %}
             <col style="width: 13%;">
             <col style="width: 15%;">
-            {% else %}
-            <col style="width: 21%;">
-            <col style="width: 35%;">
-            <col style="width: 8%;">
-            <col style="width: 13%;">
-            <col style="width: 15%;">
-            {% endif %}
         </colgroup>
         <thead style="background-color: #000; color: #fff;">
             <tr>
-                <th>Imagen</th>
+                {% if mostrar_imagenes %}<th>Imagen</th>{% endif %}
                 <th>Producto</th>
                 <th>Descripcion</th>
                 <th class="text-center">Cant.</th>
@@ -345,25 +340,16 @@
         </thead>
         <tbody>
             {% for item in cot.items %}
-            {% set item_img_src = url_for('static', filename='placeholder_product.png') %}
-            {% if item.imagen_url %}
-                {% if item.imagen_url.startswith('http://') or item.imagen_url.startswith('https://') %}
-                    {% set item_img_src = item.imagen_url %}
-                {% else %}
-                    {% set item_img_src = url_for('static', filename=item.imagen_url) %}
-                {% endif %}
-            {% endif %}
+            {% set item_img_src = imagenes_items[loop.index0] %}
             {% set detail_text = (item.detalle or "")|trim %}
             <tr>
+                {% if mostrar_imagenes %}
                 <td class="text-center col-image">
-                    <img
-                        src="{{ item_img_src }}"
-                        alt="{{ item.descripcion }}"
-                        class="product-img"
-                        loading="lazy"
-                        onerror="this.onerror=null;this.src='{{ url_for('static', filename='placeholder_product.png') }}';"
-                    >
+                    {% if item_img_src %}
+                    <img src="{{ item_img_src }}" alt="{{ item.descripcion }}" class="product-img" loading="lazy" onerror="this.remove();">
+                    {% endif %}
                 </td>
+                {% endif %}
                 <td class="col-product">{{ item.descripcion }}</td>
                 <td class="col-detail">
                     {% if detail_text %}
