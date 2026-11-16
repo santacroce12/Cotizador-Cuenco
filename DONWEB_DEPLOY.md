@@ -54,7 +54,8 @@ Campos minimos recomendados:
 - `SMTP_USERNAME`
 - `SMTP_PASSWORD`
 - `SMTP_FROM`
-- `FOLLOWUP_DEFAULT_TO_EMAIL`
+
+El mail de seguimiento siempre va a `cotizador@cuencotech.com` (fijo en el codigo).
 
 Ejemplo:
 
@@ -68,8 +69,7 @@ Ejemplo:
   "SMTP_USERNAME": "usuario@example.com",
   "SMTP_PASSWORD": "TU_PASSWORD_REAL",
   "SMTP_FROM": "usuario@example.com",
-  "APP_BASE_URL": "https://cotizador.example.com",
-  "FOLLOWUP_DEFAULT_TO_EMAIL": "equipo@example.com"
+  "APP_BASE_URL": "https://cotizador.example.com"
 }
 ```
 
