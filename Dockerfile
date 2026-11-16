@@ -25,4 +25,6 @@ RUN mkdir -p /app/data /app/static/uploads/productos
 
 EXPOSE 9000
 
-CMD ["sh", "-c", "gunicorn --preload --bind 0.0.0.0:${PORT:-9000} --workers ${GUNICORN_WORKERS:-1} --threads ${GUNICORN_THREADS:-4} --timeout ${GUNICORN_TIMEOUT:-120} wsgi:application"]
+# "exec" reemplaza al shell por gunicorn: asi recibe la senal de "docker stop" y
+# cierra limpio (sin exec, Docker espera 10 s y lo mata: codigo 137).
+CMD ["sh", "-c", "exec gunicorn --preload --bind 0.0.0.0:${PORT:-9000} --workers ${GUNICORN_WORKERS:-1} --threads ${GUNICORN_THREADS:-4} --timeout ${GUNICORN_TIMEOUT:-120} wsgi:application"]

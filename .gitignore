@@ -26,3 +26,7 @@ backups_locales/
 *.db-wal
 *.db-shm
 *.db.arranque.lock
+
+# Archivos locales de herramientas
+.playwright-cli/
+.claude/launch.json
