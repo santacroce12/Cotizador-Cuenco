@@ -1,12 +1,24 @@
 {% extends "layout.html" %}
 
+{% block title %}Presupuesto {{ cot.numero_cotizacion }}{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('historial_page') }}">Historial</a></li>
+<li class="breadcrumb-item active">{{ cot.numero_cotizacion }}</li>
+{% endblock %}
+
 {% block content %}
+{% set simbolo_moneda = "$" if cot.moneda == "ARS" else "US$" %}
 <style>
-    .invoice-box { max-width: 800px; margin: auto; padding: 30px; border: 1px solid #eee; background: #fff; }
+    .invoice-box { max-width: 920px; margin: 0 auto; padding: 30px; border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); box-shadow: var(--shadow-sm); background: #fff; }
     .quote-items-table {
         border: 1px solid #c3cfdb;
         table-layout: fixed;
         width: 100%;
+    }
+    .quote-items-wrap {
+        border-radius: 10px;
+        overflow-x: hidden;
     }
     .product-img {
         width: 56px;
@@ -17,7 +29,7 @@
         background: #fff;
         padding: 4px;
     }
-    thead th {
+    .quote-items-table thead th {
         background-color: #dbe4ee !important;
         color: #111111 !important;
         text-transform: none;
@@ -35,10 +47,24 @@
         background: #edf3f9;
         border-color: #c3cfdb;
         color: #223247;
+        padding: 0.72rem 0.58rem;
+        vertical-align: top;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+    .quote-items-table tbody td.col-product {
+        font-size: 0.89rem;
+        font-weight: 600;
+        line-height: 1.28;
+        color: #1d2d40;
+        overflow-wrap: anywhere;
+        word-break: break-word;
     }
     .quote-items-table tbody td.col-detail {
-        font-size: 0.84rem;
-        line-height: 1.35;
+        font-size: 0.8rem;
+        line-height: 1.26;
+        padding: 0.72rem 0.68rem;
     }
     .quote-items-table thead th.col-price-unit,
     .quote-items-table thead th.col-sale-total {
@@ -48,6 +74,9 @@
     .quote-items-table tbody td.col-price-unit,
     .quote-items-table tbody td.col-sale-total {
         padding-right: 0.85rem !important;
+        white-space: nowrap;
+        word-break: normal;
+        overflow-wrap: normal;
     }
     .quote-items-table thead th.col-sale-total,
     .quote-items-table tbody td.col-sale-total {
@@ -59,6 +88,17 @@
     }
     .quote-items-table tbody tr:nth-child(even) td {
         background: #e6edf5;
+    }
+    .quote-detail-text {
+        width: 100%;
+        margin: 0;
+        color: #273b52;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+    .quote-detail-placeholder {
+        color: #72859a;
+        font-style: italic;
     }
     .table td { border-bottom: 1px solid #c3cfdb; }
     .quote-totals-card {
@@ -126,33 +166,109 @@
     .quote-doc-number {
         display: inline-block;
         white-space: nowrap;
-        font-size: clamp(1.5rem, 2.1vw, 1.9rem);
+        font-size: clamp(1.15rem, 1.5vw, 1.45rem);
         line-height: 1.05;
         letter-spacing: -0.02em;
     }
     .fw-bold { font-weight: bold; }
+    .col-image {
+        width: 8%;
+    }
+    .col-qty,
+    .col-discount {
+        text-align: center !important;
+        white-space: nowrap;
+        word-break: normal;
+        overflow-wrap: normal;
+    }
+    @page {
+        size: A4;
+        margin: 0;
+    }
+    @media (max-width: 991.98px) {
+        .invoice-box {
+            padding: 24px 18px;
+        }
+        .quote-items-table {
+            min-width: 0;
+        }
+    }
     @media print {
         .no-print, .btn, .container.no-print, nav.navbar { display: none !important; }
-        body { background: white !important; }
-        .invoice-box { box-shadow: none !important; border: none !important; margin: 0 !important; width: 100% !important; }
-        thead th {
+        html,
+        body {
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .invoice-box {
+            box-shadow: none !important;
+            border: none !important;
+            margin: 0 !important;
+            max-width: none !important;
+            width: 100% !important;
+            padding: 10mm !important;
+            box-sizing: border-box;
+        }
+        .quote-items-wrap {
+            overflow: visible !important;
+            border-radius: 0 !important;
+        }
+        .quote-items-table {
+            font-size: 0.74rem;
+            min-width: 0 !important;
+        }
+        .quote-items-table thead th {
             background-color: #dbe4ee !important;
             color: #111111 !important;
+            font-size: 0.66rem;
+            padding: 0.42rem 0.24rem !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+        }
+        .quote-items-table tbody td {
+            padding: 0.46rem 0.34rem;
+        }
+        .quote-items-table tbody td.col-product,
+        .quote-items-table tbody td.col-detail {
+            font-size: 0.7rem;
+            line-height: 1.2;
+        }
+        .quote-items-table tbody td.col-price-unit,
+        .quote-items-table tbody td.col-sale-total,
+        .quote-items-table tbody td.col-qty,
+        .quote-items-table tbody td.col-discount {
+            font-size: 0.66rem;
+            line-height: 1.15;
+        }
+        .product-img {
+            width: 42px;
+            height: 42px;
+            padding: 3px;
         }
     }
 </style>
 
-<div class="container no-print text-center my-4">
-    <button onclick="window.print()" class="btn btn-pdf-custom btn-lg px-5">Guardar como PDF / Imprimir</button>
-    <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-edit-custom btn-lg">Editar</a>
-    <a href="{{ url_for('ver_cotizacion_llave_en_mano', id=cot.id) }}" class="btn btn-outline-dark btn-lg">Llave en mano</a>
-    <a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="btn btn-excel-custom btn-lg">Exportar Excel</a>
-    <a href="/historial" class="btn btn-outline-secondary btn-lg">Volver al Historial</a>
+<div class="page-header no-print">
+    <div>
+        <h1 class="page-title">Presupuesto {{ cot.numero_cotizacion }}</h1>
+        <p class="page-description">{{ cot.cliente_razon_social or cot.cliente }} · {{ cot.fecha|fecha_local }} · <span class="estado-pill {% if cot.estado == 'Aceptada' %}estado-aceptada{% elif cot.estado == 'Rechazada' %}estado-rechazada{% else %}estado-en-progreso{% endif %}">{{ cot.estado or 'En progreso' }}</span></p>
+    </div>
+    <div class="page-actions">
+        <a href="{{ url_for('editar_cotizacion', id=cot.id) }}" class="btn btn-outline-dark"><i class="bi bi-pencil"></i>Editar</a>
+        <div class="dropdown">
+            <button type="button" class="btn btn-outline-dark" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-three-dots"></i>Más</button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a href="{{ url_for('ver_cotizacion_llave_en_mano', id=cot.id) }}" class="dropdown-item"><i class="bi bi-file-text"></i>Consolidada</a></li>
+                <li><a href="{{ url_for('exportar_cotizacion_xlsx', id=cot.id) }}" class="dropdown-item"><i class="bi bi-file-earmark-lock"></i>Excel interno (costos y márgenes)</a></li>
+                <li><button type="button" class="dropdown-item" onclick="window.print()"><i class="bi bi-printer"></i>Imprimir</button></li>
+            </ul>
+        </div>
+        <a href="{{ url_for('exportar_cotizacion_pdf', id=cot.id) }}" class="btn btn-primary"><i class="bi bi-file-earmark-pdf"></i>Descargar PDF</a>
+    </div>
 </div>
 
-<div class="invoice-box mt-5">
+<div class="invoice-box tema-claro" data-bs-theme="light">
     <div class="row align-items-center mb-3">
         <div class="col-6 d-flex align-items-center">
             <img src="{{ url_for('static', filename='LOGO color.png') }}" alt="Logo Cuenco Tech" style="max-width: 120px; margin-right: 15px;" onerror="this.onerror=null;this.src='{{ url_for('static', filename='logo.png') }}';">
@@ -164,10 +280,7 @@
         <div class="col-6 text-end">
             <h2 class="h4 quote-doc-number">PRESUPUESTO #{{ cot.numero_cotizacion or ("%04d" | format(cot.id)) }}</h2>
             <p class="fw-bold mb-1">Moneda: {{ "Pesos Argentinos" if cot.moneda == "ARS" else "Dolares Estadounidenses" }}</p>
-            {% if cot.tipo_cambio_usado %}
-            <p class="text-muted small mb-1">Tipo de cambio usado: 1 USD = $ {{ "{:,.4f}".format(cot.tipo_cambio_usado) }} ARS</p>
-            {% endif %}
-            <p class="mb-0">Fecha: {{ cot.fecha.strftime('%d/%m/%Y') }}</p>
+            <p class="mb-0">Fecha: {{ cot.fecha|fecha_local }}</p>
         </div>
     </div>
     <hr>
@@ -198,27 +311,23 @@
         {% endif %}
     </div>
     {% endif %}
-    <table class="table mt-4 quote-items-table">
+    <div class="table-responsive quote-items-wrap mt-4">
+    <table class="table quote-items-table mb-0">
+        {# Anchos: la columna de imagen solo existe si algun item tiene foto; si no,
+           ese 8% pasa a Producto. #}
+        {% set ancho_producto = (18 if mostrar_descuento else 21) + (0 if mostrar_imagenes else 8) %}
         <colgroup>
-            <col style="width: 12%;">
-            {% if mostrar_descuento %}
-            <col style="width: 22%;">
-            <col style="width: 18%;">
-            <col style="width: 9%;">
-            <col style="width: 10%;">
+            {% if mostrar_imagenes %}<col style="width: 8%;">{% endif %}
+            <col style="width: {{ ancho_producto }}%;">
+            <col style="width: {{ 30 if mostrar_descuento else 35 }}%;">
+            <col style="width: 8%;">
+            {% if mostrar_descuento %}<col style="width: 8%;">{% endif %}
             <col style="width: 13%;">
-            <col style="width: 16%;">
-            {% else %}
-            <col style="width: 24%;">
-            <col style="width: 20%;">
-            <col style="width: 11%;">
-            <col style="width: 16%;">
-            <col style="width: 17%;">
-            {% endif %}
+            <col style="width: 15%;">
         </colgroup>
         <thead style="background-color: #000; color: #fff;">
             <tr>
-                <th>Imagen</th>
+                {% if mostrar_imagenes %}<th>Imagen</th>{% endif %}
                 <th>Producto</th>
                 <th>Descripcion</th>
                 <th class="text-center">Cant.</th>
@@ -231,29 +340,27 @@
         </thead>
         <tbody>
             {% for item in cot.items %}
-            {% set item_img_src = url_for('static', filename='placeholder_product.png') %}
-            {% if item.imagen_url %}
-                {% if item.imagen_url.startswith('http://') or item.imagen_url.startswith('https://') %}
-                    {% set item_img_src = item.imagen_url %}
-                {% else %}
-                    {% set item_img_src = url_for('static', filename=item.imagen_url) %}
-                {% endif %}
-            {% endif %}
+            {% set item_img_src = imagenes_items[loop.index0] %}
+            {% set detail_text = (item.detalle or "")|trim %}
             <tr>
-                <td class="text-center">
-                    <img
-                        src="{{ item_img_src }}"
-                        alt="{{ item.descripcion }}"
-                        class="product-img"
-                        loading="lazy"
-                        onerror="this.onerror=null;this.src='{{ url_for('static', filename='placeholder_product.png') }}';"
-                    >
+                {% if mostrar_imagenes %}
+                <td class="text-center col-image">
+                    {% if item_img_src %}
+                    <img src="{{ item_img_src }}" alt="{{ item.descripcion }}" class="product-img" loading="lazy" onerror="this.remove();">
+                    {% endif %}
                 </td>
-                <td>{{ item.descripcion }}</td>
-                <td class="col-detail">{{ item.detalle or "-" }}</td>
-                <td class="text-center">{{ (item.cantidad or 0)|int }}</td>
+                {% endif %}
+                <td class="col-product">{{ item.descripcion }}</td>
+                <td class="col-detail">
+                    {% if detail_text %}
+                    <div class="quote-detail-text">{{ detail_text }}</div>
+                    {% else %}
+                    <span class="quote-detail-placeholder">Sin detalle adicional</span>
+                    {% endif %}
+                </td>
+                <td class="text-center col-qty">{{ (item.cantidad or 0)|int }}</td>
                 {% if mostrar_descuento %}
-                <td class="text-center">
+                <td class="text-center col-discount">
                     {% if (item.descuento_pct or 0) > 0 %}
                         {{ ('%.2f'|format(item.descuento_pct or 0)).replace('.00', '') }}%
                     {% else %}
@@ -261,50 +368,66 @@
                     {% endif %}
                 </td>
                 {% endif %}
-                {% if cot.condicion_iva == 'Responsable Inscrito' %}
-                <td class="text-end col-price-unit">$ {{ "{:,.2f}".format(item.precio_venta) }}</td>
-                <td class="col-sale-total">$ {{ "{:,.2f}".format(item.precio_venta * item.cantidad) }}</td>
+                {% set linea = lineas_documento[loop.index0] %}
+                {% if precio_incluye_iva %}
+                <td class="text-end col-price-unit">{{ simbolo_moneda }} {{ "{:,.2f}".format(linea.unitario_final) }}</td>
+                <td class="col-sale-total">{{ simbolo_moneda }} {{ "{:,.2f}".format(linea.total) }}</td>
                 {% else %}
-                <td class="text-end col-price-unit">$ {{ "{:,.2f}".format(item.precio_venta * (1 + item.iva_porcentaje / 100)) }}</td>
-                <td class="col-sale-total">$ {{ "{:,.2f}".format(item.subtotal) }}</td>
+                <td class="text-end col-price-unit">{{ simbolo_moneda }} {{ "{:,.2f}".format(linea.unitario_neto) }}</td>
+                <td class="col-sale-total">{{ simbolo_moneda }} {{ "{:,.2f}".format(linea.neto) }}</td>
                 {% endif %}
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
     <div class="row justify-content-end">
         <div class="col-5">
             <div class="p-3 quote-totals-card">
-            {% if cot.condicion_iva == 'Responsable Inscrito' %}
+            {% if not precio_incluye_iva %}
             <div class="d-flex justify-content-between mb-2">
                 <span class="fw-bold">Subtotal Neto:</span>
-                <span>$ {{ "{:,.2f}".format(cot.total_neto) }}</span>
+                <span>{{ simbolo_moneda }} {{ "{:,.2f}".format(totales.neto) }}</span>
             </div>
+            {% if totales.bonificacion > 0 %}
+            <div class="d-flex justify-content-between mb-2 text-success">
+                <span class="fw-bold">Bonificación de cierre:</span>
+                <span>- {{ simbolo_moneda }} {{ "{:,.2f}".format(totales.bonificacion_neta) }}</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2">
+                <span class="fw-bold">Neto bonificado:</span>
+                <span>{{ simbolo_moneda }} {{ "{:,.2f}".format(totales.neto_bonificado) }}</span>
+            </div>
+            {% endif %}
             {% for iva_linea in desglose_iva %}
             <div class="d-flex justify-content-between mb-2">
                 <span class="fw-bold">{{ iva_linea.label }}:</span>
-                <span>$ {{ "{:,.2f}".format(iva_linea.amount) }}</span>
+                <span>{{ simbolo_moneda }} {{ "{:,.2f}".format(iva_linea.amount) }}</span>
             </div>
             {% endfor %}
             <div class="d-flex justify-content-between mb-2">
                 <span class="fw-bold">IVA Total:</span>
-                <span>$ {{ "{:,.2f}".format(cot.total_iva) }}</span>
+                <span>{{ simbolo_moneda }} {{ "{:,.2f}".format(totales.iva_total) }}</span>
             </div>
             {% else %}
             <div class="mb-2 text-muted small">
                 <i>* Los precios incluyen IVA.</i>
             </div>
-            {% endif %}
-            {% if (cot.bonificacion_cierre_monto or 0) > 0 %}
-            <div class="d-flex justify-content-between mb-2 text-success">
-                <span class="fw-bold">Bonificacion de cierre:</span>
-                <span>- $ {{ "{:,.2f}".format(cot.bonificacion_cierre_monto) }}</span>
+            {% if totales.bonificacion > 0 %}
+            <div class="d-flex justify-content-between mb-2">
+                <span class="fw-bold">Subtotal:</span>
+                <span>{{ simbolo_moneda }} {{ "{:,.2f}".format(totales.bruto) }}</span>
             </div>
+            <div class="d-flex justify-content-between mb-2 text-success">
+                <span class="fw-bold">Bonificación de cierre:</span>
+                <span>- {{ simbolo_moneda }} {{ "{:,.2f}".format(totales.bonificacion) }}</span>
+            </div>
+            {% endif %}
             {% endif %}
             <hr style="border-top: 2px solid #000;">
             <div class="d-flex justify-content-between h5 fw-bold" style="color: #000;">
                 <span>TOTAL:</span>
-                <span>$ {{ "{:,.2f}".format(cot.total_final) }}</span>
+                <span>{{ simbolo_moneda }} {{ "{:,.2f}".format(totales.total) }}</span>
             </div>
             </div>
         </div>
@@ -314,9 +437,7 @@
             <div class="quote-note-card">
                 <h6>Condiciones comerciales</h6>
                 <ul>
-                    {% if quote_signature.validity_days %}
-                    <li>Validez de la oferta: {{ quote_signature.validity_days }} dias.</li>
-                    {% endif %}
+                    <li>{{ validez.texto }}</li>
                     {% for condicion in condiciones_cotizacion %}
                     <li>{{ condicion }}</li>
                     {% endfor %}
@@ -338,6 +459,9 @@
                 <div class="quote-signature-line"></div>
                 <div class="quote-signature-name">{{ quote_signature.name }}</div>
                 <div class="quote-signature-role">{{ quote_signature.role }}</div>
+                {% if quote_signature.email %}
+                <div class="quote-signature-contact">{{ quote_signature.email }}</div>
+                {% endif %}
                 {% if quote_signature.phone %}
                 <div class="quote-signature-contact">{{ quote_signature.phone }}</div>
                 {% endif %}

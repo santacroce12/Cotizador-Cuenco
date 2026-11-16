@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 410 112" width="410" height="112" role="img" aria-labelledby="title desc">
+  <title id="title">YoCotizo</title>
+  <desc id="desc">Logotipo de YoCotizo: documento de presupuesto con una marca de verificación dentro de un recuadro azul, seguido del nombre de la marca en negro y azul.</desc>
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#367DFF"/>
+      <stop offset="1" stop-color="#1755D5"/>
+    </linearGradient>
+  </defs>
+  <rect x="14" y="15" width="82" height="82" rx="22" fill="url(#brand)"/>
+  <!-- Documento con esquina plegada -->
+  <path d="M39 30h22l12 12v34a5 5 0 0 1-5 5H39a5 5 0 0 1-5-5V35a5 5 0 0 1 5-5Z" fill="#fff"/>
+  <path d="M61 30v10a3 3 0 0 0 3 3h9" fill="#C7D9FF"/>
+  <path d="M43 49h17" stroke="#A8C4FF" stroke-width="3.4" stroke-linecap="round"/>
+  <path d="M43 57h10" stroke="#A8C4FF" stroke-width="3.4" stroke-linecap="round"/>
+  <path d="m45 69 6 6 12-14" fill="none" stroke="#2465E6" stroke-width="4.3" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Wordmark -->
+  <text x="112" y="72" font-family="Inter, Poppins, 'Segoe UI', Arial, sans-serif" font-size="49" font-weight="750" letter-spacing="-2.4">
+    <tspan fill="#1C2535">yo</tspan><tspan fill="#2469ED">cotizo</tspan>
+  </text>
+</svg>

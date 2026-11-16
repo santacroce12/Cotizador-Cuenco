@@ -1,8 +1,8 @@
-# Guia para usar `cotizocuenco.com` solo en tu PC
+# Guia para usar `cotizador.local` solo en tu PC
 
 ## Objetivo
 
-Hacer que `http://cotizocuenco.com` abra el cotizador **solo en tu PC**, sin tocar el DNS global del router ni afectar otros servicios de la red.
+Hacer que `http://cotizador.local` abra el cotizador **solo en tu PC**, sin tocar el DNS global del router ni afectar otros servicios de la red.
 
 ## Cuando conviene este metodo
 
@@ -16,8 +16,8 @@ No usalo si queres que tambien funcione en todos los telefonos y PCs de la red. 
 
 ## Datos actuales del sistema
 
-- servidor Ubuntu: `192.168.0.200`
-- dominio interno deseado: `cotizocuenco.com`
+- servidor Ubuntu: `192.168.0.50`
+- dominio interno deseado: `cotizador.local`
 - cotizador: publicado en el server y accesible por red local
 
 ## Paso a paso en Windows
@@ -48,7 +48,7 @@ Si no lo ves:
 ### 3. Agregar esta linea al final
 
 ```text
-192.168.0.200 cotizocuenco.com
+192.168.0.50 cotizador.local
 ```
 
 Guarda el archivo.
@@ -66,13 +66,13 @@ ipconfig /flushdns
 Corre:
 
 ```powershell
-ping cotizocuenco.com
+ping cotizador.local
 ```
 
 Esperado:
 
 ```text
-Haciendo ping a cotizocuenco.com [192.168.0.200]
+Haciendo ping a cotizador.local [192.168.0.50]
 ```
 
 ### 6. Abrir el sistema
@@ -80,14 +80,14 @@ Haciendo ping a cotizocuenco.com [192.168.0.200]
 Proba primero:
 
 ```text
-http://cotizocuenco.com
+http://cotizador.local
 ```
 
 Si no abre, proba estas dos URL de control:
 
 ```text
-http://192.168.0.200
-http://192.168.0.200:9000
+http://192.168.0.50
+http://192.168.0.50:9000
 ```
 
 ## Como deshacerlo
@@ -98,7 +98,7 @@ Si en algun momento queres volver atras:
 2. borra esta linea:
 
 ```text
-192.168.0.200 cotizocuenco.com
+192.168.0.50 cotizador.local
 ```
 
 3. limpia cache otra vez:

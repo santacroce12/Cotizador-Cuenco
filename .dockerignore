@@ -1,5 +1,8 @@
 .git
 .gitignore
+.mcp.json
+.playwright-mcp/
+.ftpquota
 __pycache__/
 *.py[cod]
 .venv/
@@ -13,10 +16,18 @@ storage/uploads/productos/
 .codex/
 .agents/
 .aidesigner/
-.mcp.json
+tmp/
 DONWEB_DEPLOY.md
 GUIA_COTIZOCUENCO_PC_LOCAL.md
 tests/
 tmp_*
 *.log
 *.png
+# Datos y salidas locales: nunca dentro de la imagen.
+backups_locales/
+*.db-wal
+*.db-shm
+*.arranque.lock
+.playwright-cli/
+output/
+YoCotizo_logo_preview.png

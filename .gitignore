@@ -6,6 +6,11 @@ local_settings.json
 .env
 .venv/
 venv/
+.mcp.json
+.playwright-mcp/
+.ftpquota
+tmp/
+cotizador-fixed-desktop.png
 static/uploads/productos/
 data/*
 !data/.gitkeep
@@ -16,3 +21,12 @@ storage/uploads/productos/*
 .codex/
 tmp_*
 *.log
+backups_locales/
+*.arranque.lock
+*.db-wal
+*.db-shm
+*.db.arranque.lock
+
+# Archivos locales de herramientas
+.playwright-cli/
+.claude/launch.json

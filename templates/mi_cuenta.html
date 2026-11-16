@@ -1,0 +1,87 @@
+{% extends "layout.html" %}
+
+{% block title %}Mi cuenta{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Mi cuenta</h1>
+        <p class="page-description">Tus datos de acceso. Los datos de firma los carga un administrador desde Usuarios.</p>
+    </div>
+</div>
+
+{% with mensajes = get_flashed_messages(with_categories=true) %}
+{% for categoria, mensaje in mensajes %}
+<div class="alert alert-{{ categoria }}" role="alert">{{ mensaje }}</div>
+{% endfor %}
+{% endwith %}
+{% if error %}
+<div class="alert alert-danger" role="alert">{{ error }}</div>
+{% endif %}
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Perfil</h2>
+                    <p class="card-description">Así aparecés en los presupuestos.</p>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <span class="avatar" style="width:3rem;height:3rem;font-size:1rem">{{ current_user.nombre_para_documentos[:2] }}</span>
+                    <div>
+                        <div class="fw-semibold">{{ current_user.nombre_para_documentos }}</div>
+                        <div class="text-muted small">{{ current_user.cargo or "Sin cargo cargado" }}</div>
+                    </div>
+                </div>
+                <div class="separator"></div>
+                <div class="kv"><span>Usuario</span><span>{{ current_user.username }}</span></div>
+                <div class="kv"><span>Rol</span><span>{{ "Administrador" if current_user.is_admin else "Operador" }}</span></div>
+                <div class="kv"><span>Email</span><span>{{ current_user.email or "—" }}</span></div>
+                <div class="kv"><span>Teléfono</span><span>{{ current_user.telefono or "—" }}</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Cambiar contraseña</h2>
+                    <p class="card-description">Al cambiarla se cierran tus sesiones abiertas en otros navegadores.</p>
+                </div>
+            </div>
+            <div class="card-body">
+                <form method="POST" class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label" for="password_actual">Contraseña actual</label>
+                        <div class="password-field">
+                            <input type="password" id="password_actual" name="password_actual" class="form-control" autocomplete="current-password" required data-password-field>
+                            <button type="button" class="password-toggle-btn" data-password-toggle aria-label="Mostrar contraseña" title="Mostrar contraseña" aria-pressed="false"><i class="bi bi-eye"></i></button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="password">Nueva contraseña</label>
+                        <div class="password-field">
+                            <input type="password" id="password" name="password" class="form-control" autocomplete="new-password" minlength="8" required data-password-field>
+                            <button type="button" class="password-toggle-btn" data-password-toggle aria-label="Mostrar contraseña" title="Mostrar contraseña" aria-pressed="false"><i class="bi bi-eye"></i></button>
+                        </div>
+                        <div class="form-text">Mínimo 8 caracteres.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="password_confirm">Repetir nueva contraseña</label>
+                        <div class="password-field">
+                            <input type="password" id="password_confirm" name="password_confirm" class="form-control" autocomplete="new-password" minlength="8" required data-password-field>
+                            <button type="button" class="password-toggle-btn" data-password-toggle aria-label="Mostrar contraseña" title="Mostrar contraseña" aria-pressed="false"><i class="bi bi-eye"></i></button>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">Cambiar contraseña</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

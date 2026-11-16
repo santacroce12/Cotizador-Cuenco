@@ -1,5 +1,5 @@
 # Cotizador-Cuenco
 
-Guía de deploy Docker para Ubuntu Server:
+Guias principales:
 
 - `DOCKER_DEPLOY_UBUNTU.md`
